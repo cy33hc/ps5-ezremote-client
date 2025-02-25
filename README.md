@@ -1,6 +1,6 @@
 # ezRemote Client
 
-ezRemote Client is an application that allows you to connect the PS5 to remote FTP/SFTP, SMB(Windows Share), NFS, WebDAV, HTTP servers and Google Drive to transfer files. The interface is inspired by Filezilla client which provides a commander like GUI.
+ezRemote Client is an application that allows you to connect the PS5 to remote FTP/SFTP, SMB(Windows Share), NFS, WebDAV, HTTP servers to transfer files. The interface is inspired by Filezilla client which provides a commander like GUI.
 
 ![Preview](/screenshot.jpg)
 
@@ -76,6 +76,8 @@ To distinguish between FTP, SMB, NFS, WebDAV or HTTP, the URL must be prefix wit
     |      |           |  |
     |----------|-----------|---|
     | ![archive_org_screen1](https://github.com/user-attachments/assets/b129b6cf-b938-4d7c-a3fa-61e1c633c1f6) | ![archive_org_screen2](https://github.com/user-attachments/assets/646106d1-e60b-4b35-b153-3475182df968)| ![image](https://github.com/user-attachments/assets/cad94de8-a694-4ef5-92a8-b87468e30adb) |
+- For Myrient repos, entry **https://myrient.erista.me/files** in the server field.
+  ![image](https://github.com/user-attachments/assets/b80e2bec-b8cc-4acc-9ab6-7b0dc4ef20e6)
        
 Tested with following WebDAV server:
  - **(Recommeded)** [Dufs](https://github.com/sigoden/dufs) - For hosting your own WebDAV server. (Recommended since this allow anonymous access which is required for Remote Package Install)

@@ -6,6 +6,9 @@ ezRemote Client is an application that allows you to connect the PS5 to remote F
 
 ![Preview](/ezremote_client_web.png)
 
+## Installation
+Extracted the **ezremote_client.zip** in to the **/data/homebrew** folder on the PS5. Launch app with @john-tornblom [Homebrew Launcher](https://github.com/ps5-payload-dev/websrv).
+
 ## Usage
 To distinguish between FTP, SMB, NFS, WebDAV or HTTP, the URL must be prefix with **ftp://**, **sftp://**, **smb://**, **nfs://**, **webdav://**, **webdavs://**, **http://** and **https://**
 
@@ -88,7 +91,7 @@ Tested with following WebDAV server:
  - drivehq.com
 
 ## Remote Package Installer Feature
-Remote Package Installation with all Remote Server, even if they are password protected.
+TODO
 
 ## Features Native Application##
  - Transfer files back and forth between PS5 and FTP/SMB/NFS/WebDAV server
@@ -112,9 +115,6 @@ Remote Package Installation with all Remote Server, even if they are password pr
 You need to launch the "ezRemote Client" app on the PS5. Then on any device(laptop, tablet, phone etc..) with web browser goto to http://<ip_address_of_ps5>:9090 . That's all.
 
 The port# can be changed from the "Global Settings" dialog in the PS5 app. Any changes to the web server settings needs a restart of the application to take effect.
-
-## Installation
-Extracted the **ezremote_client.zip** in to the **/data/homebrew** folder on the PS5
 
 ## Controls
 ```

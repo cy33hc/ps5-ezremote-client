@@ -10,6 +10,7 @@
 #include "config.h"
 #include "fs.h"
 #include "lang.h"
+#include "crypt.h"
 #include "base64.h"
 
 extern "C"
@@ -50,20 +51,18 @@ namespace CONFIG
 {
     int Encrypt(const std::string &text, std::string &encrypt_text)
     {
-        /* unsigned char tmp_encrypt_text[text.length() * 2];
+        unsigned char tmp_encrypt_text[text.length() * 2];
         int encrypt_text_len;
         memset(tmp_encrypt_text, 0, sizeof(tmp_encrypt_text));
         int ret = openssl_encrypt((unsigned char *)text.c_str(), text.length(), cipher_key, cipher_iv, tmp_encrypt_text, &encrypt_text_len);
         if (ret == 0)
-            return 0; */
-        encrypt_text.clear();
-        encrypt_text.append(text);
-        return 1;
+            return 0;
+        return Base64::Encode(std::string((const char *)tmp_encrypt_text, encrypt_text_len), encrypt_text);
     }
 
     int Decrypt(const std::string &text, std::string &decrypt_text)
     {
-        /* std::string tmp_decode_text;
+        std::string tmp_decode_text;
         int ret = Base64::Decode(text, tmp_decode_text);
         if (ret == 0)
             return 0;
@@ -73,10 +72,10 @@ namespace CONFIG
         memset(tmp_decrypt_text, 0, sizeof(tmp_decrypt_text));
         ret = openssl_decrypt((unsigned char *)tmp_decode_text.c_str(), tmp_decode_text.length(), cipher_key, cipher_iv, tmp_decrypt_text, &decrypt_text_len);
         if (ret == 0)
-            return 0; */
+            return 0;
 
         decrypt_text.clear();
-        decrypt_text.append(text);
+        decrypt_text.append(std::string((const char *)tmp_decrypt_text, decrypt_text_len));
 
         return 1;
     }

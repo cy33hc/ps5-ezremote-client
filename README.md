@@ -133,7 +133,7 @@ The appplication support following languages.
 
 **Note:** Due to new strings added, there are about 31 missing translations for all the languagess. Please help by downloading this [Template](https://github.com/cy33hc/ps5-ezremote-client/blob/master/data/assets/langs/English.ini), make your changes and submit an issue with the file attached for the language.
 
-The following languages are auto detected.
+The following languages have translations.
 ```
 Dutch
 English
@@ -148,10 +148,6 @@ Russian
 Spanish
 Simplified Chinese
 Traditional Chinese
-```
-
-The following aren't standard languages supported by the PS5, therefore requires a config file update.
-```
 Arabic
 Catalan
 Croatian
@@ -165,6 +161,7 @@ Ryukyuan
 Thai
 Turkish
 Ukrainian
+Vietnamese
 ```
 **HELP:** There are no language translations for the following languages, therefore not support yet. Please help expand the list by submitting translation for the following languages. If you would like to help, please download this [Template](https://github.com/cy33hc/ps5-ezremote-client/blob/master/data/assets/langs/English.ini), make your changes and submit an issue with the file attached.
 ```
@@ -173,7 +170,6 @@ Swedish
 Danish
 Norwegian
 Czech
-Vietnamese
 ```
 or any other language that you have a traslation for.
 

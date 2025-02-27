@@ -5,7 +5,7 @@ async function main() {
 
     return {
         mainText: "ezRemote Client",
-        secondaryText: 'File manager for remote servers like FTP,SFTP,SMB,NFS,WebDAV,HTTP Server',
+        secondaryText: 'File Manager for remote servers',
         onclick: async () => {
 	    return {
 		path: PAYLOAD,

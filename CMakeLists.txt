@@ -25,6 +25,7 @@ add_executable(ezremote_client.elf
   source/clients/apache.cpp
   source/clients/archiveorg.cpp
   source/clients/ftpclient.cpp
+  source/clients/github.cpp
   source/clients/myrient.cpp
   source/clients/iis.cpp
   source/clients/nginx.cpp

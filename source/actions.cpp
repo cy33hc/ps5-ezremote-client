@@ -724,7 +724,7 @@ namespace Actions
 
     void *MakeZipThread(void *argp)
     {
-        /* zipFile zf = zipOpen64(zip_file_path, APPEND_STATUS_CREATE);
+        zipFile zf = zipOpen64(zip_file_path, APPEND_STATUS_CREATE);
         if (zf != NULL)
         {
             std::vector<DirEntry> files;
@@ -753,7 +753,7 @@ namespace Actions
         activity_inprogess = false;
         multi_selected_local_files.clear();
         Windows::SetModalMode(false);
-        selected_action = ACTION_REFRESH_LOCAL_FILES; */
+        selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
     }
 

@@ -2394,6 +2394,21 @@ namespace Windows
             sprintf(status_message, "\"%s\" %s", remote_directory, lang_strings[STR_SET_DEFAULT_DIRECTORY_MSG]);
             selected_action = ACTION_NONE;
             break;
+        case ACTION_VIEW_LOCAL_IMAGE:
+            if (Textures::LoadImageFile(selected_local_file.path, &texture))
+            {
+                view_image = true;
+            }
+            selected_action = ACTION_NONE;
+            break;
+        case ACTION_VIEW_REMOTE_IMAGE:
+            remoteclient->Get(TMP_ICON_PATH, selected_remote_file.path);
+            if (Textures::LoadImageFile(TMP_ICON_PATH, &texture))
+            {
+                view_image = true;
+            }
+            selected_action = ACTION_NONE;
+            break;
         case ACTION_LOCAL_EDIT:
             if (selected_local_file.file_size > max_edit_file_size)
                 sprintf(status_message, "%s %d", lang_strings[STR_MAX_EDIT_FILE_SIZE_MSG], max_edit_file_size);

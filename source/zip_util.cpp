@@ -267,7 +267,9 @@ namespace ZipUtil
         if (path[0] == '\0')
             return;
 
-        FS::MkDirs(path);
+        // disabled since next_header return incorrect folders
+        // FS::MkDirs(path);
+
         archive_read_data_skip(a);
     }
 
@@ -390,14 +392,15 @@ namespace ZipUtil
 
         realpathname = pathcat(base_dir.c_str(), pathname);
 
-        /* ensure that parent directory exists */
-        FS::MkDirs(realpathname, true);
-
         if (S_ISDIR(filetype))
             extract_dir(a, e, realpathname);
         else
         {
             snprintf(activity_message, 255, "%s: %s", lang_strings[STR_EXTRACTING], pathname);
+            
+            /* ensure that parent directory exists */
+            FS::MkDirs(realpathname, true);
+
             extract_file(a, e, realpathname);
         }
 
@@ -569,6 +572,7 @@ namespace ZipUtil
             }
         }
 
+        FS::MkDirs(basepath.c_str());
         for (;;)
         {
             if (stop_activity)

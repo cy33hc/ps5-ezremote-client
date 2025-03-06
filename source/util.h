@@ -11,6 +11,7 @@
 #include "wolfssl/openssl/md5.h"
 #include "common.h"
 #include "lang.h"
+#include "sceKernel.h"
 
 namespace Util
 {
@@ -157,18 +158,15 @@ namespace Util
 
     static inline void Notify(const char *fmt, ...)
     {
-        /* OrbisNotificationRequest request;
+        SceNotificationRequest request;
+        bzero(&request, sizeof request);
 
         va_list args;
         va_start(args, fmt);
         vsprintf(request.message, fmt, args);
         va_end(args);
 
-        request.type = OrbisNotificationRequestType::NotificationRequest;
-        request.unk3 = 0;
-        request.useIconImageUri = 0;
-        request.targetId = -1;
-        sceKernelSendNotificationRequest(0, &request, sizeof(request), 0); */
+        sceKernelSendNotificationRequest(0, &request, sizeof(request), 0);
     }
 
     static inline void SetupPreviousFolder(const std::string &path, DirEntry *entry)

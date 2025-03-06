@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-// #include <dbglogger.h>
+#include <dbglogger.h>
 
 #include "imgui.h"
 #include "SDL2/SDL.h"
@@ -15,6 +15,7 @@
 #include "lang.h"
 #include "gui.h"
 #include "util.h"
+#include "installer.h"
 #include "textures.h"
 
 extern "C"
@@ -259,6 +260,7 @@ void InitImgui()
 
 static void terminate()
 {
+	INSTALLER::Exit();
 	if (g_libnetMemId != -1)
 	{
 		sceNetPoolDestroy(g_libnetMemId);
@@ -267,8 +269,8 @@ static void terminate()
 
 int main()
 {
-	//dbglogger_init();
-	//dbglogger_log("If you see this you've set up dbglogger correctly.");
+	dbglogger_init();
+	dbglogger_log("If you see this you've set up dbglogger correctly.");
 
 	// No buffering
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -283,6 +285,9 @@ int main()
 	{
 		return -1;
 	}
+
+	if (INSTALLER::Init() < 0)
+		return 0;
 
 	CONFIG::LoadConfig();
 	HttpServer::Start();

@@ -92,6 +92,8 @@ target_link_libraries(ezremote_client.elf
   SceKeyboard
   ScePad
   SceNet
+  SceBgft
+  SceAppInstUtil
   SceSystemService
   SceUserService
   SceLibcInternal

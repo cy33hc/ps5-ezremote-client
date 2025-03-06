@@ -1213,7 +1213,7 @@ namespace Windows
                 ImGui::PopID();
                 ImGui::Separator();
 
-                /* ImGui::PushID("Install##local");
+                ImGui::PushID("Install##local");
                 if (ImGui::Selectable(lang_strings[STR_INSTALL], false, getSelectableFlag(REMOTE_ACTION_INSTALL) | ImGuiSelectableFlags_DontClosePopups, ImVec2(220, 0)))
                 {
                     SetModalMode(false);
@@ -1221,7 +1221,7 @@ namespace Windows
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::PopID();
-                ImGui::Separator(); */
+                ImGui::Separator();
             }
 
             if (remote_browser_selected)

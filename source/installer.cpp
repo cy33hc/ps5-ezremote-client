@@ -19,6 +19,7 @@
 #include "sceUserService.h"
 #include "sceSystemService.h"
 #include "installer.h"
+#include "dbglogger.h"
 
 #define BGFT_HEAP_SIZE (1 * 1024 * 1024)
 
@@ -59,13 +60,13 @@ namespace INSTALLER
 			memset(s_bgft_init_params.heap, 0, s_bgft_init_params.heapSize);
 		}
 
-		/* ret = sceBgftServiceIntInit(&s_bgft_init_params);
+		ret = sceBgftServiceIntInit(&s_bgft_init_params);
 		if (ret)
 		{
 			goto err_bgft_heap_free;
 		}
 
-		s_bgft_initialized = true; */
+		s_bgft_initialized = true;
 
 	done:
 		return 0;
@@ -94,7 +95,7 @@ namespace INSTALLER
 			return;
 		}
 
-		// ret = sceBgftServiceIntTerm();
+		ret = sceBgftServiceIntTerm();
 
 		if (s_bgft_init_params.heap)
 		{
@@ -127,7 +128,7 @@ namespace INSTALLER
 		uint32_t param_sfo_size = 0;
 		for (size_t i = 0; i < entry_count; ++i)
 		{
-			if (BE32(entries[i].id) == PKG_ENTRY_ID__PARAM_SFO)
+			if (BE32(entries[i].id) == PKG_ENTRY_ID_PARAM_SFO)
 			{
 				param_sfo_offset = BE32(entries[i].offset);
 				param_sfo_size = BE32(entries[i].size);
@@ -173,7 +174,7 @@ namespace INSTALLER
 		uint32_t icon0_png_size = 0;
 		for (size_t i = 0; i < entry_count; ++i)
 		{
-			if (BE32(entries[i].id) == PKG_ENTRY_ID__PARAM_SFO)
+			if (BE32(entries[i].id) == PKG_ENTRY_ID_PARAM_SFO)
 			{
 				param_sfo_offset = BE32(entries[i].offset);
 				param_sfo_size = BE32(entries[i].size);
@@ -529,7 +530,7 @@ namespace INSTALLER
 
 	int InstallLocalPkg(const std::string &path, pkg_header *header, bool remove_after_install)
 	{
-		/* int ret;
+		int ret;
 		bool completed = false;
 
 		if (strncmp(path.c_str(), "/data/", 6) != 0 &&
@@ -542,17 +543,6 @@ namespace INSTALLER
 		snprintf(filepath, 1023, "%s", path.c_str());
 		if (strncmp(path.c_str(), "/data/", 6) == 0)
 			snprintf(filepath, 1023, "/user%s", path.c_str());
-		char titleId[18];
-		memset(titleId, 0, sizeof(titleId));
-		int is_app = -1;
-		ret = sceAppInstUtilGetTitleIdFromPkg(path.c_str(), titleId, &is_app);
-		if (ret)
-		{
-			return 0;
-		}
-
-		std::string title = GetLocalPkgTitle(path, header);
-		std::string display_title = title.length() > 0 ? title : std::string(titleId);
 
 		SceBgftTaskProgress progress_info;
 		int prog = 0;
@@ -562,7 +552,7 @@ namespace INSTALLER
 			download_params.params.entitlementType = 5;
 			download_params.params.id = (char *)header->pkg_content_id;
 			download_params.params.contentUrl = filepath;
-			download_params.params.contentName = display_title.c_str();
+			download_params.params.contentName = (char *)header->pkg_content_id;
 			;
 			download_params.params.iconPath = "";
 			download_params.params.playgoScenarioId = "0";
@@ -573,9 +563,10 @@ namespace INSTALLER
 	retry:
 		int task_id = -1;
 		ret = sceBgftServiceIntDownloadRegisterTaskByStorageEx(&download_params, &task_id);
+		dbglogger_log("error sceBgftServiceIntDownloadRegisterTaskByStorageEx %x", ret);
 		if (ret == 0x80990088 || ret == 0x80990015)
 		{
-			sprintf(confirm_message, "%s - %s?", display_title.c_str(), lang_strings[STR_REINSTALL_CONFIRM_MSG]);
+			sprintf(confirm_message, "%s - %s?", (char *)header->pkg_content_id, lang_strings[STR_REINSTALL_CONFIRM_MSG]);
 			confirm_state = CONFIRM_WAIT;
 			action_to_take = selected_action;
 			activity_inprogess = false;
@@ -588,7 +579,7 @@ namespace INSTALLER
 
 			if (confirm_state == CONFIRM_YES)
 			{
-				ret = sceAppInstUtilAppUnInstall(titleId);
+				ret = sceAppInstUtilAppUnInstall((char *)header->pkg_content_id);
 				if (ret != 0)
 					goto err;
 				goto retry;
@@ -610,7 +601,7 @@ namespace INSTALLER
 
 		if (!remove_after_install)
 		{
-			Util::Notify("%s queued", display_title.c_str());
+			Util::Notify("%s queued", (char *)header->pkg_content_id);
 			return 1;
 		}
 
@@ -638,7 +629,7 @@ namespace INSTALLER
 			FS::Rm(path);
 		return 1;
 
-	err: */
+	err:
 		return 0;
 	}
 
@@ -668,12 +659,12 @@ namespace INSTALLER
 		{
 			switch (BE32(entries[i].id))
 			{
-			case PKG_ENTRY_ID__PARAM_SFO:
+			case PKG_ENTRY_ID_PARAM_SFO:
 				param_sfo_offset = BE32(entries[i].offset);
 				param_sfo_size = BE32(entries[i].size);
 				items++;
 				break;
-			case PKG_ENTRY_ID__ICON0_PNG:
+			case PKG_ENTRY_ID_ICON0_PNG:
 				icon0_png_offset = BE32(entries[i].offset);
 				icon0_png_size = BE32(entries[i].size);
 				items++;
@@ -739,12 +730,12 @@ namespace INSTALLER
 		{
 			switch (BE32(entries[i].id))
 			{
-			case PKG_ENTRY_ID__PARAM_SFO:
+			case PKG_ENTRY_ID_PARAM_SFO:
 				param_sfo_offset = BE32(entries[i].offset);
 				param_sfo_size = BE32(entries[i].size);
 				items++;
 				break;
-			case PKG_ENTRY_ID__ICON0_PNG:
+			case PKG_ENTRY_ID_ICON0_PNG:
 				icon0_png_offset = BE32(entries[i].offset);
 				icon0_png_size = BE32(entries[i].size);
 				items++;

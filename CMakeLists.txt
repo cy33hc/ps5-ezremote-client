@@ -97,3 +97,20 @@ target_link_libraries(ezremote_client.elf
   SceLibcInternal
   kernel
 )
+
+set(APPDIR "ezremote-client")
+set(APP_VERSION "1.03")
+
+add_custom_target(package
+   DEPENDS ezremote_client.elf
+   COMMAND rm -rf ${APPDIR}
+   COMMAND rm -f ezremote-client.zip
+   COMMAND mkdir -p ${APPDIR}
+   COMMAND cp -R ${PROJECT_SOURCE_DIR}/data/* ${APPDIR}
+   COMMAND cp ezremote_client.elf ${APPDIR}
+   COMMAND sed -i "s/ezRemote Client/ezRemote Client v${APP_VERSION}/g"  ${APPDIR}/homebrew.js
+
+   COMMAND zip -r ezremote-client.zip ${APPDIR}/
+
+
+)

@@ -18,6 +18,7 @@
 #include "clients/nfsclient.h"
 #include "clients/iis.h"
 #include "clients/rclone.h"
+#include "server/http_server.h"
 #include "common.h"
 #include "fs.h"
 #include "config.h"
@@ -25,8 +26,10 @@
 #include "util.h"
 #include "lang.h"
 #include "actions.h"
+#include "installer.h"
 #include "sfo.h"
 #include "zip_util.h"
+#include "sceSystemService.h"
 
 namespace Actions
 {
@@ -367,7 +370,7 @@ namespace Actions
             return remoteclient->Put(src, dest);
         }
 
-        // sceSystemServicePowerTick();
+        sceSystemServicePowerTick();
         return 1;
     }
 
@@ -523,7 +526,7 @@ namespace Actions
             return remoteclient->Get(dest, src);
         }
 
-        // sceSystemServicePowerTick();
+        sceSystemServicePowerTick();
         return 1;
     }
 
@@ -633,6 +636,340 @@ namespace Actions
             multi_selected_remote_files.clear();
             Windows::SetModalMode(false);
             selected_action = ACTION_REFRESH_LOCAL_FILES;
+        }
+    }
+
+    void *InstallRemotePkgsThread(void *argp)
+    {
+        int failed = 0;
+        int success = 0;
+        int skipped = 0;
+
+        std::vector<DirEntry> files;
+        if (multi_selected_remote_files.size() > 0)
+            std::copy(multi_selected_remote_files.begin(), multi_selected_remote_files.end(), std::back_inserter(files));
+        else
+            files.push_back(selected_remote_file);
+
+        bool download_and_install = false;
+        if (remote_settings->enable_rpi)
+        {
+            std::string url = INSTALLER::getRemoteUrl(files.begin()->path);
+            sprintf(activity_message, "%s", lang_strings[STR_CHECKING_REMOTE_SERVER_MSG]);
+            file_transfering = false;
+            if (!INSTALLER::canInstallRemotePkg(url))
+            {
+                confirm_state = CONFIRM_WAIT;
+                action_to_take = selected_action;
+                activity_inprogess = false;
+                while (confirm_state == CONFIRM_WAIT)
+                {
+                    usleep(100000);
+                }
+                activity_inprogess = true;
+                selected_action = action_to_take;
+
+                if (confirm_state == CONFIRM_YES)
+                {
+                    download_and_install = true;
+                }
+                else
+                {
+                    goto finish;
+                }
+            }
+        }
+        else
+        {
+            download_and_install = true;
+        }
+        
+        for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
+        {
+            if (stop_activity)
+                break;
+            sprintf(activity_message, "%s %s", lang_strings[STR_INSTALLING], it->name);
+
+            if (!it->isDir)
+            {
+                std::string path = std::string(it->path);
+                path = Util::ToLower(path);
+                if (path.size() > 4 && path.substr(path.size() - 4) == ".pkg")
+                {
+                    pkg_header header;
+                    memset(&header, 0, sizeof(header));
+
+                    if (remoteclient->Head(it->path, (void *)&header, sizeof(header)) == 0)
+                        failed++;
+                    else
+                    {
+                        if (BE32(header.pkg_magic) == PKG_MAGIC)
+                        {
+                            if (download_and_install)
+                            {
+                                if (DownloadAndInstallPkg(it->path, &header) == 0)
+                                    failed++;
+                                else
+                                    success++;
+                            }
+                            else
+                            {
+                                if (remote_settings->enable_disk_cache)
+                                {
+                                    SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
+                                    memset(install_data, 0, sizeof(SplitPkgInstallData));
+
+                                    uint64_t tick = Util::GetTick();
+                                    std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(tick) + ".pkg";
+                                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
+
+                                    install_data->split_file = sp;
+                                    install_data->remote_client = remoteclient;
+                                    install_data->path = it->path;
+                                    remoteclient->Size(it->path, &install_data->size);
+                                    install_data->stop_write_thread = false;
+                                    install_data->delete_client = false;
+
+                                    int ret = pthread_create(&install_data->thread, NULL, DownloadSplitPkg, install_data);
+
+                                    if (INSTALLER::InstallSplitPkg(it->path, install_data, false) == 0)
+                                        failed++;
+                                    else
+                                        success++;
+                                }
+                                else
+                                {
+                                    std::string url = INSTALLER::getRemoteUrl(it->path, true);
+                                    std::string title = INSTALLER::GetRemotePkgTitle(remoteclient, it->path, &header);
+                                    if (INSTALLER::InstallRemotePkg(url, &header, title, true) == 0)
+                                        failed++;
+                                    else
+                                        success++;
+                                }
+                            }
+                        }
+                        else
+                            skipped++;
+                    }
+                }
+                else if (Util::EndsWith(path,".zip") || Util::EndsWith(path,".rar") || Util::EndsWith(path,".7z") ||
+                        Util::EndsWith(path,".tar.xz") || Util::EndsWith(path,".tar.gz"))
+                {
+                    ArchiveEntry *entry = ZipUtil::GetPackageEntry(it->path, remoteclient);
+                    if (entry != nullptr)
+                    {
+                        while (entry != nullptr)
+                        {
+                            ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) malloc(sizeof(ArchivePkgInstallData));
+                            memset(install_data, 0, sizeof(ArchivePkgInstallData));
+
+                            std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
+                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
+                            
+                            install_data->archive_entry = entry;
+                            install_data->split_file = sp;
+                            install_data->stop_write_thread = false;
+
+                            int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
+
+                            INSTALLER::InstallArchivePkg(entry->filename, install_data);
+
+                            ArchiveEntry *previos = entry;
+                            entry = ZipUtil::GetNextPackageEntry(entry);
+                            free(previos);
+                        }
+                        success++;
+                    }
+                    else
+                        skipped++;
+                }
+                else
+                    skipped++;
+            }
+            else
+                skipped++;
+
+            sprintf(status_message, "%s %s = %d, %s = %d, %s = %d", lang_strings[STR_INSTALL],
+                    lang_strings[STR_INSTALL_SUCCESS], success, lang_strings[STR_INSTALL_FAILED], failed,
+                    lang_strings[STR_INSTALL_SKIPPED], skipped);
+        }
+    finish:
+        activity_inprogess = false;
+        multi_selected_remote_files.clear();
+        Windows::SetModalMode(false);
+        return NULL;
+    }
+
+    void InstallRemotePkgs()
+    {
+        sprintf(status_message, "%s", "");
+        int res = pthread_create(&bk_activity_thid, NULL, InstallRemotePkgsThread, NULL);
+        if (res != 0)
+        {
+            activity_inprogess = false;
+            file_transfering = false;
+            multi_selected_remote_files.clear();
+            Windows::SetModalMode(false);
+        }
+    }
+
+    void *ExtractArchivePkg(void *argp)
+    {
+        ssize_t len;
+        char *buffer = (char*) malloc(ARCHIVE_TRANSFER_SIZE);
+
+        ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) argp;
+        SplitFile *sp = install_data->split_file;
+
+        /* loop over file contents and write to fd */
+        sp->Open();
+        while (!install_data->stop_write_thread)
+        {
+            len = archive_read_data(install_data->archive_entry->archive, buffer, ARCHIVE_TRANSFER_SIZE);
+
+            if (len == 0)
+                break;
+
+            if (len < 0)
+            {
+                sprintf(status_message, "error archive_read_data('%s')", install_data->archive_entry->filename.c_str());
+                break;
+            }
+
+            if (sp->Write(buffer, len) != len)
+            {
+                sprintf(status_message, "error write('%s')", install_data->archive_entry->filename.c_str());
+                break;;
+            }
+        }
+
+        sp->Close();
+        free(buffer);
+        return NULL;
+    }
+
+    void *DownloadSplitPkg(void *argp)
+    {
+        SplitPkgInstallData *install_data = (SplitPkgInstallData*) argp;
+        SplitFile *sp = install_data->split_file;
+
+        /* loop over file contents and write to fd */
+        sp->Open();
+        install_data->remote_client->Get(sp, install_data->path);
+        sp->Close();
+        return NULL;
+    }
+
+    void *InstallLocalPkgsThread(void *argp)
+    {
+        int failed = 0;
+        int success = 0;
+        int skipped = 0;
+        int ret;
+
+        std::vector<DirEntry> files;
+        if (multi_selected_local_files.size() > 0)
+            std::copy(multi_selected_local_files.begin(), multi_selected_local_files.end(), std::back_inserter(files));
+        else
+            files.push_back(selected_local_file);
+
+        for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
+        {
+            if (stop_activity)
+                break;
+            sprintf(activity_message, "%s %s", lang_strings[STR_INSTALLING], it->name);
+
+            if (!it->isDir)
+            {
+                std::string path = std::string(it->path);
+                path = Util::ToLower(path);
+                if (Util::EndsWith(path,".pkg"))
+                {
+                    pkg_header header;
+                    memset(&header, 0, sizeof(header));
+                    if (FS::Head(it->path, (void *)&header, sizeof(header)) == 0)
+                        failed++;
+                    else
+                    {
+                        if (BE32(header.pkg_magic) == PKG_MAGIC)
+                        {
+                            if ((ret = INSTALLER::InstallLocalPkg(it->path, &header)) <= 0)
+                            {
+                                if (ret == -1)
+                                {
+                                    sprintf(activity_message, "%s - %s", it->name, lang_strings[STR_INSTALL_FROM_DATA_MSG]);
+                                    usleep(3000000);
+                                }
+                                else if (ret == -2)
+                                {
+                                    sprintf(activity_message, "%s - %s", it->name, lang_strings[STR_ALREADY_INSTALLED_MSG]);
+                                    usleep(3000000);
+                                }
+                                failed++;
+                            }
+                            else
+                                success++;
+                        }
+                        else
+                            skipped++;
+                    }
+                }
+                else if (Util::EndsWith(path,".zip") || Util::EndsWith(path,".rar") || Util::EndsWith(path,".7z") ||
+                         Util::EndsWith(path,".tar.xz") || Util::EndsWith(path,".tar.gz") || Util::EndsWith(path,".tar.bz2") )
+                {
+                    ArchiveEntry *entry = ZipUtil::GetPackageEntry(it->path);
+                    if (entry != nullptr)
+                    {
+                        while (entry != nullptr)
+                        {
+                            ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) malloc(sizeof(ArchivePkgInstallData));
+                            memset(install_data, 0, sizeof(ArchivePkgInstallData));
+
+                            std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
+                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
+                            
+                            install_data->archive_entry = entry;
+                            install_data->split_file = sp;
+                            install_data->stop_write_thread = false;
+
+                            int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
+
+                            INSTALLER::InstallArchivePkg(entry->filename, install_data);
+
+                            ArchiveEntry *previous = entry;
+                            entry = ZipUtil::GetNextPackageEntry(entry);
+                            free(previous);
+                        }
+                        success++;
+                    }
+                    else
+                        skipped++;
+                }
+                else
+                    skipped++;
+            }
+            else
+                skipped++;
+
+            sprintf(status_message, "%s %s = %d, %s = %d, %s = %d", lang_strings[STR_INSTALL],
+                    lang_strings[STR_INSTALL_SUCCESS], success, lang_strings[STR_INSTALL_FAILED], failed,
+                    lang_strings[STR_INSTALL_SKIPPED], skipped);
+        }
+        activity_inprogess = false;
+        multi_selected_local_files.clear();
+        Windows::SetModalMode(false);
+        return NULL;
+    }
+
+    void InstallLocalPkgs()
+    {
+        sprintf(status_message, "%s", "");
+        int res = pthread_create(&bk_activity_thid, NULL, InstallLocalPkgsThread, NULL);
+        if (res != 0)
+        {
+            activity_inprogess = false;
+            multi_selected_local_files.clear();
+            Windows::SetModalMode(false);
         }
     }
 
@@ -766,6 +1103,184 @@ namespace Actions
             file_transfering = false;
             activity_inprogess = false;
             multi_selected_local_files.clear();
+            Windows::SetModalMode(false);
+        }
+    }
+
+    void *InstallLocalUrlPkgThread(void *argp)
+    {
+        bytes_transfered = 0;
+        /* sceRtcGetCurrentTick(&prev_tick);
+        sprintf(status_message, "%s", "");
+        pkg_header header;
+        char filename[2000];
+        OrbisDateTime now;
+        OrbisTick tick;
+        sceRtcGetCurrentClockLocalTime(&now);
+        sceRtcGetTick(&now, &tick);
+        sprintf(filename, "%s/%lu.pkg", TMP_FOLDER_PATH, tick.mytick);
+
+        std::string full_url = std::string(install_pkg_url.url);
+        FileHost *filehost = FileHost::getFileHost(full_url, install_pkg_url.enable_alldebrid, install_pkg_url.enable_realdebrid);
+        if (!filehost->IsValidUrl())
+        {
+            sprintf(status_message, "%s", lang_strings[STR_FAIL_TO_OBTAIN_GG_DL_MSG]);
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            return NULL;
+        }
+        full_url = filehost->GetDownloadUrl();
+        delete(filehost);
+
+        if (full_url.empty())
+        {
+            sprintf(status_message, "%s", lang_strings[STR_FAIL_TO_OBTAIN_GG_DL_MSG]);
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            return NULL;
+        }
+        size_t scheme_pos = full_url.find_first_of("://");
+        size_t path_pos = full_url.find_first_of("/", scheme_pos + 3);
+        std::string host = full_url.substr(0, path_pos);
+        std::string path = full_url.substr(path_pos);
+
+        BaseClient tmp_client;
+        tmp_client.Connect(host.c_str(), install_pkg_url.username, install_pkg_url.password);
+
+        sprintf(activity_message, "%s URL to %s", lang_strings[STR_DOWNLOADING], filename);
+        int s = sizeof(pkg_header);
+        memset(&header, 0, s);
+
+        int ret = tmp_client.Size(path, &bytes_to_download);
+        if (ret == 0)
+        {
+            sprintf(status_message, "%s", tmp_client.LastResponse());
+            tmp_client.Quit();
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            return NULL;
+        }
+
+        file_transfering = 1;
+        int is_performed = tmp_client.Get(filename, path);
+
+        if (is_performed == 0)
+        {
+            sprintf(status_message, "%s - %s", lang_strings[STR_FAILED], tmp_client.LastResponse());
+            tmp_client.Quit();
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            return NULL;
+        }
+        tmp_client.Quit();
+
+        FILE *in = FS::OpenRead(filename);
+        if (in == NULL)
+        {
+            sprintf(status_message, "%s - Error opening temp pkg file - %s", lang_strings[STR_FAILED], filename);
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            return NULL;
+        }
+
+        FS::Read(in, (void *)&header, s);
+        FS::Close(in);
+        if (BE32(header.pkg_magic) == PKG_MAGIC)
+        {
+            int ret;
+            if ((ret = INSTALLER::InstallLocalPkg(filename, &header, true)) != 1)
+            {
+                if (ret == -1)
+                {
+                    sprintf(activity_message, "%s", lang_strings[STR_INSTALL_FROM_DATA_MSG]);
+                    sceKernelUsleep(3000000);
+                }
+                else if (ret == -2)
+                {
+                    sprintf(activity_message, "%s", lang_strings[STR_ALREADY_INSTALLED_MSG]);
+                    sceKernelUsleep(3000000);
+                }
+                else if (ret == -3)
+                {
+                    sprintf(activity_message, "%s", lang_strings[STR_FAIL_INSTALL_TMP_PKG_MSG]);
+                    sceKernelUsleep(5000000);
+                }
+                if (ret != -3 && auto_delete_tmp_pkg)
+                    FS::Rm(filename);
+            }
+        }
+
+        activity_inprogess = false;
+        Windows::SetModalMode(false); */
+        return NULL;
+    }
+
+    void *InstallRpiUrlPkgThread(void *argp)
+    {
+        /* json_object *params = json_object_new_object();
+        json_object_object_add(params, "url", json_object_new_string(install_pkg_url.url));
+        json_object_object_add(params, "use_alldebrid", json_object_new_boolean(install_pkg_url.enable_alldebrid));
+        json_object_object_add(params, "use_realdebrid", json_object_new_boolean(install_pkg_url.enable_realdebrid));
+        json_object_object_add(params, "use_disk_cache", json_object_new_boolean(install_pkg_url.enable_disk_cache));
+
+        const char *params_str = json_object_to_json_string(params);
+
+        char host[128];
+        sprintf(host, "http://127.0.0.1:%d", http_server_port);
+
+        httplib::Client tmp_client(host);
+        tmp_client.set_follow_location(true);
+        tmp_client.set_connection_timeout(30);
+        tmp_client.set_read_timeout(30);
+        tmp_client.enable_server_certificate_verification(false);
+
+        auto res = tmp_client.Post("/__local__/install_url", params_str, strlen(params_str), "application/json");
+        if (res != nullptr && HTTP_SUCCESS(res->status))
+        {
+            json_object *jobj = json_tokener_parse(res->body.c_str());
+            if (jobj != nullptr)
+            {
+                json_object *result = json_object_object_get(jobj, "result");
+                if (result != nullptr)
+                {
+                    bool success = json_object_get_boolean(json_object_object_get(result, "success"));
+                    if (!success)
+                    {
+                        const char* error_message = json_object_get_string(json_object_object_get(result, "error"));
+                        sprintf(status_message, "%s", error_message);
+                        activity_inprogess = false;
+                        Windows::SetModalMode(false);
+                    }
+                }
+            }
+            else
+            {
+                activity_inprogess = false;
+                Windows::SetModalMode(false);
+            }
+        }
+        else
+        {
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+        } */
+
+        return NULL;
+    }
+
+    void InstallUrlPkg()
+    {
+        int res;
+        sprintf(status_message, "%s", "");
+
+        if (!install_pkg_url.enable_rpi)
+            res = pthread_create(&bk_activity_thid, NULL, InstallLocalUrlPkgThread, NULL);
+        else
+            res = pthread_create(&bk_activity_thid, NULL, InstallRpiUrlPkgThread, NULL);
+
+        if (res != 0)
+        {
+            activity_inprogess = false;
             Windows::SetModalMode(false);
         }
     }
@@ -1305,6 +1820,25 @@ namespace Actions
             remote_paste_files.clear();
             Windows::SetModalMode(false);
         }
+    }
+
+    int DownloadAndInstallPkg(const std::string &filename, pkg_header *header)
+    {
+        char local_file[2000];
+        uint64_t tick = Util::GetTick();
+        sprintf(local_file, "%s/%lu.pkg", temp_folder, tick);
+
+        sprintf(activity_message, "%s %s to %s", lang_strings[STR_DOWNLOADING], filename.c_str(), local_file);
+        remoteclient->Size(filename, &bytes_to_download);
+        bytes_transfered = 0;
+        prev_tick = Util::GetTick();
+
+        file_transfering = true;
+        int ret = remoteclient->Get(local_file, filename);
+        if (ret == 0)
+            return 0;
+
+        return INSTALLER::InstallLocalPkg(local_file, header, true);
     }
 
     void CreateLocalFile(char *filename)

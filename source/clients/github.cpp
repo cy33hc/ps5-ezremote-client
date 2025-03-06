@@ -178,6 +178,20 @@ int GithubClient::Get(const std::string &outputfile, const std::string &path, ui
     return 0;
 }
 
+int GithubClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
+{
+    /* std::vector<std::string> path_parts = Util::Split(path, "/");
+    
+    if (path_parts.size() != 2)
+    {
+        return 0;
+    }
+
+    return m_client.Get(split_file, m_assets[path_parts[0]][path_parts[1]].url, offset); */
+    return 0;
+}
+
+
 int GithubClient::GetRange(const std::string &path, void *buffer, uint64_t size, uint64_t offset)
 {
     if (!ParseReleases())
@@ -289,4 +303,17 @@ bool GithubClient::ParseReleases()
     }
 
     return 1;
+}
+
+int GithubClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)
+{
+    /* std::vector<std::string> path_parts = Util::Split(path, "/");
+    
+    if (path_parts.size() != 2)
+    {
+        return 0;
+    }
+
+    return m_client.GetRange(m_assets[path_parts[0]][path_parts[1]].url, sink, size, offset);   */
+    return 0;
 }

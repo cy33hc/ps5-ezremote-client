@@ -19,8 +19,11 @@ public:
     int Rmdir(const std::string &path);
     int Size(const std::string &path, uint64_t *size);
     int Get(const std::string &outputfile, const std::string &path, uint64_t offset=0);
+    int Get(SplitFile *split_file, const std::string &path, uint64_t offset=0);
     int GetRange(const std::string &path, void *buffer, uint64_t size, uint64_t offset);
+    int GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset);
     int GetRange(void *fp, void *buffer, uint64_t size, uint64_t offset);
+    int GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset);
     int Put(const std::string &inputfile, const std::string &path, uint64_t offset=0);
     int Rename(const std::string &src, const std::string &dst);
     int Delete(const std::string &path);

@@ -15,18 +15,6 @@ static uint8_t storebuffer[1024];
 static char initial_ime_text[1024];
 static int max_text_length;
 
-extern "C"
-{
-int sceUserServiceInitialize(void *);
-int sceUserServiceGetForegroundUser(int *);
-
-int sceImeDialogInit(const SceImeDialogParam*, void*);
-int sceImeDialogGetResult(SceImeDialogResult*);
-int sceImeDialogTerm(void);
-
-SceImeDialogStatus sceImeDialogGetStatus(void);
-};
-
 static void utf16_to_utf8(const uint16_t *src, uint8_t *dst)
 {
   int i;

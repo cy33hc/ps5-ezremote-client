@@ -237,6 +237,89 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 	return 1;
 }
 
+int SmbClient::Get(SplitFile *split_file, const std::string &ppath, uint64_t offset)
+{
+	std::string path = std::string(ppath);
+	path = Util::Trim(path, "/");
+
+	struct smb2fh *in = smb2_open(smb2, path.c_str(), O_RDONLY);
+	if (in == NULL)
+	{
+		sprintf(response, "%s", smb2_get_error(smb2));
+		return 0;
+	}
+
+	uint8_t *buff = (uint8_t *)malloc(max_read_size);
+	int count = 0;
+
+	while ((count = smb2_read(smb2, in, buff, max_read_size)) > 0)
+	{
+		if (count < 0)
+		{
+			sprintf(response, "%s", smb2_get_error(smb2));
+			smb2_close(smb2, in);
+			free((void *)buff);
+			return 0;
+		}
+		split_file->Write((char*)buff, count);
+	}
+
+	smb2_close(smb2, in);
+	free((void *)buff);
+	return 1;
+}
+
+int SmbClient::GetRange(const std::string &ppath, DataSink &sink, uint64_t size, uint64_t offset)
+{
+	std::string path = std::string(ppath);
+	path = Util::Trim(path, "/");
+	struct smb2fh *in = smb2_open(smb2, path.c_str(), O_RDONLY);
+	if (in == NULL)
+	{
+		return 0;
+	}
+
+	int ret = this->GetRange((void *)in, sink, size, offset);
+	smb2_close(smb2, in);
+
+	return ret;
+}
+
+int SmbClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset)
+{
+	struct smb2fh *in = (struct smb2fh *)fp;
+
+	smb2_lseek(smb2, in, offset, SEEK_SET, NULL);
+
+	uint8_t *buff = (uint8_t *)malloc(max_read_size);
+	int count = 0;
+	size_t bytes_remaining = size;
+	do
+	{
+		size_t bytes_to_read = std::min<size_t>(max_read_size, bytes_remaining);
+		count = smb2_read(smb2, in, buff, bytes_to_read);
+		if (count > 0)
+		{
+			bytes_remaining -= count;
+			bool ok = sink.write((char *)buff, count);
+			if (!ok)
+			{
+				free((uint8_t *)buff);
+				return 0;
+			}
+		}
+		else
+		{
+			break;
+		}
+	} while (1);
+
+	free((char *)buff);
+
+	return 1;
+}
+
+
 int SmbClient::GetRange(const std::string &ppath, void *buffer, uint64_t size, uint64_t offset)
 {
 	std::string path = std::string(ppath);

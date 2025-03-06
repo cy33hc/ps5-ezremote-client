@@ -9,6 +9,8 @@
 #include "windows.h"
 #include "common.h"
 
+using httplib::DataSink;
+
 BaseClient::BaseClient(){};
 
 BaseClient::~BaseClient()
@@ -139,6 +141,58 @@ int BaseClient::Get(const std::string &outputfile, const std::string &path, uint
     }
     return 0;
 }
+
+int BaseClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
+{
+    /* Headers headers;
+    SetCookies(headers);
+
+    if (auto res = client->Get(GetFullPath(path), headers,
+                               [&](const char *data, size_t data_length)
+                               {
+                                   if (!split_file->IsClosed())
+                                   {
+                                        split_file->Write((char*)data, data_length);
+                                        return true;
+                                   }
+                                   else
+                                        return false;
+                               }))
+    {
+        return 1;
+    }
+    else
+    {
+        sprintf(this->response, "%s", httplib::to_string(res.error()).c_str());
+    } */
+    return 0;
+}
+
+int BaseClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)
+{
+    /* char range_header[64];
+    sprintf(range_header, "bytes=%lu-%lu", offset, offset + size - 1);
+    Headers headers = {{"Range", range_header}};
+    SetCookies(headers);
+
+    size_t bytes_read = 0;
+    if (auto res = client->Get(GetFullPath(path), headers,
+                               [&](const char *data, size_t data_length)
+                               {
+                                   bytes_read += data_length;
+                                   bool ok = sink.write(data, data_length);
+                                   return ok;
+                               }))
+    {
+        return bytes_read == size;
+    }
+    else
+    {
+        sprintf(this->response, "%s", httplib::to_string(res.error()).c_str());
+    } */
+    return 0;
+}
+
 
 int BaseClient::GetRange(const std::string &path, void *buffer, uint64_t size, uint64_t offset)
 {
@@ -345,6 +399,12 @@ void *BaseClient::Open(const std::string &path, int flags)
 void BaseClient::Close(void *fp)
 {
     sprintf(this->response, "%s", lang_strings[STR_UNSUPPORTED_OPERATION_MSG]);
+}
+
+int BaseClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset)
+{
+    sprintf(this->response, "%s", lang_strings[STR_UNSUPPORTED_OPERATION_MSG]);
+    return -1;
 }
 
 int BaseClient::GetRange(void *fp, void *buffer, uint64_t size, uint64_t offset)

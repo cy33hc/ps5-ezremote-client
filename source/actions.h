@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 #include "common.h"
+#include "installer.h"
 
 #define CONFIRM_NONE -1
 #define CONFIRM_WAIT 0
@@ -35,6 +36,9 @@ enum ACTIONS
     ACTION_CONNECT,
     ACTION_DISCONNECT,
     ACTION_DISCONNECT_AND_EXIT,
+    ACTION_INSTALL_REMOTE_PKG,
+    ACTION_INSTALL_LOCAL_PKG,
+    ACTION_INSTALL_URL_PKG,
     ACTION_EXTRACT_LOCAL_ZIP,
     ACTION_CREATE_LOCAL_ZIP,
     ACTION_LOCAL_CUT,
@@ -51,6 +55,8 @@ enum ACTIONS
     ACTION_SET_DEFAULT_REMOTE_FOLDER,
     ACTION_VIEW_LOCAL_IMAGE,
     ACTION_VIEW_REMOTE_IMAGE,
+    ACTION_VIEW_LOCAL_PKG,
+    ACTION_VIEW_REMOTE_PKG,
     ACTION_EXTRACT_REMOTE_ZIP,
 };
 
@@ -89,6 +95,13 @@ namespace Actions
     void Disconnect();
     void SelectAllLocalFiles();
     void SelectAllRemoteFiles();
+    void *InstallRemotePkgsThread(void *argp);
+    void InstallRemotePkgs();
+    void *InstallLocalPkgsThread(void *argp);
+    void InstallLocalPkgs();
+    void *InstallLocalUrlPkgThread(void *argp);
+    void *InstallRpiUrlPkgThread(void *argp);
+    void InstallUrlPkg();
     void *KeepAliveThread(void *argp);
     void *ExtractZipThread(void *argp);
     void ExtractLocalZips();
@@ -104,8 +117,11 @@ namespace Actions
     void MoveRemoteFiles();
     void *CopyRemoteFilesThread(void *argp);
     void CopyRemoteFiles();
+    int DownloadAndInstallPkg(const std::string &filename, pkg_header *header);
     void CreateLocalFile(char *filename);
     void CreateRemoteFile(char *filename);
+    void *ExtractArchivePkg(void *argp);
+    void *DownloadSplitPkg(void *argp);
 }
 
 #endif

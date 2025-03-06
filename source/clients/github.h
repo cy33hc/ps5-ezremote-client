@@ -14,7 +14,9 @@ public:
     std::vector<DirEntry> ListDir(const std::string &path);
     int Size(const std::string &path, uint64_t *size);
     int Get(const std::string &outputfile, const std::string &path, uint64_t offset=0);
+    int Get(SplitFile *split_file, const std::string &path, uint64_t offset=0);
     int GetRange(const std::string &path, void *buffer, uint64_t size, uint64_t offset);
+    int GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset);
     int Head(const std::string &path, void *buffer, uint64_t len);
     bool FileExists(const std::string &path);
 

@@ -234,6 +234,87 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 	return 1;
 }
 
+int NfsClient::Get(SplitFile *split_file, const std::string &ppath, uint64_t offset)
+{
+	struct nfsfh *nfsfh = nullptr;
+	int ret = nfs_open(nfs, ppath.c_str(), 0400, &nfsfh);
+	if (ret != 0)
+	{
+		sprintf(response, "%s", nfs_get_error(nfs));
+		return 0;
+	}
+
+	void *buff = malloc(BUF_SIZE);
+	int count = 0;
+	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) > 0)
+	{
+		if (count < 0)
+		{
+			sprintf(response, "%s", nfs_get_error(nfs));
+			nfs_close(nfs, nfsfh);
+			free((void *)buff);
+			return 0;
+		}
+		split_file->Write((char *)buff, count);
+	}
+	nfs_close(nfs, nfsfh);
+	free((void *)buff);
+
+	return 1;
+}
+
+int NfsClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)
+{
+	struct nfsfh *nfsfh = nullptr;
+	int ret = nfs_open(nfs, path.c_str(), 0400, &nfsfh);
+	if (ret != 0)
+	{
+		return 0;
+	}
+
+	ret = this->GetRange((void *)nfsfh, sink, size, offset);
+	nfs_close(nfs, nfsfh);
+
+	return ret;
+}
+
+int NfsClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset)
+{
+	struct nfsfh *nfsfh = (struct nfsfh *)fp;
+
+	int ret = nfs_lseek(nfs, nfsfh, offset, SEEK_SET, NULL);
+	if (ret != 0)
+	{
+		return 0;
+	}
+
+	void *buff = malloc(BUF_SIZE);
+	int count = 0;
+	size_t bytes_remaining = size;
+	do
+	{
+		size_t bytes_to_read = std::min<size_t>(BUF_SIZE, bytes_remaining);
+		count = nfs_read(nfs, nfsfh, bytes_to_read, buff);
+		if (count > 0)
+		{
+			bytes_remaining -= count;
+			bool ok = sink.write((char *)buff, count);
+			if (!ok)
+			{
+				free((void *)buff);
+				return 0;
+			}
+		}
+		else
+		{
+			break;
+		}
+	} while (1);
+
+	free((void *)buff);
+	return 1;
+}
+
 int NfsClient::GetRange(const std::string &ppath, void *buffer, uint64_t size, uint64_t offset)
 {
 	struct nfsfh *nfsfh = nullptr;

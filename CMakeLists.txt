@@ -45,6 +45,7 @@ add_executable(ezremote_client.elf
   source/gui.cpp
   source/ime_dialog.cpp
   source/inifile.c
+  source/installer.cpp
   source/lang.cpp
   source/main.cpp
   source/sfo.cpp

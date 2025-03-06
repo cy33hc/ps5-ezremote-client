@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <stdarg.h>
 #include <sys/time.h>
-// #include "base64.h"
-// #include "openssl/md5.h"
+#include "base64.h"
+#include "wolfssl/openssl/md5.h"
 #include "common.h"
 #include "lang.h"
 
@@ -71,36 +71,6 @@ namespace Util
         }
 
         *dst = '\0';
-    }
-
-    static inline uint16_t LE16(const uint8_t *bytes)
-    {
-        return (bytes[0]) | (bytes[1] << 8);
-    }
-
-    static inline uint32_t LE32(const uint8_t *bytes)
-    {
-        return (bytes[0]) | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);
-    }
-
-    static inline uint64_t LE64(const uint8_t *bytes)
-    {
-        return (uint64_t)bytes[0] | ((uint64_t)bytes[1] << 8) | ((uint64_t)bytes[2] << 16) | ((uint64_t)bytes[3] << 24) | ((uint64_t)bytes[4] << 32) | ((uint64_t)bytes[5] << 40) | ((uint64_t)bytes[6] << 48) | ((uint64_t)bytes[7] << 56);
-    }
-
-    static inline uint16_t BE16(const uint8_t *bytes)
-    {
-        return (bytes[1]) | (bytes[0] << 8);
-    }
-
-    static inline uint32_t BE32(const uint8_t *bytes)
-    {
-        return (bytes[3]) | (bytes[2] << 8) | (bytes[1] << 16) | (bytes[0] << 24);
-    }
-
-    static inline uint64_t BE64(const uint8_t *bytes)
-    {
-        return (uint64_t)bytes[7] | ((uint64_t)bytes[6] << 8) | ((uint64_t)bytes[5] << 16) | ((uint64_t)bytes[4] << 24) | ((uint64_t)bytes[3] << 32) | ((uint64_t)bytes[2] << 40) | ((uint64_t)bytes[1] << 48) | ((uint64_t)bytes[0] << 56);
     }
 
     static inline std::string &Ltrim(std::string &str, std::string chars)
@@ -171,37 +141,35 @@ namespace Util
         myObjectStream << value;
         return myObjectStream.str();
     }
+    
+    static inline std::string UrlHash(const std::string &text)
+    {
+        std::vector<unsigned char> res(16);
+        wolfSSL_MD5((const unsigned char *)text.c_str(), text.length(), res.data());
 
-    /*
-        static inline std::string UrlHash(const std::string &text)
-        {
-            std::vector<unsigned char> res(16);
-            MD5((const unsigned char *)text.c_str(), text.length(), res.data());
+        std::string out;
+        Base64::Encode(res.data(), res.size(), out);
+        Util::ReplaceAll(out, "=", "_");
+        Util::ReplaceAll(out, "+", "_");
+        out = out + ".pkg";
+        return out;
+    }
 
-            std::string out;
-            Base64::Encode(res.data(), res.size(), out);
-            Util::ReplaceAll(out, "=", "_");
-            Util::ReplaceAll(out, "+", "_");
-            out = out + ".pkg";
-            return out;
-        }
+    static inline void Notify(const char *fmt, ...)
+    {
+        /* OrbisNotificationRequest request;
 
-        static inline void Notify(const char *fmt, ...)
-        {
-            OrbisNotificationRequest request;
+        va_list args;
+        va_start(args, fmt);
+        vsprintf(request.message, fmt, args);
+        va_end(args);
 
-            va_list args;
-            va_start(args, fmt);
-            vsprintf(request.message, fmt, args);
-            va_end(args);
-
-            request.type = OrbisNotificationRequestType::NotificationRequest;
-            request.unk3 = 0;
-            request.useIconImageUri = 0;
-            request.targetId = -1;
-            sceKernelSendNotificationRequest(0, &request, sizeof(request), 0);
-        }
-    */
+        request.type = OrbisNotificationRequestType::NotificationRequest;
+        request.unk3 = 0;
+        request.useIconImageUri = 0;
+        request.targetId = -1;
+        sceKernelSendNotificationRequest(0, &request, sizeof(request), 0); */
+    }
 
     static inline void SetupPreviousFolder(const std::string &path, DirEntry *entry)
     {

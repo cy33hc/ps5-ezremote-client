@@ -13,10 +13,12 @@
 #include "util.h"
 #include "lang.h"
 #include "ime_dialog.h"
+#include "installer.h"
 #include "IconsFontAwesome6.h" 
 #include "OpenFontIcons.h"
 #include "textures.h"
 #include "sfo.h"
+#include "sceSystemService.h"
 
 #define MAX_IMAGE_HEIGHT 980
 #define MAX_IMAGE_WIDTH 1820
@@ -620,10 +622,10 @@ namespace Windows
                         {
                             selected_action = ACTION_LOCAL_EDIT;
                         }
-                        /* else if (ext.compare(".pkg") == 0)
+                        else if (ext.compare(".pkg") == 0)
                         {
                             selected_action = ACTION_VIEW_LOCAL_PKG;
-                        } */
+                        }
                     }
                 }
             }
@@ -808,10 +810,10 @@ namespace Windows
                         {
                             selected_action = ACTION_REMOTE_EDIT;
                         }
-                        /* else if (ext.compare(".pkg") == 0)
+                        else if (ext.compare(".pkg") == 0)
                         {
                             selected_action = ACTION_VIEW_REMOTE_PKG;
-                        } */
+                        }
                     }
                 }
             }
@@ -1473,7 +1475,7 @@ namespace Windows
                     ImGui::PopTextWrapPos();
                 }
                 ImGui::EndPopup();
-                // sceSystemServicePowerTick();
+                sceSystemServicePowerTick();
             }
         }
     }
@@ -2090,21 +2092,21 @@ namespace Windows
                 ImGui::PopTextWrapPos();
                 EndGroupPanel();
 
-                if (saved_selected_browser & REMOTE_BROWSER ||
+                /* if (saved_selected_browser & REMOTE_BROWSER ||
                     (saved_selected_browser & LOCAL_BROWSER && (strncmp(selected_local_file.path, "/data/", 6) == 0 || strncmp(selected_local_file.path, "/mnt/usb", 8) == 0)))
                 {
                     ImGui::SetCursorPos(ImVec2(7, 420));
                     if (ImGui::Button(lang_strings[STR_INSTALL], ImVec2(400, 0)))
                     {
-                        /* if (saved_selected_browser & REMOTE_BROWSER)
+                        if (saved_selected_browser & REMOTE_BROWSER)
                             selected_action = ACTION_INSTALL_REMOTE_PKG;
                         else
-                            selected_action = ACTION_INSTALL_LOCAL_PKG; */
+                            selected_action = ACTION_INSTALL_LOCAL_PKG;
                         show_pkg_info = false;
                         SetModalMode(false);
                         ImGui::CloseCurrentPopup();
                     }
-                }
+                } */
 
                 if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
                 {
@@ -2138,7 +2140,7 @@ namespace Windows
             ShowEditorDialog();
             ShowSettingsDialog();
             ShowImageDialog();
-            // ShowPackageInfoDialog();
+            ShowPackageInfoDialog();
         }
         ImGui::End();
     }
@@ -2317,9 +2319,33 @@ namespace Windows
             break;
         case ACTION_DISCONNECT_AND_EXIT:
             Actions::Disconnect();
-/*             HttpServer::Stop();
-            GDriveClient::StopRefreshToken();
- */            done = true;
+            HttpServer::Stop();
+            done = true;
+            break;
+        case ACTION_INSTALL_REMOTE_PKG:
+            sprintf(status_message, "%s", "");
+            activity_inprogess = true;
+            file_transfering = true;
+            sprintf(activity_message, "%s", "");
+            stop_activity = false;
+            Actions::InstallRemotePkgs();
+            selected_action = ACTION_NONE;
+            break;
+        case ACTION_INSTALL_LOCAL_PKG:
+            activity_inprogess = true;
+            sprintf(status_message, "%s", "");
+            sprintf(activity_message, "%s", "");
+            stop_activity = false;
+            Actions::InstallLocalPkgs();
+            selected_action = ACTION_NONE;
+            break;
+        case ACTION_INSTALL_URL_PKG:
+            activity_inprogess = true;
+            sprintf(status_message, "%s", "");
+            sprintf(activity_message, "%s", "");
+            stop_activity = false;
+            Actions::InstallUrlPkg();
+            selected_action = ACTION_NONE;
             break;
         case ACTION_LOCAL_CUT:
         case ACTION_LOCAL_COPY:
@@ -2431,6 +2457,24 @@ namespace Windows
                 editor_inprogress = true;
             }
             editor_modified = false;
+            selected_action = ACTION_NONE;
+            break;
+        case ACTION_VIEW_LOCAL_PKG:
+            INSTALLER::ExtractLocalPkg(selected_local_file.path, TMP_SFO_PATH, TMP_ICON_PATH);
+            Textures::LoadImageFile(TMP_ICON_PATH, &texture);
+            sfo = FS::Load(TMP_SFO_PATH);
+            sfo_params = SFO::GetParams(sfo.data(), sfo.size());
+            show_pkg_info = true;
+            selected_action = ACTION_NONE;
+            break;
+        case ACTION_VIEW_REMOTE_PKG:
+            if (INSTALLER::ExtractRemotePkg(selected_remote_file.path, TMP_SFO_PATH, TMP_ICON_PATH))
+            {
+                Textures::LoadImageFile(TMP_ICON_PATH, &texture);
+                sfo = FS::Load(TMP_SFO_PATH);
+                sfo_params = SFO::GetParams(sfo.data(), sfo.size());
+                show_pkg_info = true;
+            }
             selected_action = ACTION_NONE;
             break;
         default:

@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include "common.h"
+#include "http/httplib.h"
+#include "split_file.h"
 
 enum RemoteActions
 {
@@ -36,7 +38,7 @@ enum ClientType
     CLINET_TYPE_UNKNOWN
 };
 
-// using namespace httplib;
+using namespace httplib;
 
 class RemoteClient
 {
@@ -48,6 +50,7 @@ public:
     virtual int Rmdir(const std::string &path, bool recursive) = 0;
     virtual int Size(const std::string &path, uint64_t *size) = 0;
     virtual int Get(const std::string &outputfile, const std::string &path, uint64_t offset=0) = 0;
+    virtual int Get(SplitFile *split_file, const std::string &path, uint64_t offset=0) = 0;
     virtual int Put(const std::string &inputfile, const std::string &path, uint64_t offset=0) = 0;
     virtual int Rename(const std::string &src, const std::string &dst) = 0;
     virtual int Delete(const std::string &path) = 0;
@@ -55,12 +58,14 @@ public:
     virtual int Move(const std::string &from, const std::string &to) = 0;
     virtual int Head(const std::string &path, void *buffer, uint64_t len) = 0;
     virtual int GetRange(const std::string &path, void *buffer, uint64_t size, uint64_t offset) = 0;
+    virtual int GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset) = 0;
+    virtual int GetRange(void *fp, void *buffer, uint64_t size, uint64_t offset) = 0;
+    virtual int GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset) = 0;
     virtual bool FileExists(const std::string &path) = 0;
     virtual std::vector<DirEntry> ListDir(const std::string &path) = 0;
-    virtual std::string GetPath(std::string path1, std::string path2) = 0;
-    virtual int GetRange(void *fp, void *buffer, uint64_t size, uint64_t offset) = 0;
     virtual void *Open(const std::string &path, int flags) = 0;
     virtual void Close(void *fp) = 0;
+    virtual std::string GetPath(std::string path1, std::string path2) = 0;
     virtual bool IsConnected() = 0;
     virtual bool Ping() = 0;
     virtual const char *LastResponse() = 0;

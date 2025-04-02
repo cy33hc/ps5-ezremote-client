@@ -563,119 +563,42 @@ namespace INSTALLER
 	bool InstallArchivePkg(const std::string &path, ArchivePkgInstallData *pkg_data, bool bg)
 	{
 		int ret = 0;
-		/* pkg_header header;
+		pkg_header header;
 		pkg_data->split_file->Read((char *)&header, sizeof(pkg_header), 0);
+
+
+
+		PlayGoInfo playgo_info;
+		SceAppInstallPkgInfo pkg_info;
+		memset(&playgo_info, 0, sizeof(playgo_info));
+		
+		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+		}
+
+		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+		}
 
 		std::string cid = std::string((char *)header.pkg_content_id);
 		cid = cid.substr(cid.find_first_of("-") + 1, 9);
 		std::string display_title = cid;
-		int user_id;
-		ret = sceUserServiceGetForegroundUser(&user_id);
-		const char *package_type;
-		uint32_t content_type = BE32(header.pkg_content_type);
-		uint32_t flags = BE32(header.pkg_content_flags);
-		bool is_patch = false;
-		bool completed = false;
-
-		switch (content_type)
-		{
-		case PKG_CONTENT_TYPE_GD:
-			package_type = "PS4GD";
-			break;
-		case PKG_CONTENT_TYPE_AC:
-			package_type = "PS4AC";
-			break;
-		case PKG_CONTENT_TYPE_AL:
-			package_type = "PS4AL";
-			break;
-		case PKG_CONTENT_TYPE_DP:
-			package_type = "PS4DP";
-			break;
-		default:
-			package_type = NULL;
-			return 0;
-			break;
-		}
-
-		if (flags & PKG_CONTENT_FLAGS_FIRST_PATCH ||
-			flags & PKG_CONTENT_FLAGS_SUBSEQUENT_PATCH ||
-			flags & PKG_CONTENT_FLAGS_DELTA_PATCH ||
-			flags & PKG_CONTENT_FLAGS_CUMULATIVE_PATCH)
-		{
-			is_patch = true;
-		}
 
 		std::string hash = Util::UrlHash(path);
 		std::string full_url = std::string("http://localhost:") + std::to_string(http_server_port) + "/archive_inst/" + hash;
 		AddArchivePkgInstallData(hash, pkg_data);
 
-		SceBgftTaskProgress progress_info;
-		SceBgftDownloadParam params;
-		memset(&params, 0, sizeof(params));
-		{
-			params.userId = user_id;
-			params.entitlementType = 5;
-			params.id = (char *)header.pkg_content_id;
-			params.contentUrl = full_url.c_str();
-			params.contentName = display_title.c_str();
-			params.iconPath = "";
-			params.playgoScenarioId = "0";
-			params.option = SCE_BGFT_TASK_OPT_DISABLE_CDN_QUERY_PARAM;
-			params.packageType = package_type;
-			params.packageSubType = "";
-			params.packageSize = BE64(header.pkg_size);
-		}
+		MetaInfo metainfo = (MetaInfo){
+			.uri = full_url.c_str(),
+			.ex_uri = "",
+			.playgo_scenario_id = "",
+			.content_id = "",
+			.content_name = display_title.c_str(),
+			.icon_url = ""
+		};
 
-	retry:
-		int task_id = -1;
-		if (!is_patch)
-			ret = sceBgftServiceIntDownloadRegisterTask(&params, &task_id);
-		else
-			ret = sceBgftServiceIntDebugDownloadRegisterPkg(&params, &task_id);
-		if (ret == 0x80990088 || ret == 0x80990015)
-		{
-			if (!bg)
-			{
-				sprintf(confirm_message, "%s - %s?", display_title.c_str(), lang_strings[STR_REINSTALL_CONFIRM_MSG]);
-				confirm_state = CONFIRM_WAIT;
-				action_to_take = selected_action;
-				activity_inprogess = false;
-				while (confirm_state == CONFIRM_WAIT)
-				{
-					usleep(100000);
-				}
-				activity_inprogess = true;
-				selected_action = action_to_take;
-
-				if (confirm_state == CONFIRM_YES)
-				{
-					ret = sceAppInstUtilAppUnInstall(cid.c_str());
-					if (ret != 0)
-					{
-						ret = 0;
-						goto finish;
-					}
-					goto retry;
-				}
-			}
-			else
-			{
-				ret = sceAppInstUtilAppUnInstall(cid.c_str());
-				if (ret != 0)
-				{
-					ret = 0;
-					goto finish;
-				}
-				goto retry;
-			}
-		}
-		else if (ret > 0)
-		{
-			ret = 0;
-			goto finish;
-		}
-
-		ret = sceBgftServiceDownloadStartTask(task_id);
+		ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
 		if (ret)
 		{
 			ret = 0;
@@ -691,21 +614,15 @@ namespace INSTALLER
 			bytes_transfered = 0;
 			prev_tick = Util::GetTick();
 
-			while (!completed)
+			SceAppInstallStatusInstalled progress_info;
+			while (strcmp(progress_info.status, "playable") != 0)
 			{
-				memset(&progress_info, 0, sizeof(progress_info));
-				ret = sceBgftServiceDownloadGetProgress(task_id, &progress_info);
-				if (ret || (progress_info.transferred > 0 && progress_info.errorResult != 0))
-				{
-					ret = 0;
-					goto finish;
-				}
-				if (progress_info.length > 0)
-				{
-					completed = progress_info.transferred == progress_info.length;
-					bytes_to_download = progress_info.length;
-					bytes_transfered = progress_info.transferred;
-				}
+				ret = sceAppInstUtilGetInstallStatus((const char *)header.pkg_content_id, &progress_info);
+				if (ret || (progress_info.error_info.error_code != 0))
+					return 0;
+	
+				bytes_to_download = progress_info.total_size;
+				bytes_transfered = progress_info.downloaded_size;
 				sceSystemServicePowerTick();
 			}
 		}
@@ -715,7 +632,7 @@ namespace INSTALLER
 			memset(bg_check_data, 0, sizeof(BgProgressCheck));
 			bg_check_data->archive_pkg_data = pkg_data;
 			bg_check_data->split_pkg_data = nullptr;
-			bg_check_data->task_id = task_id;
+			snprintf(bg_check_data->content_id, sizeof(bg_check_data->content_id), "%s", (char *)header.pkg_content_id);
 			bg_check_data->hash = hash;
 			ret = pthread_create(&bk_install_thid, NULL, CheckBgInstallTaskThread, bg_check_data);
 			return 1;
@@ -726,7 +643,7 @@ namespace INSTALLER
 		pthread_join(pkg_data->thread, NULL);
 		delete (pkg_data->split_file);
 		free(pkg_data);
-		RemoveArchivePkgInstallData(hash); */
+		RemoveArchivePkgInstallData(hash);
 		return ret;
 	}
 

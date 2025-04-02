@@ -11,7 +11,7 @@
 #include "util.h"
 #include "windows.h"
 
-int GithubClient::Connect(const std::string &url, const std::string &username, const std::string &password)
+int GithubClient::Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping)
 {
     if (url.find("https://github.com") == std::string::npos)
         return 0;
@@ -28,7 +28,9 @@ int GithubClient::Connect(const std::string &url, const std::string &username, c
     client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
     client->SetCertificateFile(CACERT_FILE);
 
-    if (Ping())
+    if (!send_ping)
+        this->connected = true;
+    else if (Ping())
         this->connected = true;
     return 1;
 }

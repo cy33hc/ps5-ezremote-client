@@ -116,6 +116,7 @@ struct RemoteSettings
     GoogleAccountInfo gg_account;
     char default_directory[256];
     bool enable_disk_cache;
+    RemoteClient *client;
 };
 
 struct PackageUrlInfo

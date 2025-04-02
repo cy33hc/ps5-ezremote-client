@@ -98,10 +98,6 @@ namespace CONFIG
         {
             setting->type = CLIENT_TYPE_WEBDAV;
         }
-        else if (strncmp(setting->server, "https://drive.google.com", 24) == 0)
-        {
-            setting->type = CLIENT_TYPE_GOOGLE;
-        }
         else if (strncmp(setting->server, "http://", 7) == 0 || strncmp(setting->server, "https://", 8) == 0)
         {
             setting->type = CLIENT_TYPE_HTTP_SERVER;

@@ -13,7 +13,7 @@ class BaseClient : public RemoteClient
 public:
     BaseClient();
     ~BaseClient();
-    int Connect(const std::string &url, const std::string &username, const std::string &password);
+    int Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping=false);
     int Mkdir(const std::string &path);
     int Rmdir(const std::string &path, bool recursive);
     int Size(const std::string &path, uint64_t *size);
@@ -45,6 +45,7 @@ public:
     static std::string UnEscape(const std::string &url);
     static int DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
     static int UploadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
+    static size_t WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data);
 
 protected:
     CHTTPClient *client;

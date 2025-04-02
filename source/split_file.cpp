@@ -56,7 +56,10 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
     while ((block_num >= this->file_blocks.size() && !this->complete) ||
            (block_num < this->file_blocks.size() && this->file_blocks[block_num]->status == BLOCK_STATUS_NOT_EXISTS))
     {
-        sem_wait(&this->block_ready);
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 2;
+        sem_timedwait(&this->block_ready, &ts);
     }
 
     block = this->file_blocks[block_num];
@@ -120,7 +123,10 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
         while ((block_num > this->file_blocks.size() - 1 && !this->complete) ||
                this->file_blocks[block_num]->status == BLOCK_STATUS_NOT_EXISTS)
         {
-            sem_wait(&this->block_ready);
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_sec += 2;
+            sem_timedwait(&this->block_ready, &ts);
         }
 
         block = this->file_blocks[block_num];
@@ -128,7 +134,7 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
 
     // delete blocks before the first read offset block. Assumuption, that reads are always
     // forward and won't read previously already read blocks. For safety, keeping only current block and 2 previous blocks
-    for (int j=0; j < first_block_num - 2; j++)
+    for (int j=0; j < first_block_num - 20; j++)
     {
         if (this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
         {

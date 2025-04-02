@@ -93,6 +93,10 @@ namespace CONFIG
         else if (strncmp(setting->server, "sftp://", 7) == 0)
         {
             setting->type = CLIENT_TYPE_SFTP;
+            if (setting->enable_rpi)
+                setting->enable_disk_cache = true;
+            else
+                setting->enable_disk_cache = false;
         }
         else if (strncmp(setting->server, "webdav://", 9) == 0 || strncmp(setting->server, "webdavs://", 10) == 0)
         {
@@ -105,6 +109,10 @@ namespace CONFIG
         else if (strncmp(setting->server, "nfs://", 6) == 0)
         {
             setting->type = CLIENT_TYPE_NFS;
+            if (setting->enable_rpi)
+                setting->enable_disk_cache = true;
+            else
+                setting->enable_disk_cache = false;
         }
         else
         {

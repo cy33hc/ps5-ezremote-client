@@ -109,10 +109,6 @@ namespace CONFIG
         else if (strncmp(setting->server, "nfs://", 6) == 0)
         {
             setting->type = CLIENT_TYPE_NFS;
-            if (setting->enable_rpi)
-                setting->enable_disk_cache = true;
-            else
-                setting->enable_disk_cache = false;
         }
         else
         {

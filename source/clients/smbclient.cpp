@@ -590,7 +590,7 @@ ClientType SmbClient::clientType()
 
 uint32_t SmbClient::SupportedActions()
 {
-	return REMOTE_ACTION_ALL ^ REMOTE_ACTION_CUT ^ REMOTE_ACTION_COPY ^ REMOTE_ACTION_PASTE ^ REMOTE_ACTION_RAW_READ;
+	return REMOTE_ACTION_ALL ^ REMOTE_ACTION_CUT ^ REMOTE_ACTION_COPY ^ REMOTE_ACTION_PASTE;
 }
 
 void *SmbClient::Open(const std::string &ppath, int flags)

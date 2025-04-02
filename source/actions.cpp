@@ -760,6 +760,8 @@ namespace Actions
                     {
                         while (entry != nullptr)
                         {
+                            snprintf(activity_message, 1023, "%s %s", lang_strings[STR_INSTALLING], entry->filename.c_str());
+
                             ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) malloc(sizeof(ArchivePkgInstallData));
                             memset(install_data, 0, sizeof(ArchivePkgInstallData));
 

@@ -995,10 +995,7 @@ namespace HttpServer
                 range_len, "application/octet-stream",
                 [tmp_client, path, range, range_len](size_t offset, size_t length, DataSink &sink) {
                     int ret;
-                    if ((tmp_client->SupportedActions() & REMOTE_ACTION_RAW_READ) == 0)
-                    {
-                        ret = tmp_client->GetRange(path, sink, range_len, range.first);
-                    }
+                    ret = tmp_client->GetRange(path, sink, range_len, range.first);
                     return (ret==1);
                 },
                 [tmp_client](bool success) {

@@ -442,6 +442,14 @@ namespace Windows
 
         if (ImGui::Checkbox("###enable_rpi", &remote_settings->enable_rpi))
         {
+            if (remote_settings->type == CLIENT_TYPE_NFS || remote_settings->type == CLIENT_TYPE_SFTP)
+            {
+                if (remote_settings->enable_rpi)
+                    remote_settings->enable_disk_cache = true;
+                else
+                remote_settings->enable_disk_cache = false;
+            }
+
             CONFIG::SaveConfig();
         }
         if (ImGui::IsItemHovered())
@@ -461,6 +469,9 @@ namespace Windows
 
         if (ImGui::Checkbox("###enable_disk_cache", &remote_settings->enable_disk_cache))
         {
+            if (remote_settings->type == CLIENT_TYPE_NFS || remote_settings->type == CLIENT_TYPE_SFTP)
+                remote_settings->enable_disk_cache = true;
+
             CONFIG::SaveConfig();
         }
         if (ImGui::IsItemHovered())

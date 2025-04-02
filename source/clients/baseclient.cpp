@@ -5,6 +5,7 @@
 #include "clients/baseclient.h"
 #include "config.h"
 #include "lang.h"
+#include "split_file.h"
 #include "util.h"
 #include "windows.h"
 #include "common.h"
@@ -35,7 +36,25 @@ int BaseClient::UploadProgressCallback(void* ptr, double dTotalToDownload, doubl
     return 0;
 }
 
-int BaseClient::Connect(const std::string &url, const std::string &username, const std::string &password)
+size_t BaseClient::WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data)
+{
+    if ((size == 0) || (nmemb == 0) || ((size * nmemb) < 1) || (data == nullptr))
+        return 0;
+
+    SplitFile *split_file = reinterpret_cast<SplitFile *>(data);
+    if (!split_file->IsClosed())
+    {
+        split_file->Write(reinterpret_cast<char *>(buff), size * nmemb);
+    }
+    else
+    {
+        return 0;
+    }
+
+    return size * nmemb;
+}
+
+int BaseClient::Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping)
 {
     this->host_url = url;
     size_t scheme_pos = url.find("://");
@@ -54,7 +73,9 @@ int BaseClient::Connect(const std::string &url, const std::string &username, con
     client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
     client->SetCertificateFile(CACERT_FILE);
 
-    if (Ping())
+    if (!send_ping)
+        this->connected = true;
+    else if (Ping())
         this->connected = true;
 
     return 1;
@@ -144,52 +165,42 @@ int BaseClient::Get(const std::string &outputfile, const std::string &path, uint
 
 int BaseClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
 {
-    /* Headers headers;
-    SetCookies(headers);
+    long status;
+    CHTTPClient::HeadersMap headers;
 
-    if (auto res = client->Get(GetFullPath(path), headers,
-                               [&](const char *data, size_t data_length)
-                               {
-                                   if (!split_file->IsClosed())
-                                   {
-                                        split_file->Write((char*)data, data_length);
-                                        return true;
-                                   }
-                                   else
-                                        return false;
-                               }))
+    prev_tick = Util::GetTick();
+    std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+    if (client->DownloadFile((void*)split_file, encoded_url, (void*)WriteToSplitFileCallback, status))
     {
         return 1;
     }
     else
     {
-        sprintf(this->response, "%s", httplib::to_string(res.error()).c_str());
-    } */
+        sprintf(this->response, "%ld - %s", status, lang_strings[STR_FAIL_DOWNLOAD_MSG]);
+    }
     return 0;
 }
 
 int BaseClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)
 {
-    /* char range_header[64];
-    sprintf(range_header, "bytes=%lu-%lu", offset, offset + size - 1);
-    Headers headers = {{"Range", range_header}};
-    SetCookies(headers);
+    CHTTPClient::HttpResponse res;
+    CHTTPClient::HeadersMap headers;
 
-    size_t bytes_read = 0;
-    if (auto res = client->Get(GetFullPath(path), headers,
-                               [&](const char *data, size_t data_length)
-                               {
-                                   bytes_read += data_length;
-                                   bool ok = sink.write(data, data_length);
-                                   return ok;
-                               }))
+    char range_header[128];
+    sprintf(range_header, "bytes=%lu-%lu", offset, offset + size - 1);
+    headers["Range"] = range_header;
+
+    std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+    if (client->Get(encoded_url, headers, res))
     {
-        return bytes_read == size;
+        uint64_t len = MIN(size, res.strBody.size());
+        sink.write(res.strBody.data(), len);
+        return 1;
     }
     else
     {
-        sprintf(this->response, "%s", httplib::to_string(res.error()).c_str());
-    } */
+        sprintf(this->response, "%s", res.errMessage.c_str());
+    }
     return 0;
 }
 

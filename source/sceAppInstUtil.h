@@ -1,0 +1,119 @@
+#ifndef __SCE_APP_INST_UTIL_H__
+#define __SCE_APP_INST_UTIL_H__
+
+#define PLAYGOSCENARIOID_SIZE 3
+#define CONTENTID_SIZE 0x30
+#define LANGUAGE_SIZE 8
+
+#define SCE_NUM_LANGUAGES 30
+#define SCE_NUM_IDS 64
+
+enum  AppInstErrorCodes
+{
+    SCE_APP_INSTALLER_ERROR_UNKNOWN = -2136801279,
+    SCE_APP_INSTALLER_ERROR_NOSPACE,
+    SCE_APP_INSTALLER_ERROR_PARAM,
+    SCE_APP_INSTALLER_ERROR_APP_NOT_FOUND,
+    SCE_APP_INSTALLER_ERROR_DISC_NOT_INSERTED,
+    SCE_APP_INSTALLER_ERROR_PKG_INVALID_DRM_TYPE,
+    SCE_APP_INSTALLER_ERROR_OUT_OF_MEMORY,
+    SCE_APP_INSTALLER_ERROR_APP_BROKEN,
+    SCE_APP_INSTALLER_ERROR_PKG_INVALID_CONTENT_TYPE,
+    SCE_APP_INSTALLER_ERROR_USED_APP_NOT_FOUND,
+    SCE_APP_INSTALLER_ERROR_ADDCONT_BROKEN,
+    SCE_APP_INSTALLER_ERROR_APP_IS_RUNNING,
+    SCE_APP_INSTALLER_ERROR_SYSTEM_VERSION,
+    SCE_APP_INSTALLER_ERROR_NOT_INSTALL,
+    SCE_APP_INSTALLER_ERROR_CONTENT_ID_DISAGREE,
+    SCE_APP_INSTALLER_ERROR_NOSPACE_KERNEL,
+    SCE_APP_INSTALLER_ERROR_APP_VER,
+    SCE_APP_INSTALLER_ERROR_DB_DISABLE,
+    SCE_APP_INSTALLER_ERROR_CANCELED,
+    SCE_APP_INSTALLER_ERROR_ENTRYDIGEST,
+    SCE_APP_INSTALLER_ERROR_BUSY,
+    SCE_APP_INSTALLER_ERROR_DLAPP_ALREADY_INSTALLED,
+    SCE_APP_INSTALLER_ERROR_NEED_ADDCONT_INSTALL,
+    SCE_APP_INSTALLER_ERROR_APP_MOUNTED_BY_HOST_TOOL,
+    SCE_APP_INSTALLER_ERROR_INVALID_PATCH_PKG,
+    SCE_APP_INSTALLER_ERROR_NEED_ADDCONT_INSTALL_NO_CHANGE_TYPE = -2136801248,
+    SCE_APP_INSTALLER_ERROR_ADDCONT_IS_INSTALLING,
+    SCE_APP_INSTALLER_ERROR_ADDCONT_ALREADY_INSTALLED,
+    SCE_APP_INSTALLER_ERROR_CANNOT_READ_DISC,
+    SCE_APP_INSTALLER_ERROR_DATA_DISC_NOT_INSTALLED,
+    SCE_APP_INSTALLER_ERROR_NOT_TRANSFER_DISC_VERSION,
+    SCE_APP_INSTALLER_ERROR_NO_SLOT_SPACE,
+    SCE_APP_INSTALLER_ERROR_NO_SLOT_INFORMATION,
+    SCE_APP_INSTALLER_ERROR_INSTALL_MAIN_MISSING,
+    SCE_APP_INSTALLER_ERROR_INSTALL_TIME_VALID_IN_FUTURE,
+    SCE_APP_INSTALLER_ERROR_SYSTEM_FILE_DISAGREE,
+    SCE_APP_INSTALLER_ERROR_INSTALL_BLANK_SLOT,
+    SCE_APP_INSTALLER_ERROR_INSTALL_LINK_SLOT,
+    SCE_APP_INSTALLER_ERROR_INSTALL_PKG_NOT_COMPLETED,
+    SCE_APP_INSTALLER_ERROR_NOSPACE_IN_EXTERNAL_HDD,
+    SCE_APP_INSTALLER_ERROR_NOSPACE_KERNEL_IN_EXTERNAL_HDD,
+    SCE_APP_INSTALLER_ERROR_COMPILATION_DISC_INSERTED,
+    SCE_APP_INSTALLER_ERROR_COMPILATION_DISC_INSERTED_NOT_VISIBLE_DISC_ICON,
+    SCE_APP_INSTALLER_ERROR_ACCESS_FAILED_IN_EXTERNAL_HDD,
+    SCE_APP_INSTALLER_ERROR_MOVE_FAILED_SOME_APPLICATIONS,
+    SCE_APP_INSTALLER_ERROR_DUPLICATION,
+    SCE_APP_INSTALLER_ERROR_INVALID_STATE,
+    SCE_APP_INSTALLER_ERROR_NOSPACE_DISC,
+    SCE_APP_INSTALLER_ERROR_NOSPACE_DISC_IN_EXTERNAL_HDD,
+    SCE_APP_INST_UTIL_ERROR_NOT_INITIALIZED = -2136797184,
+    SCE_APP_INST_UTIL_ERROR_OUT_OF_MEMORY
+};
+
+typedef char playgo_scenario_id_t[PLAYGOSCENARIOID_SIZE];
+typedef char language_t[LANGUAGE_SIZE];
+typedef char content_id_t[CONTENTID_SIZE];
+
+typedef struct {
+    content_id_t content_id;
+    int content_type;
+    int content_platform;
+} SceAppInstallPkgInfo;
+
+typedef struct {
+    const char* uri;
+    const char* ex_uri;
+    const char* playgo_scenario_id;
+    const char* content_id;
+    const char* content_name;
+    const char* icon_url;
+} MetaInfo;
+
+typedef struct {
+    language_t languages[SCE_NUM_LANGUAGES];
+    playgo_scenario_id_t playgo_scenario_ids[SCE_NUM_IDS];
+    content_id_t content_ids[SCE_NUM_IDS];
+    unsigned char unknown[6480]; // standard sony practice of wasting memory?
+} PlayGoInfo;
+
+typedef struct {
+    int32_t error_code;
+    int32_t version;
+    char description[512];
+    char type[9];
+} SceAppInstallErrorInfo;
+
+typedef struct {
+    char status[16];
+    char src_type[8];
+    uint32_t remain_time;
+    uint64_t downloaded_size;
+    uint64_t initial_chunk_size;
+    uint64_t total_size;
+    uint32_t promote_progress;
+    SceAppInstallErrorInfo error_info;
+    int32_t local_copy_percent;
+    bool is_copy_only;
+} SceAppInstallStatusInstalled;
+
+extern "C"
+{
+    int sceAppInstUtilInstallByPackage(MetaInfo* arg1, SceAppInstallPkgInfo* pkg_info, PlayGoInfo* arg2);
+    int sceAppInstUtilGetInstallStatus(const char* content_id, SceAppInstallStatusInstalled* status);
+    int sceAppInstUtilInitialize(void);
+}
+    
+#endif

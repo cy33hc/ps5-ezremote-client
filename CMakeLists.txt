@@ -95,6 +95,8 @@ target_link_libraries(ezremote_client.elf
   SceSystemService
   SceUserService
   SceLibcInternal
+  SceAppInstUtil
+  SceIpmi
   kernel
 )
 

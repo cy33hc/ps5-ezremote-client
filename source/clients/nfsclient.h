@@ -17,7 +17,7 @@ class NfsClient : public RemoteClient
 public:
 	NfsClient();
 	~NfsClient();
-	int Connect(const std::string &url, const std::string &user, const std::string &pass);
+	int Connect(const std::string &url, const std::string &user, const std::string &pass, bool send_ping=false);
 	int Mkdir(const std::string &path);
 	int Rmdir(const std::string &path, bool recursive);
 	int Size(const std::string &path, uint64_t *size);

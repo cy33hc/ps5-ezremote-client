@@ -359,8 +359,6 @@ namespace Windows
         int width = 550;
         if (remote_settings->type == CLIENT_TYPE_HTTP_SERVER)
             width = 500;
-        else if (remote_settings->type == CLIENT_TYPE_GOOGLE)
-            width = 600;
         else if (remote_settings->type == CLIENT_TYPE_NFS)
             width = 900;
         pos = ImGui::GetCursorPos();
@@ -404,8 +402,6 @@ namespace Windows
             ImGui::SameLine();
 
             width = 180;
-            if (remote_settings->type == CLIENT_TYPE_GOOGLE)
-                width = 480;
             sprintf(id, "%s##username", remote_settings->username);
             pos = ImGui::GetCursorPos();
             if (ImGui::Button(id, ImVec2(width, 0)))
@@ -420,7 +416,7 @@ namespace Windows
             ImGui::SameLine();
         }
         
-        if (remote_settings->type != CLIENT_TYPE_NFS && remote_settings->type != CLIENT_TYPE_GOOGLE)
+        if (remote_settings->type != CLIENT_TYPE_NFS)
         {
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 5);
             ImGui::TextColored(colors[ImGuiCol_ButtonHovered], "%s:", lang_strings[STR_PASSWORD]);
@@ -439,7 +435,7 @@ namespace Windows
             }
         }
 
-        /* ImGui::SameLine();
+        ImGui::SameLine();
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 5);
         ImGui::TextColored(colors[ImGuiCol_ButtonHovered], "%s:", lang_strings[STR_ENABLE_RPI]);
         ImGui::SameLine();
@@ -475,7 +471,7 @@ namespace Windows
             ImGui::Text("%s", lang_strings[STR_ENABLE_DISC_CACHE_MSG]);
             ImGui::PopTextWrapPos();
             ImGui::EndTooltip();
-        }*/
+        }
 
         ImGui::PopStyleVar();
 
@@ -1213,15 +1209,15 @@ namespace Windows
                 ImGui::PopID();
                 ImGui::Separator();
 
-                /* ImGui::PushID("Install##local");
-                if (ImGui::Selectable(lang_strings[STR_INSTALL], false, getSelectableFlag(REMOTE_ACTION_INSTALL) | ImGuiSelectableFlags_DontClosePopups, ImVec2(220, 0)))
+                ImGui::PushID("Install##local");
+                if (ImGui::Selectable(lang_strings[STR_INSTALL], false, ImGuiSelectableFlags_DontClosePopups, ImVec2(220, 0)))
                 {
                     SetModalMode(false);
                     selected_action = ACTION_INSTALL_LOCAL_PKG;
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::PopID();
-                ImGui::Separator(); */
+                ImGui::Separator();
             }
 
             if (remote_browser_selected)
@@ -1239,7 +1235,7 @@ namespace Windows
                 ImGui::PopID();
                 ImGui::Separator();
 
-                /* ImGui::PushID("Install##remote");
+                 ImGui::PushID("Install##remote");
                 if (ImGui::Selectable(lang_strings[STR_INSTALL], false, getSelectableFlag(REMOTE_ACTION_INSTALL) | ImGuiSelectableFlags_DontClosePopups, ImVec2(220, 0)))
                 {
                     SetModalMode(false);
@@ -1247,7 +1243,7 @@ namespace Windows
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::PopID();
-                ImGui::Separator(); */
+                ImGui::Separator();
             }
 
             /* ImGui::PushID("InstallFromUrl##both");
@@ -1797,12 +1793,12 @@ namespace Windows
                 }
                 ImGui::Separator();
 
-                /* ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
                 ImGui::Text("%s", lang_strings[STR_AUTO_DELETE_TMP_PKG]);
                 ImGui::SameLine();
                 ImGui::SetCursorPosX(805);
                 ImGui::Checkbox("##auto_delete_tmp_pkg", &auto_delete_tmp_pkg);
-                ImGui::Separator(); */
+                ImGui::Separator();
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
                 ImGui::Text("%s", lang_strings[STR_SHOW_HIDDEN_FILES]);
                 ImGui::SameLine();
@@ -2333,6 +2329,7 @@ namespace Windows
             break;
         case ACTION_INSTALL_LOCAL_PKG:
             activity_inprogess = true;
+            file_transfering = true;
             sprintf(status_message, "%s", "");
             sprintf(activity_message, "%s", "");
             stop_activity = false;

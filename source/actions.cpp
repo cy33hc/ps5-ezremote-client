@@ -703,7 +703,7 @@ namespace Actions
                         failed++;
                     else
                     {
-                        if (BE32(header.pkg_magic) == PKG_MAGIC)
+                        if (BE32(header.pkg_magic) == PS4_PKG_MAGIC || BE32(header.pkg_magic) == PS5_PKG_MAGIC)
                         {
                             if (download_and_install)
                             {
@@ -891,7 +891,7 @@ namespace Actions
                         failed++;
                     else
                     {
-                        if (BE32(header.pkg_magic) == PKG_MAGIC)
+                        if (BE32(header.pkg_magic) == PS4_PKG_MAGIC || BE32(header.pkg_magic) == PS5_PKG_MAGIC)
                         {
                             if ((ret = INSTALLER::InstallLocalPkg(it->path, &header)) <= 0)
                             {
@@ -1185,7 +1185,7 @@ namespace Actions
 
         FS::Read(in, (void *)&header, s);
         FS::Close(in);
-        if (BE32(header.pkg_magic) == PKG_MAGIC)
+        if (BE32(header.pkg_magic) == PS4_PKG_MAGIC || BE32(header.pkg_magic) == PS5_PKG_MAGIC)
         {
             int ret;
             if ((ret = INSTALLER::InstallLocalPkg(filename, &header, true)) != 1)

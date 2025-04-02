@@ -33,7 +33,8 @@
 #define BE32(x) SWAP32(x)
 #define BE64(x) SWAP64(x)
 
-#define PKG_MAGIC 0x7F434E54
+#define PS4_PKG_MAGIC 0x7F434E54
+#define PS5_PKG_MAGIC 0x7F464948
 
 #define PKG_CONTENT_FLAGS_FIRST_PATCH 0x00100000
 #define PKG_CONTENT_FLAGS_PATCHGO 0x00200000
@@ -46,8 +47,8 @@
 #define PKG_CONTENT_FLAGS_DELTA_PATCH 0x41000000
 #define PKG_CONTENT_FLAGS_CUMULATIVE_PATCH 0x60000000
 
-#define PKG_ENTRY_ID__PARAM_SFO 0x1000
-#define PKG_ENTRY_ID__ICON0_PNG 0x1200
+#define PKG_ENTRY_ID_PARAM_SFO 0x1000
+#define PKG_ENTRY_ID_ICON0_PNG 0x1200
 
 #define INSTALL_ARCHIVE_PKG_SPLIT_SIZE 10485760
 
@@ -150,7 +151,6 @@ namespace INSTALLER
     bool canInstallRemotePkg(const std::string &url);
     std::string getRemoteUrl(const std::string path, bool encodeUrl = false);
     int InstallRemotePkg(const std::string &path, pkg_header *header, std::string title, bool prompt = false);
-    int InstallLocalPkg(const std::string &path);
     int InstallLocalPkg(const std::string &path, pkg_header *header, bool remove_after_install = false);
     bool ExtractLocalPkg(const std::string &path, const std::string sfo_path, const std::string icon_path);
     bool ExtractRemotePkg(const std::string &path, const std::string sfo_path, const std::string icon_path);

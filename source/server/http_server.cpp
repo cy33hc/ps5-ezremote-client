@@ -4,6 +4,7 @@
 #include "http/httplib.h"
 #include "server/http_server.h"
 #include "clients/smbclient.h"
+#include "clients/sftpclient.h"
 #include "clients/ftpclient.h"
 #include "clients/nfsclient.h"
 #include "clients/webdav.h"
@@ -19,6 +20,7 @@
 #include "lang.h"
 #include "zip_util.h"
 #include "util.h"
+#include "dbglogger.h"
 
 #define SUCCESS_MSG "{ \"result\": { \"success\": true, \"error\": null } }"
 #define FAILURE_MSG "{ \"result\": { \"success\": false, \"error\": \"%s\" } }"
@@ -27,14 +29,6 @@
 
 using namespace httplib;
 
-struct RemoteDownloadData
-{
-    RemoteClient *client = nullptr;
-    std::map<std::string, void *> fp_handles;
-};
-
-static RemoteDownloadData remote_data[100];
-
 Server *svr;
 int http_server_port = 9090;
 char compressed_file_path[1024];
@@ -42,6 +36,11 @@ bool web_server_enabled = false;
 
 namespace HttpServer
 {
+    static int FtpCallback(int64_t xfered, void *arg)
+    {
+        return 1;
+    }
+
     std::string dump_headers(const Headers &headers)
     {
         std::string s;
@@ -190,35 +189,12 @@ namespace HttpServer
         return 1;
     }
 
-    static RemoteClient *GetRemoteClient(int site_idx, bool new_client)
+    static RemoteClient *GetRemoteClient(int site_idx)
     {
-        RemoteClient *tmp_client;
+        RemoteClient *tmp_client = nullptr;
         RemoteSettings *tmp_settings = &site_settings[sites[site_idx]];
 
-        if (!new_client)
-        {
-            tmp_client = remote_data[site_idx].client;
-            if (tmp_client != nullptr)
-                return tmp_client;
-        }
-
-        if (tmp_settings->type == CLIENT_TYPE_SMB)
-        {
-            tmp_client = new SmbClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_FTP)
-        {
-            tmp_client = new FtpClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_NFS)
-        {
-            tmp_client = new NfsClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_WEBDAV)
-        {
-            tmp_client = new WebDAVClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_HTTP_SERVER)
+        if (tmp_settings->type == CLIENT_TYPE_HTTP_SERVER)
         {
             if (strcmp(remote_settings->http_server_type, HTTP_SERVER_APACHE) == 0)
                 tmp_client = new ApacheClient();
@@ -233,25 +209,38 @@ namespace HttpServer
             else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_ARCHIVEORG) == 0)
                 tmp_client = new ArchiveOrgClient();
         }
-
-        if (tmp_client->clientType() != CLIENT_TYPE_GOOGLE)
-            tmp_client->Connect(tmp_settings->server, tmp_settings->username, tmp_settings->password);
-
-        if (!new_client && tmp_client->clientType() != CLIENT_TYPE_FTP)
+        else if (tmp_settings->type == CLIENT_TYPE_WEBDAV)
         {
-            remote_data[site_idx].client = tmp_client;
+            tmp_client = new WebDAVClient();
         }
+        else if (tmp_settings->type == CLIENT_TYPE_SMB)
+        {
+            tmp_client = new SmbClient();
+        }
+        else if (tmp_settings->type == CLIENT_TYPE_SFTP)
+        {
+            tmp_client = new SFTPClient();
+        }
+        else if (tmp_settings->type == CLIENT_TYPE_FTP)
+        {
+            tmp_client = new FtpClient();
+            FtpClient *ftp_client = (FtpClient*) tmp_client;
+            ftp_client->SetCallbackXferFunction(FtpCallback);
+        }
+        else if (tmp_settings->type == CLIENT_TYPE_NFS)
+        {
+            tmp_client = new NfsClient();
+        }
+
+        tmp_client->Connect(tmp_settings->server, tmp_settings->username, tmp_settings->password, false);
 
         return tmp_client;
     }
 
-    static void DeleteRemoteClient(RemoteClient *tmp_client, int site_idx)
+    static void DeleteRemoteClient(RemoteClient *tmp_client)
     {
-        if (tmp_client != nullptr && tmp_client->clientType() != CLIENT_TYPE_GOOGLE)
-        {
-            tmp_client->Quit();
-            delete tmp_client;
-        }
+        tmp_client->Quit();
+        delete tmp_client;
     }
     
     void *ServerThread(void *argp)
@@ -976,186 +965,72 @@ namespace HttpServer
 
         svr->Get("/rmt_inst/Site (\\d+)(/)(.*)", [&](const Request &req, Response &res)
         {
-            /* RemoteClient *tmp_client = nullptr;
-            RemoteSettings *tmp_settings;
+            RemoteClient *tmp_client = nullptr;
             auto site_idx = std::stoi(req.matches[1])-1;
             std::string path;
 
             if (site_idx != 98)
             {
                 path = std::string("/") + std::string(req.matches[3]);
+                tmp_client = GetRemoteClient(site_idx);
             }
             else
             {
                 std::string hash = std::string(req.matches[3]);
-                std::string url = FileHost::GetCachedDownloadUrl(hash);
+                std::string url = ""; //FileHost::GetCachedDownloadUrl(hash);
                 size_t scheme_pos = url.find("://");
                 size_t root_pos = url.find("/", scheme_pos + 3);
                 std::string host = url.substr(0, root_pos);
                 path = url.substr(root_pos);
 
                 tmp_client = new BaseClient();
-                tmp_client->Connect(host, "", "");
+                tmp_client->Connect(host, "", "", false);
             }
 
-            if (req.method == "HEAD")
-            {
-                int64_t file_size;
-                int ret;
-                if (site_idx != 98)
-                    tmp_client = GetRemoteClient(site_idx, true);
-
-                ret = tmp_client->Size(path, &file_size);
-                if (!ret)
-                {
-                    res.status = 500;
-                    DeleteRemoteClient(tmp_client, site_idx);
-                    return;
-                }
-
-                res.status = 204;
-                res.set_header("Content-Length", std::to_string(file_size));
-                res.set_header("Accept-Ranges", "bytes");
-                DeleteRemoteClient(tmp_client, site_idx);
-                return;
-            }
-
-            if (req.ranges.empty())
-            {
-                res.status = 200;
-                if (site_idx != 98)
-                    tmp_client = GetRemoteClient(site_idx, true);
-
-                res.set_content_provider(
-                    (1024*128), "application/octet-stream",
-                    [tmp_client, path](size_t offset, size_t length, DataSink &sink) {
-                        int ret = tmp_client->GetRange(path, sink, length, offset);
-                        return (ret == 1);
-                    },
-                    [tmp_client, path, site_idx](bool success) {
-                        DeleteRemoteClient(tmp_client, site_idx);
-                    });
-            }
-            else
-            {
-                res.status = 206;
-                size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
-                if (req.ranges[0].second >= 18000000000000000000ul)
-                {
-                    range_len = PKG_INITIAL_REQUEST_SIZE;
-                    res.set_header("Content-Length", std::to_string(range_len));
-                    res.set_header("Content-Range", std::string("bytes ") + std::to_string(req.ranges[0].first)+"-" + std::to_string(req.ranges[0].first+PKG_INITIAL_REQUEST_SIZE-1) + "/"+std::to_string(range_len));
-                    sceRtcGetCurrentTick(&prev_tick);
-                    if (site_idx != 98)
-                        tmp_client = GetRemoteClient(site_idx, true);
-                }
-                else
-                {
-                    if (site_idx != 98)
-                        tmp_client = GetRemoteClient(site_idx, false);
-                }
-
-                std::pair<ssize_t, ssize_t> range = req.ranges[0];
-                res.set_content_provider(
-                    range_len, "application/octet-stream",
-                    [tmp_client, path, range, range_len, site_idx](size_t offset, size_t length, DataSink &sink) {
-                        int ret;
-                        if (range_len == PKG_INITIAL_REQUEST_SIZE)
-                        {
-                            ret = tmp_client->GetRange(path, sink, range_len, range.first);
-                        }
-                        else if ((tmp_client->SupportedActions() & REMOTE_ACTION_RAW_READ) == 0)
-                        {
-                            ret = tmp_client->GetRange(path, sink, range_len, range.first);
-                        }
-                        else
-                        {
-                            std::map<std::string, void *>::iterator it = remote_data[site_idx].fp_handles.find(path);
-                            void *fp;
-                            if (it == remote_data[site_idx].fp_handles.end())
-                            {
-                                fp = tmp_client->Open(path, O_RDONLY);
-                                remote_data[site_idx].fp_handles[path] = fp;
-                            }
-                            else
-                            {
-                                fp = it->second;
-                            }
-                            ret = tmp_client->GetRange(fp, sink, range_len, range.first);
-                        }
-                        return (ret==1);
-                    },
-                    [tmp_client, path, range, site_idx](bool success) {
-                        if (range.second >= 18000000000000000000ul ||
-                            (tmp_client->clientType() == CLIENT_TYPE_HTTP_SERVER && site_idx == 98) ||
-                            tmp_client->clientType() == CLIENT_TYPE_FTP)
-                        {
-                            DeleteRemoteClient(tmp_client, site_idx);
-                        }
-                    });
-            } */ });
+            res.status = 206;
+            size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
+                
+            std::pair<ssize_t, ssize_t> range = req.ranges[0];
+            res.set_content_provider(
+                range_len, "application/octet-stream",
+                [tmp_client, path, range, range_len](size_t offset, size_t length, DataSink &sink) {
+                    int ret;
+                    if ((tmp_client->SupportedActions() & REMOTE_ACTION_RAW_READ) == 0)
+                    {
+                        ret = tmp_client->GetRange(path, sink, range_len, range.first);
+                    }
+                    return (ret==1);
+                },
+                [tmp_client](bool success) {
+                    DeleteRemoteClient(tmp_client);
+                });
+        });
 
         svr->Get("/archive_inst/(.*)", [&](const Request &req, Response &res)
         {
-            /* RemoteClient *tmp_client;
-            RemoteSettings *tmp_settings;
             std::string hash = req.matches[1];
-
             ArchivePkgInstallData *pkg_data = INSTALLER::GetArchivePkgInstallData(hash);
 
-            if (req.method == "HEAD")
-            {
-                res.status = 204;
-                res.set_header("Content-Length", std::to_string(pkg_data->archive_entry->filesize));
-                res.set_header("Accept-Ranges", "bytes");
-                return;
-            }
-
-            if (req.ranges.empty())
-            {
-                res.status = 200;
-                res.set_content_provider(
-                    131072, "application/octet-stream",
-                    [pkg_data](size_t offset, size_t length, DataSink &sink) {
-                        char *buf = (char*) malloc(131072);
-                        size_t bytes_read = pkg_data->split_file->Read(buf, 131072, offset);
-                        sink.write(buf, bytes_read);
-                        free(buf);
-                        return true;
-                    },
-                    [](bool success) {
-                        return true;
-                    });
-            }
-            else
-            {
-                res.status = 206;
-                size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
-                if (req.ranges[0].second >= 18000000000000000000ul)
-                {
-                    range_len = PKG_INITIAL_REQUEST_SIZE;
-                    res.set_header("Content-Length", std::to_string(range_len));
-                    res.set_header("Content-Range", std::string("bytes ") + std::to_string(req.ranges[0].first)+"-" + std::to_string(req.ranges[0].first+PKG_INITIAL_REQUEST_SIZE-1) + "/"+std::to_string(range_len));
-                    sceRtcGetCurrentTick(&prev_tick);
-                }
-                std::pair<ssize_t, ssize_t> range = req.ranges[0];
-                res.set_content_provider(
-                    range_len, "application/octet-stream",
-                    [pkg_data, range, range_len](size_t offset, size_t length, DataSink &sink) {
-                        char *buf = (char*) malloc(range_len);
-                        size_t bytes_read = pkg_data->split_file->Read(buf, range_len, range.first);
-                        sink.write(buf, bytes_read);
-                        free(buf);
-                        return true;
-                    },
-                    [](bool success) {
-                        return true;
-                    });
-            } */ });
+            res.status = 206;
+            size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
+            std::pair<ssize_t, ssize_t> range = req.ranges[0];
+            res.set_content_provider(
+                range_len, "application/octet-stream",
+                [pkg_data, range, range_len](size_t offset, size_t length, DataSink &sink) {
+                    char *buf = (char*) malloc(range_len);
+                    size_t bytes_read = pkg_data->split_file->Read(buf, range_len, range.first);
+                    sink.write(buf, bytes_read);
+                    free(buf);
+                    return true;
+                },
+                [](bool success) {
+                    return true;
+                });
+        });
 
         svr->Get("/split_inst/(.*)", [&](const Request &req, Response &res)
         {
-            /* std::string hash = req.matches[1];
+            std::string hash = req.matches[1];
 
             SplitPkgInstallData *pkg_data = INSTALLER::GetSplitPkgInstallData(hash);
 
@@ -1165,55 +1040,22 @@ namespace HttpServer
                 return;
             }
 
-            if (req.method == "HEAD")
-            {
-                res.status = 204;
-                res.set_header("Content-Length", std::to_string(pkg_data->size));
-                res.set_header("Accept-Ranges", "bytes");
-                return;
-            }
-
-            if (req.ranges.empty())
-            {
-                res.status = 200;
-                res.set_content_provider(
-                    131072, "application/octet-stream",
-                    [pkg_data](size_t offset, size_t length, DataSink &sink) {
-                        char *buf = (char*) malloc(131072);
-                        size_t bytes_read = pkg_data->split_file->Read(buf, 131072, offset);
-                        sink.write(buf, bytes_read);
-                        free(buf);
-                        return true;
-                    },
-                    [](bool success) {
-                        return true;
-                    });
-            }
-            else
-            {
-                res.status = 206;
-                size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
-                if (req.ranges[0].second >= 18000000000000000000ul)
-                {
-                    range_len = PKG_INITIAL_REQUEST_SIZE;
-                    res.set_header("Content-Length", std::to_string(range_len));
-                    res.set_header("Content-Range", std::string("bytes ") + std::to_string(req.ranges[0].first)+"-" + std::to_string(req.ranges[0].first+PKG_INITIAL_REQUEST_SIZE-1) + "/"+std::to_string(range_len));
-                    sceRtcGetCurrentTick(&prev_tick);
-                }
-                std::pair<ssize_t, ssize_t> range = req.ranges[0];
-                res.set_content_provider(
-                    range_len, "application/octet-stream",
-                    [pkg_data, range, range_len](size_t offset, size_t length, DataSink &sink) {
-                        char *buf = (char*) malloc(range_len);
-                        size_t bytes_read = pkg_data->split_file->Read(buf, range_len, range.first);
-                        sink.write(buf, bytes_read);
-                        free(buf);
-                        return true;
-                    },
-                    [](bool success) {
-                        return true;
-                    });
-            } */ });
+            res.status = 206;
+            size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
+            std::pair<ssize_t, ssize_t> range = req.ranges[0];
+            res.set_content_provider(
+                range_len, "application/octet-stream",
+                [pkg_data, range, range_len](size_t offset, size_t length, DataSink &sink) {
+                    char *buf = (char*) malloc(range_len);
+                    size_t bytes_read = pkg_data->split_file->Read(buf, range_len, range.first);
+                    sink.write(buf, bytes_read);
+                    free(buf);
+                    return true;
+                },
+                [](bool success) {
+                    return true;
+                });
+        });
 
         svr->Post("/__local__/install_url", [&](const Request &req, Response &res)
         {
@@ -1392,18 +1234,17 @@ namespace HttpServer
                  { svr->stop(); });
 
         svr->set_error_handler([](const Request & /*req*/, Response &res)
-                               {
+        {
             const char *fmt = "<p>Error Status: <span style='color:red;'>%d</span></p>";
             char buf[BUFSIZ];
             snprintf(buf, sizeof(buf), fmt, res.status);
-            res.set_content(buf, "text/html"); });
+            res.set_content(buf, "text/html");
+        });
 
-        /*
         svr->set_logger([](const Request &req, const Response &res)
         {
             dbglogger_log("%s", log(req, res).c_str());
         });
-        */
        
         svr->set_payload_max_length(1024 * 1024 * 12);
         svr->set_tcp_nodelay(true);

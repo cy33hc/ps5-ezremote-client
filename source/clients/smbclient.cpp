@@ -25,7 +25,7 @@ SmbClient::~SmbClient()
 {
 }
 
-int SmbClient::Connect(const std::string &url, const std::string &user, const std::string &pass)
+int SmbClient::Connect(const std::string &url, const std::string &user, const std::string &pass, bool send_ping)
 {
 	struct smb2_url *smb_url;
 
@@ -590,7 +590,7 @@ ClientType SmbClient::clientType()
 
 uint32_t SmbClient::SupportedActions()
 {
-	return REMOTE_ACTION_ALL ^ REMOTE_ACTION_CUT ^ REMOTE_ACTION_COPY ^ REMOTE_ACTION_PASTE;
+	return REMOTE_ACTION_ALL ^ REMOTE_ACTION_CUT ^ REMOTE_ACTION_COPY ^ REMOTE_ACTION_PASTE ^ REMOTE_ACTION_RAW_READ;
 }
 
 void *SmbClient::Open(const std::string &ppath, int flags)

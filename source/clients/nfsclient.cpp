@@ -16,6 +16,7 @@
 #include "lang.h"
 #include "windows.h"
 #include "util.h"
+#include "dbglogger.h"
 
 #define BUF_SIZE 1048576
 
@@ -342,10 +343,28 @@ int NfsClient::GetRange(void *fp, void *buffer, uint64_t size, uint64_t offset)
 		return 0;
 	}
 
-	int count = nfs_read(nfs, nfsfh, size, buffer);
-	if (count != size)
-		return 0;
+    size_t bytes_remaining = size;
+	char *buff = (char*)buffer;
+	int total = 0;
+	int count = 0;
+	do
+	{
+		count = nfs_read(nfs, nfsfh, bytes_remaining, buff);
+		if (count > 0)
+		{
+			bytes_remaining -= count;
+			buff += count;
+			total += count;
+		}
+		else
+		{
+			break;
+		}
+	} while (1);
 
+	if (total != size)
+		return 0;
+		
 	return 1;
 }
 

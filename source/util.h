@@ -149,8 +149,9 @@ namespace Util
 
         std::string out;
         Base64::Encode(res.data(), res.size(), out);
-        Util::ReplaceAll(out, "=", "_");
-        Util::ReplaceAll(out, "+", "_");
+        Util::ReplaceAll(out, "=", "a");
+        Util::ReplaceAll(out, "+", "b");
+        Util::ReplaceAll(out, "/", "c");
         out = out + ".pkg";
         return out;
     }

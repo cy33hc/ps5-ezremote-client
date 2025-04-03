@@ -21,7 +21,6 @@
 #include "lang.h"
 #include "zip_util.h"
 #include "util.h"
-#include "dbglogger.h"
 
 #define SUCCESS_MSG "{ \"result\": { \"success\": true, \"error\": null } }"
 #define FAILURE_MSG "{ \"result\": { \"success\": false, \"error\": \"%s\" } }"
@@ -969,7 +968,6 @@ namespace HttpServer
             RemoteClient *tmp_client = nullptr;
             auto site_idx = std::stoi(req.matches[1])-1;
             std::string path;
-
             if (site_idx != 98)
             {
                 path = std::string("/") + std::string(req.matches[3]);
@@ -1057,6 +1055,8 @@ namespace HttpServer
 
         svr->Post("/__local__/install_url", [&](const Request &req, Response &res)
         {
+            return failed(res, 200, "Function not supported");
+
             std::string url;
             const char *url_param;
             bool use_alldebrid = false;
@@ -1237,10 +1237,12 @@ namespace HttpServer
             res.set_content(buf, "text/html");
         });
 
+        /*
         svr->set_logger([](const Request &req, const Response &res)
         {
             dbglogger_log("%s", log(req, res).c_str());
         });
+        */
        
         svr->set_payload_max_length(1024 * 1024 * 12);
         svr->set_tcp_nodelay(true);

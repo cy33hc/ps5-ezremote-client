@@ -18,7 +18,6 @@
 #include "sceUserService.h"
 #include "sceSystemService.h"
 #include "installer.h"
-#include "dbglogger.h"
 
 struct BgProgressCheck
 {
@@ -192,7 +191,7 @@ namespace INSTALLER
 		int ret;
 
 		SceAppInstallStatusInstalled progress_info;
-		while (strcmp(progress_info.status, "playable") != 0)
+		while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 		{
 			ret = sceAppInstUtilGetInstallStatus(bg_check_data->content_id, &progress_info);
 			if (ret || (progress_info.error_info.error_code != 0))
@@ -285,12 +284,11 @@ namespace INSTALLER
 			prev_tick = Util::GetTick();
 	
 			SceAppInstallStatusInstalled progress_info;
-			while (strcmp(progress_info.status, "playable") != 0)
+			while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 			{
 				ret = sceAppInstUtilGetInstallStatus((const char *)header->pkg_content_id, &progress_info);
 				if (ret || (progress_info.error_info.error_code != 0))
 					return 0;
-	
 				bytes_to_download = progress_info.total_size;
 				bytes_transfered = progress_info.downloaded_size;
 				sceSystemServicePowerTick();
@@ -321,7 +319,7 @@ namespace INSTALLER
 		if (FS::Head(path.c_str(), (void *)&header, sizeof(header)) == 0)
 			return 0;
 
-		if (BE32(header.pkg_magic) != PS4_PKG_MAGIC)
+		if (BE32(header.pkg_magic) != PS4_PKG_MAGIC && BE32(header.pkg_magic) != PS5_PKG_MAGIC)
 			return 0;
 
 		return InstallLocalPkg(path, &header, false);
@@ -391,7 +389,7 @@ namespace INSTALLER
 		prev_tick = Util::GetTick();
 
 		SceAppInstallStatusInstalled progress_info;
-		while (strcmp(progress_info.status, "playable") != 0)
+		while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 		{
 			ret = sceAppInstUtilGetInstallStatus((const char *)header->pkg_content_id, &progress_info);
 			if (ret || (progress_info.error_info.error_code != 0))
@@ -631,7 +629,7 @@ namespace INSTALLER
 			prev_tick = Util::GetTick();
 
 			SceAppInstallStatusInstalled progress_info;
-			while (strcmp(progress_info.status, "playable") != 0)
+			while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 			{
 				ret = sceAppInstUtilGetInstallStatus((const char *)header.pkg_content_id, &progress_info);
 				if (ret || (progress_info.error_info.error_code != 0))
@@ -733,7 +731,7 @@ namespace INSTALLER
 			prev_tick = Util::GetTick();
 
 			SceAppInstallStatusInstalled progress_info;
-			while (strcmp(progress_info.status, "playable") != 0)
+			while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 			{
 				ret = sceAppInstUtilGetInstallStatus((const char *)header.pkg_content_id, &progress_info);
 				if (ret || (progress_info.error_info.error_code != 0))

@@ -9,7 +9,6 @@
 #include "lang.h"
 #include "util.h"
 #include "windows.h"
-#include "dbglogger.h"
 
 static const char *months[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 

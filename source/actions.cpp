@@ -18,6 +18,7 @@
 #include "clients/nfsclient.h"
 #include "clients/iis.h"
 #include "clients/rclone.h"
+#include "filehost/filehost.h"
 #include "server/http_server.h"
 #include "common.h"
 #include "fs.h"
@@ -1112,15 +1113,11 @@ namespace Actions
     void *InstallLocalUrlPkgThread(void *argp)
     {
         bytes_transfered = 0;
-        /* sceRtcGetCurrentTick(&prev_tick);
+        prev_tick = Util::GetTick();
         sprintf(status_message, "%s", "");
         pkg_header header;
         char filename[2000];
-        OrbisDateTime now;
-        OrbisTick tick;
-        sceRtcGetCurrentClockLocalTime(&now);
-        sceRtcGetTick(&now, &tick);
-        sprintf(filename, "%s/%lu.pkg", TMP_FOLDER_PATH, tick.mytick);
+        sprintf(filename, "%s/%lu.pkg", TMP_FOLDER_PATH, prev_tick);
 
         std::string full_url = std::string(install_pkg_url.url);
         FileHost *filehost = FileHost::getFileHost(full_url, install_pkg_url.enable_alldebrid, install_pkg_url.enable_realdebrid);
@@ -1195,17 +1192,17 @@ namespace Actions
                 if (ret == -1)
                 {
                     sprintf(activity_message, "%s", lang_strings[STR_INSTALL_FROM_DATA_MSG]);
-                    sceKernelUsleep(3000000);
+                    usleep(3000000);
                 }
                 else if (ret == -2)
                 {
                     sprintf(activity_message, "%s", lang_strings[STR_ALREADY_INSTALLED_MSG]);
-                    sceKernelUsleep(3000000);
+                    usleep(3000000);
                 }
                 else if (ret == -3)
                 {
                     sprintf(activity_message, "%s", lang_strings[STR_FAIL_INSTALL_TMP_PKG_MSG]);
-                    sceKernelUsleep(5000000);
+                    usleep(5000000);
                 }
                 if (ret != -3 && auto_delete_tmp_pkg)
                     FS::Rm(filename);
@@ -1213,13 +1210,13 @@ namespace Actions
         }
 
         activity_inprogess = false;
-        Windows::SetModalMode(false); */
+        Windows::SetModalMode(false);
         return NULL;
     }
 
     void *InstallRpiUrlPkgThread(void *argp)
     {
-        /* json_object *params = json_object_new_object();
+        json_object *params = json_object_new_object();
         json_object_object_add(params, "url", json_object_new_string(install_pkg_url.url));
         json_object_object_add(params, "use_alldebrid", json_object_new_boolean(install_pkg_url.enable_alldebrid));
         json_object_object_add(params, "use_realdebrid", json_object_new_boolean(install_pkg_url.enable_realdebrid));
@@ -1230,29 +1227,37 @@ namespace Actions
         char host[128];
         sprintf(host, "http://127.0.0.1:%d", http_server_port);
 
-        httplib::Client tmp_client(host);
-        tmp_client.set_follow_location(true);
-        tmp_client.set_connection_timeout(30);
-        tmp_client.set_read_timeout(30);
-        tmp_client.enable_server_certificate_verification(false);
+        CHTTPClient::HttpResponse res;
+        CHTTPClient::HeadersMap headers;
+        CHTTPClient tmp_client([](const std::string& log){});
+        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+        tmp_client.SetCertificateFile(CACERT_FILE);
+        headers["Content-Type"] = "application/json";
 
-        auto res = tmp_client.Post("/__local__/install_url", params_str, strlen(params_str), "application/json");
-        if (res != nullptr && HTTP_SUCCESS(res->status))
+        if (tmp_client.Post("/__local__/install_url", headers, params_str, res))
         {
-            json_object *jobj = json_tokener_parse(res->body.c_str());
-            if (jobj != nullptr)
+            if (HTTP_SUCCESS(res.iCode))
             {
-                json_object *result = json_object_object_get(jobj, "result");
-                if (result != nullptr)
+                json_object *jobj = json_tokener_parse(res.strBody.data());
+                if (jobj != nullptr)
                 {
-                    bool success = json_object_get_boolean(json_object_object_get(result, "success"));
-                    if (!success)
+                    json_object *result = json_object_object_get(jobj, "result");
+                    if (result != nullptr)
                     {
-                        const char* error_message = json_object_get_string(json_object_object_get(result, "error"));
-                        sprintf(status_message, "%s", error_message);
-                        activity_inprogess = false;
-                        Windows::SetModalMode(false);
+                        bool success = json_object_get_boolean(json_object_object_get(result, "success"));
+                        if (!success)
+                        {
+                            const char* error_message = json_object_get_string(json_object_object_get(result, "error"));
+                            sprintf(status_message, "%s", error_message);
+                            activity_inprogess = false;
+                            Windows::SetModalMode(false);
+                        }
                     }
+                }
+                else
+                {
+                    activity_inprogess = false;
+                    Windows::SetModalMode(false);
                 }
             }
             else
@@ -1261,11 +1266,6 @@ namespace Actions
                 Windows::SetModalMode(false);
             }
         }
-        else
-        {
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
-        } */
 
         return NULL;
     }

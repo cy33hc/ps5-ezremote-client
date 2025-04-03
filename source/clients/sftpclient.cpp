@@ -410,10 +410,29 @@ int SFTPClient::GetRange(void *fp, void *buffer, uint64_t size, uint64_t offset)
     LIBSSH2_SFTP_HANDLE *sftp_handle = (LIBSSH2_SFTP_HANDLE *)fp;
 
     libssh2_sftp_seek64(sftp_handle, offset);
-    int count = libssh2_sftp_read(sftp_handle, (char *)buffer, size);
-    if (count != size)
-        return 0;
 
+    size_t bytes_remaining = size;
+	char *buff = (char*)buffer;
+	int total = 0;
+	int count = 0;
+	do
+	{
+		count = libssh2_sftp_read(sftp_handle, (char *)buff, bytes_remaining);
+		if (count > 0)
+		{
+			bytes_remaining -= count;
+			buff += count;
+			total += count;
+		}
+		else
+		{
+			break;
+		}
+	} while (1);
+
+	if (total != size)
+		return 0;
+	
     return 1;
 }
 

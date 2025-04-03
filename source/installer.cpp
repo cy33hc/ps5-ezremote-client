@@ -311,6 +311,22 @@ namespace INSTALLER
 		return 1;
 	}
 
+	int InstallLocalPkg(const std::string &path)
+	{
+		int ret;
+		pkg_header header;
+		bool completed = false;
+
+		memset(&header, 0, sizeof(header));
+		if (FS::Head(path.c_str(), (void *)&header, sizeof(header)) == 0)
+			return 0;
+
+		if (BE32(header.pkg_magic) != PS4_PKG_MAGIC)
+			return 0;
+
+		return InstallLocalPkg(path, &header, false);
+	}
+
 	int InstallLocalPkg(const std::string &path, pkg_header *header, bool remove_after_install)
 	{
 		int ret;

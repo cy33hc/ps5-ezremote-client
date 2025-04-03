@@ -152,6 +152,7 @@ namespace INSTALLER
     std::string getRemoteUrl(const std::string path, bool encodeUrl = false);
     int InstallRemotePkg(const std::string &path, pkg_header *header, std::string title, bool prompt = false);
     int InstallLocalPkg(const std::string &path, pkg_header *header, bool remove_after_install = false);
+    int InstallLocalPkg(const std::string &path);
     bool ExtractLocalPkg(const std::string &path, const std::string sfo_path, const std::string icon_path);
     bool ExtractRemotePkg(const std::string &path, const std::string sfo_path, const std::string icon_path);
     std::string GetRemotePkgTitle(RemoteClient *client, const std::string &path, pkg_header *header);

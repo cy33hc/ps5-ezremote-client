@@ -14,6 +14,7 @@
 #include "clients/nginx.h"
 #include "clients/npxserve.h"
 #include "clients/rclone.h"
+#include "filehost/filehost.h"
 #include "config.h"
 #include "fs.h"
 #include "windows.h"
@@ -529,7 +530,7 @@ namespace HttpServer
 
         svr->Post("/__local__/install", [&](const Request &req, Response &res)
         {
-            /* json_object *items;
+            json_object *items;
             json_object *jobj = json_tokener_parse(req.body.c_str());
             if (jobj != nullptr)
             {
@@ -561,7 +562,7 @@ namespace HttpServer
                 failed(res, 200, error_msg);
             }
             else
-                success(res); */
+                success(res);
         });
 
         svr->Post("/__local__/edit", [&](const Request &req, Response &res)
@@ -977,7 +978,7 @@ namespace HttpServer
             else
             {
                 std::string hash = std::string(req.matches[3]);
-                std::string url = ""; //FileHost::GetCachedDownloadUrl(hash);
+                std::string url = FileHost::GetCachedDownloadUrl(hash);
                 size_t scheme_pos = url.find("://");
                 size_t root_pos = url.find("/", scheme_pos + 3);
                 std::string host = url.substr(0, root_pos);
@@ -1056,7 +1057,7 @@ namespace HttpServer
 
         svr->Post("/__local__/install_url", [&](const Request &req, Response &res)
         {
-            /* std::string url;
+            std::string url;
             const char *url_param;
             bool use_alldebrid = false;
             bool use_realdebrid = false;
@@ -1103,7 +1104,7 @@ namespace HttpServer
             file_transfering = true;
             bytes_to_download = 100;
             bytes_transfered = 0;
-            sceRtcGetCurrentTick(&prev_tick);
+            prev_tick = Util::GetTick();
 
             Windows::SetModalMode(true);
 
@@ -1161,9 +1162,7 @@ namespace HttpServer
                     SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
                     memset(install_data, 0, sizeof(SplitPkgInstallData));
 
-                    OrbisTick tick;
-                    sceRtcGetCurrentTick(&tick);
-                    std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(tick.mytick) + ".pkg";
+                    std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
                     SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
 
                     install_data->split_file = sp;
@@ -1224,7 +1223,7 @@ namespace HttpServer
                     Windows::SetModalMode(false);
                     return;
                 }
-            } */
+            }
             success(res); });
 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)

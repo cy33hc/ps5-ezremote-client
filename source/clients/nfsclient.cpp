@@ -16,7 +16,6 @@
 #include "lang.h"
 #include "windows.h"
 #include "util.h"
-#include "dbglogger.h"
 
 #define BUF_SIZE 1048576
 
@@ -615,8 +614,14 @@ uint32_t NfsClient::SupportedActions()
 
 void *NfsClient::Open(const std::string &path, int flags)
 {
-	sprintf(this->response, "%s", lang_strings[STR_UNSUPPORTED_OPERATION_MSG]);
-	return nullptr;
+	struct nfsfh *nfsfh = nullptr;
+	int ret = nfs_open(nfs, path.c_str(), 0400, &nfsfh);
+	if (ret != 0)
+	{
+		sprintf(response, "%s", nfs_get_error(nfs));
+		return nullptr;
+	}
+	return nfsfh;
 }
 
 void NfsClient::Close(void *fp)

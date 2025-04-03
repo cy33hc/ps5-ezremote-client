@@ -15,7 +15,7 @@
 #include "clients/smbclient.h"
 #include "windows.h"
 #include "util.h"
-//#include <dbglogger.h>
+#include <dbglogger.h>
 
 SmbClient::SmbClient()
 {
@@ -348,10 +348,28 @@ int SmbClient::GetRange(void *fp, void *buffer, uint64_t size, uint64_t offset)
 
 	smb2_lseek(smb2, in, offset, SEEK_SET, NULL);
 
-	int count = smb2_read(smb2, in, (uint8_t *)buffer, size);
-	if (count != size)
+	size_t bytes_remaining = size;
+	uint8_t *buff = (uint8_t*)buffer;
+	int count = 0;
+	int total = 0;
+	do
+	{
+		size_t bytes_to_read = std::min<size_t>(max_read_size, bytes_remaining);
+		count = smb2_read(smb2, in, buff, bytes_to_read);
+		if (count > 0)
+		{
+			bytes_remaining -= count;
+			buff += count;
+			total += count;
+		}
+		else
+		{
+			break;
+		}
+	} while (1);
+	
+	if (total != size)
 		return 0;
-
 	return 1;
 }
 

@@ -260,7 +260,12 @@ int SmbClient::Get(SplitFile *split_file, const std::string &ppath, uint64_t off
 			free((void *)buff);
 			return 0;
 		}
-		split_file->Write((char*)buff, count);
+		if (split_file->Write((char*)buff, count) < 0)
+		{
+			smb2_close(smb2, in);
+			free((void *)buff);
+			return 0;
+		}
 	}
 
 	smb2_close(smb2, in);

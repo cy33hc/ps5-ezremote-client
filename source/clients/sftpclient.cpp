@@ -323,7 +323,12 @@ int SFTPClient::Get(SplitFile *split_file, const std::string &path, uint64_t off
         rc = libssh2_sftp_read(sftp_handle, buff, FTP_CLIENT_BUFSIZ);
         if (rc > 0)
         {
-            split_file->Write(buff, rc);
+            if (split_file->Write(buff, rc) < 0)
+            {
+                free((char *)buff);
+                libssh2_sftp_close(sftp_handle);
+                return 0;
+            }
         }
         else
         {

@@ -900,7 +900,8 @@ int FtpClient::FtpXfer(SplitFile *split_file, const std::string &path, ftphandle
 	dbuf = static_cast<char *>(malloc(FTP_CLIENT_BUFSIZ));
 	while ((l = FtpRead(dbuf, FTP_CLIENT_BUFSIZ, nData)) > 0)
 	{
-		split_file->Write(dbuf, l);
+		if (split_file->Write(dbuf, l) < 0)
+			break;
 	}
 
 	free(dbuf);

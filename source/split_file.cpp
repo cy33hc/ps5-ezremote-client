@@ -134,7 +134,7 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
 
     // delete blocks before the first read offset block. Assumuption, that reads are always
     // forward and won't read previously already read blocks. For safety, keeping only current block and 2 previous blocks
-    for (int j=0; j < first_block_num - 20; j++)
+    for (int j=0; j < first_block_num - 13; j++)
     {
         if (this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
         {
@@ -160,6 +160,9 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
     char *p = buf;
     size_t total_bytes_written = 0;
     size_t remaining_to_write = buf_size;
+
+    if (this->IsClosed())
+        return -1;
 
     while (remaining_to_write > 0 && !this->complete)
     {

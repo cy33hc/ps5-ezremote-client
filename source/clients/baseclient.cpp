@@ -44,7 +44,8 @@ size_t BaseClient::WriteToSplitFileCallback(void *buff, size_t size, size_t nmem
     SplitFile *split_file = reinterpret_cast<SplitFile *>(data);
     if (!split_file->IsClosed())
     {
-        split_file->Write(reinterpret_cast<char *>(buff), size * nmemb);
+        if (split_file->Write(reinterpret_cast<char *>(buff), size * nmemb) < 0)
+            return 0;
     }
     else
     {

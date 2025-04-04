@@ -18,6 +18,7 @@
 #include "sceUserService.h"
 #include "sceSystemService.h"
 #include "installer.h"
+#include "dbglogger.h"
 
 struct BgProgressCheck
 {
@@ -758,9 +759,12 @@ namespace INSTALLER
 		pkg_data->stop_write_thread = true;
 		pkg_data->split_file->Close();
 		pthread_join(pkg_data->thread, NULL);
+		usleep(2000000);
 		delete (pkg_data->split_file);
 		if (pkg_data->delete_client)
+		{
 			delete (pkg_data->remote_client);
+		}
 		free(pkg_data);
 		RemoveSplitPkgInstallData(hash);
 		activity_inprogess = false;
@@ -769,46 +773,4 @@ namespace INSTALLER
 		return ret;
 	}
 	
-	int InstallViaEtaHen(const std::string &url)
-	{
-		int sock = socket(AF_INET, SOCK_STREAM, 0);
-		if (sock < 0)
-		{
-			return -1;
-		}
-	
-		sockaddr_in serverAddr{};
-		serverAddr.sin_family = AF_INET;
-		serverAddr.sin_port = htons(9090);
-		serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-	
-		if (connect(sock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
-		{
-			close(sock);
-			return -2;
-		}
-	
-		std::string request = std::string("{ \"url\" : \"") + url + "\" }";
-		if (send(sock, request.c_str(), request.size(), 0) < 0)
-		{
-			close(sock);
-			return -2;
-		}
-	
-		char buffer[1024] = {0};
-		int bytesRead = recv(sock, buffer, sizeof(buffer) - 1, 0);
-		close(sock);
-	
-		if (bytesRead <= 0)
-		{
-			return -3;
-		}
-	
-		buffer[bytesRead] = '\0';
-		if (std::string(buffer).find("\"res\" : \"0\"") == std::string::npos)
-			return -3;
-
-		return 0;
-	}
-
 }

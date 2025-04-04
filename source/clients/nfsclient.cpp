@@ -255,7 +255,13 @@ int NfsClient::Get(SplitFile *split_file, const std::string &ppath, uint64_t off
 			free((void *)buff);
 			return 0;
 		}
-		split_file->Write((char *)buff, count);
+		ret = split_file->Write((char *)buff, count);
+		if (ret < 0)
+		{
+			nfs_close(nfs, nfsfh);
+			free((void *)buff);
+			return 0;
+		}
 	}
 	nfs_close(nfs, nfsfh);
 	free((void *)buff);

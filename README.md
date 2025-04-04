@@ -109,7 +109,7 @@ Tested with following WebDAV server:
    
 ### Package installation modes
   RPI - means (R)emote (P)ackage (I)Install <br/>
-  DC  - means (D)isk (Cache)
+  DC  - means (D)isk (C)ache
    
   - RPI [Disabled] - When RPI is disabled, the PKG is downloaded to the "Temp Directory" on the PS5 first and then installs it. This doubles the PKG file size used on the PS5. But this is the most stable of all modes. By default the temporary download pkg is deleted after install.
   - RPI [Enabled]  -  Installs the PKG directly to the PS5 without copying any content to the disk. Usually the fastest if you are on 1GB ethernet. But the negative is that there could be hundreds or ever thousands of request to the remote server to open the file, read 16MB chunk of content and then closes the file. The is known to cause issues on some NAS storage and slow network like wifi where latency kills.

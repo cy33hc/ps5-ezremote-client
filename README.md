@@ -8,8 +8,9 @@ ezRemote Client is an application that allows you to connect the PS5 to remote F
 
 ## Installation
 1. Extract the **ezremote_client.zip** in to the **/data/homebrew** folder on the PS5.
-2. Load the websrv playload
-3. Install ezRemoteClient.pkg (This create a shortcut on the dashboard to launch the app directly via websrv)
+2. Must load websrv playload
+3. Must load either kstuff or etaHen (if you load etaHen, then there is no need to load kstuff since etaHen includes kstuff)
+4. Install ezRemoteClient.pkg (This create a shortcut on the dashboard to launch the app directly via websrv)
 
 ## Usage
 To distinguish between FTP, SMB, NFS, WebDAV or HTTP, the URL must be prefix with **ftp://**, **sftp://**, **smb://**, **nfs://**, **webdav://**, **webdavs://**, **http://** and **https://**
@@ -97,7 +98,19 @@ Tested with following WebDAV server:
  - drivehq.com
 
 ## Remote Package Installer Feature
-TODO
+ - Only PS4 pkg's are supported
+ - Can install pkg from the PS4 /data folder and subfolders, /mnt/usb folder and subfolders
+ - Can install pkg from all the support HTTP Servers (Apache/Microsoft IIS/Ngnix/Serve/RClone/GitHub)
+ - Can install pkg from WebDAV/NFS/SMB/SFTP/FTP Servers
+ - Can install pkg inside ZIP files from and of the above Remote Servers
+   
+   ### Remote PKG installation modes
+   RPI - means (R)emote (P)ackage (I)Install <br/>
+   DC  - means (D)isk (Cache)
+   
+   - [ ] RPI - Downloads the PKG to the "Temp Directory" on the PS4 first and then installs it. This doubles the PKG file size used on the PS4. But this is the most stable of all modes.
+   - [x] RPI - Installs the PKG directly to the PS4 without copying any content to the disk. Usually the fastest. But the negative is that there could be hundreds or ever thousands of request to the remote server to open the file, read 16MB chunk of content and then closes the file. The is known to cause issues on some NAS storage.
+   - [X] DC  - This option is used in conjuction with RPI. If RPI is disabled, this option has no effect. With this option enabled, the app makse only 1 request to open the file, then read and stores the content of the pkg in 5MB chunks, while also at the same time sends the data to the PS5 installer until the completed pkg is installed and then pkg is closed. This saves on hundreds of Opening/Closing of the PKG on the remote. The negative is that approximately 100MB - 200MB of disk space is used. This help with installing for NAS.
 
 ## Features Native Application##
  - Transfer files back and forth between PS5 and FTP/SMB/NFS/WebDAV server

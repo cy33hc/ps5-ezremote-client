@@ -18,7 +18,6 @@
 #include "sceUserService.h"
 #include "sceSystemService.h"
 #include "installer.h"
-#include "dbglogger.h"
 
 struct BgProgressCheck
 {
@@ -320,7 +319,7 @@ namespace INSTALLER
 		if (FS::Head(path.c_str(), (void *)&header, sizeof(header)) == 0)
 			return 0;
 
-		if (BE32(header.pkg_magic) != PS4_PKG_MAGIC && BE32(header.pkg_magic) != PS5_PKG_MAGIC)
+		if (BE32(header.pkg_magic) != PS4_PKG_MAGIC)
 			return 0;
 
 		return InstallLocalPkg(path, &header, false);
@@ -416,6 +415,9 @@ namespace INSTALLER
 		pkg_header tmp_hdr;
 		FS::Head(path, &tmp_hdr, sizeof(pkg_header));
 
+		if (BE32(tmp_hdr.pkg_magic) != PS4_PKG_MAGIC)
+			return false;
+
 		size_t entry_count = BE32(tmp_hdr.pkg_entry_count);
 		uint32_t entry_table_offset = BE32(tmp_hdr.pkg_table_offset);
 		uint64_t entry_table_size = entry_count * sizeof(pkg_table_entry);
@@ -486,6 +488,9 @@ namespace INSTALLER
 	{
 		pkg_header tmp_hdr;
 		if (!remoteclient->Head(path, &tmp_hdr, sizeof(pkg_header)))
+			return false;
+
+		if (BE32(tmp_hdr.pkg_magic) != PS4_PKG_MAGIC)
 			return false;
 
 		size_t entry_count = BE32(tmp_hdr.pkg_entry_count);

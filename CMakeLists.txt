@@ -109,7 +109,7 @@ target_link_libraries(ezremote_client.elf
 )
 
 set(APPDIR "ezremote-client")
-set(APP_VERSION "1.04")
+set(APP_VERSION "1.05")
 
 add_custom_target(package
    DEPENDS ezremote_client.elf

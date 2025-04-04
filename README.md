@@ -9,7 +9,7 @@ ezRemote Client is an application that allows you to connect the PS5 to remote F
 ## Installation
 1. Extract the **ezremote_client.zip** in to the **/data/homebrew** folder on the PS5.
 2. Must load websrv playload. You won't tbe able to start ezRemote Client without this.
-3. Must load either kstuff or etaHen. Recommend using kstuff if you plan to install packages. From my personally testing, I get 4x faster network speeds with kstuff compared with etaHen.
+3. Must load either kstuff or etaHen. <del>Recommend using kstuff if you plan to install packages. From my personally testing, I get 4x faster network speeds with kstuff compared with etaHen.</del> **UPDATE: Enabling "Lite Mode" in etaHEN resolves the network speed issue. you can try this too if you get the same issue**
 4. Install PS-ezRemoteClient.pkg (This create a shortcut on the dashboard to launch the app directly via websrv)
 
 ## Know Issues
@@ -117,7 +117,7 @@ Tested with following WebDAV server:
   
 ### Methods for increasing speed of install
   - Writing to the PS5's internal SSD seems awfully slow for some reason, if you disable RPI or enabe Disk Cache, try change the "Temp Directory" in the Settings Dialog to an external SSD that is exFAT connected to the USB3 port at the back of the console. For some reason, the speed of writing to the external SSD is faster. Usually the external usb SSD is mounted to /mnt/usb(X).
-  - From my personal testing it seems like I get 4x faster network speeds with kstuff compared to etaHen. Tested with the same pkg and same server, each time restarting and loading the payload and run the test. I ran the test 5 times just to make sure.
+  - <del>From my personal testing it seems like I get 4x faster network speeds with kstuff compared to etaHen. Tested with the same pkg and same server, each time restarting and loading the payload and run the test. I ran the test 5 times just to make sure.</del> **UPDATE: Enabling "Lite Mode" in etaHEN resolves the network speed issue. You can try this too if you get the same issue**
 
 ## Features Native Application
  - Transfer files back and forth between PS5 and FTP/SMB/NFS/WebDAV server

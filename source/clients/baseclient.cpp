@@ -20,6 +20,11 @@ BaseClient::~BaseClient()
         delete client;
 };
 
+int BaseClient::NothingCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
+{
+    return 0;
+}
+
 int BaseClient::DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     CHTTPClient::ProgressFnStruct *progress_data = (CHTTPClient::ProgressFnStruct*) ptr;
@@ -100,6 +105,7 @@ int BaseClient::Size(const std::string &path, uint64_t *size)
     CHTTPClient::HttpResponse res;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+    client->SetProgressFnCallback(nullptr, NothingCallback);
     if (client->Head(encoded_url, headers, res))
     {
         if (HTTP_SUCCESS(res.iCode))
@@ -171,6 +177,7 @@ int BaseClient::Get(SplitFile *split_file, const std::string &path, uint64_t off
 
     prev_tick = Util::GetTick();
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+    client->SetProgressFnCallback(nullptr, NothingCallback);
     if (client->DownloadFile((void*)split_file, encoded_url, (void*)WriteToSplitFileCallback, status))
     {
         return 1;
@@ -192,6 +199,7 @@ int BaseClient::GetRange(const std::string &path, DataSink &sink, uint64_t size,
     headers["Range"] = range_header;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+    client->SetProgressFnCallback(nullptr, NothingCallback);
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());
@@ -216,6 +224,7 @@ int BaseClient::GetRange(const std::string &path, void *buffer, uint64_t size, u
     headers["Range"] = range_header;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+    client->SetProgressFnCallback(nullptr, NothingCallback);
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());
@@ -269,6 +278,7 @@ int BaseClient::Head(const std::string &path, void *buffer, uint64_t size)
     headers["Range"] = range_header;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+    client->SetProgressFnCallback(nullptr, NothingCallback);
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());

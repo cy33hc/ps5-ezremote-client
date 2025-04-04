@@ -11,6 +11,8 @@
 #include "clients/apache.h"
 #include "clients/archiveorg.h"
 #include "clients/iis.h"
+#include "clients/github.h"
+#include "clients/myrient.h"
 #include "clients/nginx.h"
 #include "clients/npxserve.h"
 #include "clients/rclone.h"
@@ -208,6 +210,10 @@ namespace HttpServer
                 tmp_client = new RCloneClient();
             else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_ARCHIVEORG) == 0)
                 tmp_client = new ArchiveOrgClient();
+            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
+                tmp_client = new GithubClient();
+            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MYRIENT) == 0)
+                tmp_client = new MyrientClient();
         }
         else if (tmp_settings->type == CLIENT_TYPE_WEBDAV)
         {

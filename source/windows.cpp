@@ -2099,7 +2099,7 @@ namespace Windows
                 ImGui::PopTextWrapPos();
                 EndGroupPanel();
 
-                /* if (saved_selected_browser & REMOTE_BROWSER ||
+                if (saved_selected_browser & REMOTE_BROWSER ||
                     (saved_selected_browser & LOCAL_BROWSER && (strncmp(selected_local_file.path, "/data/", 6) == 0 || strncmp(selected_local_file.path, "/mnt/usb", 8) == 0)))
                 {
                     ImGui::SetCursorPos(ImVec2(7, 420));
@@ -2113,7 +2113,7 @@ namespace Windows
                         SetModalMode(false);
                         ImGui::CloseCurrentPopup();
                     }
-                } */
+                }
 
                 if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
                 {
@@ -2468,11 +2468,13 @@ namespace Windows
             selected_action = ACTION_NONE;
             break;
         case ACTION_VIEW_LOCAL_PKG:
-            INSTALLER::ExtractLocalPkg(selected_local_file.path, TMP_SFO_PATH, TMP_ICON_PATH);
-            Textures::LoadImageFile(TMP_ICON_PATH, &texture);
-            sfo = FS::Load(TMP_SFO_PATH);
-            sfo_params = SFO::GetParams(sfo.data(), sfo.size());
-            show_pkg_info = true;
+            if (INSTALLER::ExtractLocalPkg(selected_local_file.path, TMP_SFO_PATH, TMP_ICON_PATH))
+            {
+                Textures::LoadImageFile(TMP_ICON_PATH, &texture);
+                sfo = FS::Load(TMP_SFO_PATH);
+                sfo_params = SFO::GetParams(sfo.data(), sfo.size());
+                show_pkg_info = true;
+            }
             selected_action = ACTION_NONE;
             break;
         case ACTION_VIEW_REMOTE_PKG:

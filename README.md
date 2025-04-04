@@ -8,8 +8,8 @@ ezRemote Client is an application that allows you to connect the PS5 to remote F
 
 ## Installation
 1. Extract the **ezremote_client.zip** in to the **/data/homebrew** folder on the PS5.
-2. Must load websrv playload
-3. Must load either kstuff or etaHen (if you load etaHen, then there is no need to load kstuff since etaHen includes kstuff)
+2. Must load websrv playload. You won't tbe able to start ezRemote Client without this.
+3. Must load either kstuff or etaHen (if you load etaHen, then there is no need to load kstuff since etaHen includes kstuff). You won't be able to install packages without this.
 4. Install ezRemoteClient.pkg (This create a shortcut on the dashboard to launch the app directly via websrv)
 
 ## Usage
@@ -97,22 +97,25 @@ Tested with following WebDAV server:
  - 4shared.com
  - drivehq.com
 
-## Remote Package Installer Feature
+## Package Installer Feature
  - Only PS4 pkg's are supported
  - Can install pkg from the PS4 /data folder and subfolders, /mnt/usb folder and subfolders
  - Can install pkg from all the support HTTP Servers (Apache/Microsoft IIS/Ngnix/Serve/RClone/GitHub)
  - Can install pkg from WebDAV/NFS/SMB/SFTP/FTP Servers
  - Can install pkg inside ZIP files from and of the above Remote Servers
    
-   ### Remote PKG installation modes
-   RPI - means (R)emote (P)ackage (I)Install <br/>
-   DC  - means (D)isk (Cache)
+### Package installation modes
+  RPI - means (R)emote (P)ackage (I)Install <br/>
+  DC  - means (D)isk (Cache)
    
-   - [ ] RPI - Downloads the PKG to the "Temp Directory" on the PS4 first and then installs it. This doubles the PKG file size used on the PS4. But this is the most stable of all modes.
-   - [x] RPI - Installs the PKG directly to the PS4 without copying any content to the disk. Usually the fastest. But the negative is that there could be hundreds or ever thousands of request to the remote server to open the file, read 16MB chunk of content and then closes the file. The is known to cause issues on some NAS storage.
-   - [X] DC  - This option is used in conjuction with RPI. If RPI is disabled, this option has no effect. With this option enabled, the app makse only 1 request to open the file, then read and stores the content of the pkg in 5MB chunks, while also at the same time sends the data to the PS5 installer until the completed pkg is installed and then pkg is closed. This saves on hundreds of Opening/Closing of the PKG on the remote. The negative is that approximately 100MB - 200MB of disk space is used. This help with installing for NAS.
+  - RPI [Disabled] - When RPI is disabled, the PKG is downloaded to the "Temp Directory" on the PS4 first and then installs it. This doubles the PKG file size used on the PS4. But this is the most stable of all modes.
+  - RPI [Enabled]  - Installs the PKG directly to the PS4 without copying any content to the disk. Usually the fastest. But the negative is that there could be hundreds or ever thousands of request to the remote server to open the file, read 16MB chunk of content and then closes the file. The is known to cause issues on some NAS storage.
+  - DC [Enabled]   - This option is used in conjuction with RPI. If RPI is disabled, this option has no effect. With this option enabled, the app makse only 1 request to open the file, then read and stores the content of the pkg in 5MB chunks on disk, while also at the same time sends the data to the PS5 installer until the completed pkg is installed and then pkg is closed. This saves on hundreds of Opening/Closing of the PKG on the remote. The negative is that approximately 100MB - 200MB of disk space is used. This help with installing for NAS.
+  
+### Other methods of increasing speed of install
+  - Writing to the PS5's internal SSD seems awfully slow for some reason, if you disable RPI or enabe Disk Cache, try change the "Temp Directory" in the Settings Dialog to an external SSD that is exFAT connected to the USB3 port at the back of the console. Usually the external usb SSD is mounted to /mnt/usb(X).
 
-## Features Native Application##
+## Features Native Application
  - Transfer files back and forth between PS5 and FTP/SMB/NFS/WebDAV server
  - Support for connecting to Http Servers like (Apache/Nginx,Microsoft IIS, Serve) with html directory listings to download or install pkg. 
  - Support for connecting to Archive.org and Myrient website. 

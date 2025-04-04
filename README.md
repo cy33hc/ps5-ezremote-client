@@ -12,6 +12,9 @@ ezRemote Client is an application that allows you to connect the PS5 to remote F
 3. Must load either kstuff or etaHen (if you load etaHen, then there is no need to load kstuff since etaHen includes kstuff). You won't be able to install packages without this.
 4. Install ezRemoteClient.pkg (This create a shortcut on the dashboard to launch the app directly via websrv)
 
+## Know Issues
+- The app would crash if you cancelled the pkg install.
+
 ## Usage
 To distinguish between FTP, SMB, NFS, WebDAV or HTTP, the URL must be prefix with **ftp://**, **sftp://**, **smb://**, **nfs://**, **webdav://**, **webdavs://**, **http://** and **https://**
 
@@ -112,8 +115,8 @@ Tested with following WebDAV server:
   - RPI [Enabled]  - Installs the PKG directly to the PS4 without copying any content to the disk. Usually the fastest. But the negative is that there could be hundreds or ever thousands of request to the remote server to open the file, read 16MB chunk of content and then closes the file. The is known to cause issues on some NAS storage.
   - DC [Enabled]   - This option is used in conjuction with RPI. If RPI is disabled, this option has no effect. With this option enabled, the app makse only 1 request to open the file, then read and stores the content of the pkg in 5MB chunks on disk, while also at the same time sends the data to the PS5 installer until the completed pkg is installed and then pkg is closed. This saves on hundreds of Opening/Closing of the PKG on the remote. The negative is that approximately 100MB - 200MB of disk space is used. This help with installing for NAS.
   
-### Other methods of increasing speed of install
-  - Writing to the PS5's internal SSD seems awfully slow for some reason, if you disable RPI or enabe Disk Cache, try change the "Temp Directory" in the Settings Dialog to an external SSD that is exFAT connected to the USB3 port at the back of the console. Usually the external usb SSD is mounted to /mnt/usb(X).
+### Methods for increasing speed of install
+  - Writing to the PS5's internal SSD seems awfully slow for some reason, if you disable RPI or enabe Disk Cache, try change the "Temp Directory" in the Settings Dialog to an external SSD that is exFAT connected to the USB3 port at the back of the console. For some reason, the speed of writing to the external SSD is faster. Usually the external usb SSD is mounted to /mnt/usb(X).
 
 ## Features Native Application
  - Transfer files back and forth between PS5 and FTP/SMB/NFS/WebDAV server

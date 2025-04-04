@@ -102,7 +102,7 @@ Tested with following WebDAV server:
 
 ## Package Installer Feature
  - Only PS4 pkg's are supported
- - Can install pkg from the PS4 /data folder and subfolders, /mnt/usb folder and subfolders
+ - Can install pkg from the PS5 /data folder and subfolders, /mnt/usb folder and subfolders
  - Can install pkg from all the support HTTP Servers (Apache/Microsoft IIS/Ngnix/Serve/RClone/GitHub)
  - Can install pkg from WebDAV/NFS/SMB/SFTP/FTP Servers
  - Can install pkg inside ZIP files from any of the above Remote Servers
@@ -111,8 +111,8 @@ Tested with following WebDAV server:
   RPI - means (R)emote (P)ackage (I)Install <br/>
   DC  - means (D)isk (Cache)
    
-  - RPI [Disabled] - When RPI is disabled, the PKG is downloaded to the "Temp Directory" on the PS4 first and then installs it. This doubles the PKG file size used on the PS4. But this is the most stable of all modes. By default the temporary download pkg is deleted after install.
-  - RPI [Enabled]  - Installs the PKG directly to the PS4 without copying any content to the disk. Usually the fastest. But the negative is that there could be hundreds or ever thousands of request to the remote server to open the file, read 16MB chunk of content and then closes the file. The is known to cause issues on some NAS storage.
+  - RPI [Disabled] - When RPI is disabled, the PKG is downloaded to the "Temp Directory" on the PS5 first and then installs it. This doubles the PKG file size used on the PS5. But this is the most stable of all modes. By default the temporary download pkg is deleted after install.
+  - RPI [Enabled]  - Installs the PKG directly to the PS5 without copying any content to the disk. Usually the fastest. But the negative is that there could be hundreds or ever thousands of request to the remote server to open the file, read 16MB chunk of content and then closes the file. The is known to cause issues on some NAS storage.
   - DC [Enabled]   - This option is used in conjuction with RPI. If RPI is disabled, this option has no effect. With this option enabled, the app makse only 1 request to open the file, then read and stores the content of the pkg in 5MB chunks on disk, while also at the same time sends the data to the PS5 installer until the completed pkg is installed and then pkg is closed. This saves on hundreds of Opening/Closing of the PKG on the remote. The negative is that approximately 100MB - 200MB of disk space is used. This help with installing for NAS.
   
 ### Methods for increasing speed of install

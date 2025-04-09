@@ -1257,14 +1257,14 @@ namespace Windows
                 ImGui::Separator();
             }
 
-            /* ImGui::PushID("InstallFromUrl##both");
+            /*ImGui::PushID("InstallFromUrl##both");
             if (ImGui::Selectable(lang_strings[STR_INSTALL_FROM_URL], false, ImGuiSelectableFlags_DontClosePopups, ImVec2(220, 0)))
             {
                 select_url_inprogress = true;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::PopID();
-            ImGui::Separator(); */
+            ImGui::Separator();*/
 
             ImGui::PushID("Properties##settings");
             if (ImGui::Selectable(lang_strings[STR_PROPERTIES], false, ImGuiSelectableFlags_DontClosePopups, ImVec2(220, 0)))
@@ -1506,13 +1506,13 @@ namespace Windows
                 ImVec2 cur_pos = ImGui::GetCursorPos();
                 char id[128];
                 
-                ImGui::Checkbox("##enable_alldebrid_install_uril", &install_pkg_url.enable_alldebrid);
+                ImGui::Checkbox("##enable_alldebrid_install_url", &install_pkg_url.enable_alldebrid);
                 ImGui::SameLine();
                 ImGui::Text("%s", lang_strings[STR_ENABLE_ALLDEBRID_MSG]);
 
                 ImGui::SameLine();
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX()+40);
-                ImGui::Checkbox("##enable_realdebrid_install_uril", &install_pkg_url.enable_realdebrid);
+                ImGui::Checkbox("##enable_realdebrid_install_url", &install_pkg_url.enable_realdebrid);
                 ImGui::SameLine();
                 ImGui::Text("%s", lang_strings[STR_ENABLE_REALDEBRID_MSG]);
 
@@ -1563,52 +1563,6 @@ namespace Windows
                     select_url_inprogress = false;
                     SetModalMode(false);
                     ImGui::CloseCurrentPopup();
-                }
-
-                ImGui::Separator();
-                for (int j = 0; j < MAX_FAVORITE_URLS; j++)
-                {
-                    ImGui::Text("%s %d:", lang_strings[STR_SLOT], j);
-                    ImGui::SameLine();
-                    sprintf(id, "%d##saveslot", j);
-                    ImGui::PushID(id);
-                    ImGui::SetCursorPosX(cur_pos.x + 100);
-                    ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 1.0f));
-                    if (ImGui::Button(favorite_urls[j], ImVec2(875, 0)))
-                    {
-                        /* sprintf(install_pkg_url.url, "%s", favorite_urls[j]);
-                        memset(install_pkg_url.username, 0, sizeof(install_pkg_url.username));
-                        memset(install_pkg_url.password, 0, sizeof(install_pkg_url.password));
-                        selected_action = ACTION_INSTALL_URL_PKG;
-                        SetModalMode(false);
-                        select_url_inprogress = false; */
-                        ImGui::CloseCurrentPopup();
-                    }
-                    ImGui::PopStyleVar();
-                    ImGui::PopID();
-                    if (ImGui::IsItemHovered())
-                    {
-                        if (ImGui::CalcTextSize(favorite_urls[j]).x > 870)
-                        {
-                            ImGui::BeginTooltip();
-                            ImGui::Text("%s", favorite_urls[j]);
-                            ImGui::EndTooltip();
-                        }
-                    }
-
-                    ImGui::SameLine();
-                    sprintf(id, "%s##%d", lang_strings[STR_EDIT], j);
-                    if (ImGui::Button(id, ImVec2(70, 0)))
-                    {
-                        ResetImeCallbacks();
-                        favorite_url_idx = j;
-                        ime_single_field = favorite_urls[j];
-                        ime_field_size = 511;
-                        ime_after_update = AfterFavoriteUrlCallback;
-                        ime_callback = SingleValueImeCallback;
-                        Dialog::initImeDialog("URL", favorite_urls[j], 511, SCE_IME_TYPE_DEFAULT, 600, 340);
-                        gui_mode = GUI_MODE_IME;
-                    }
                 }
 
                 if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
@@ -1884,7 +1838,7 @@ namespace Windows
                     gui_mode = GUI_MODE_IME;
                 }
                 ImGui::PopStyleVar();
-                /* ImGui::Separator();
+                ImGui::Separator();
 
                 ImGui::TextColored(colors[ImGuiCol_ButtonHovered], "%s", lang_strings[STR_ALLDEBRID]);
                 ImGui::Separator();
@@ -1941,6 +1895,7 @@ namespace Windows
                 ImGui::Separator();
 
                 // Google settings
+                /*
                 ImGui::TextColored(colors[ImGuiCol_ButtonHovered], "%s", lang_strings[STR_GOOGLE]);
                 ImGui::Separator();
 
@@ -1983,8 +1938,9 @@ namespace Windows
                     Dialog::initImeDialog(lang_strings[STR_CLIENT_SECRET], gg_app.client_secret, 63, SCE_IME_TYPE_DEFAULT, 1050, 80);
                     gui_mode = GUI_MODE_IME;
                 }
-                ImGui::PopStyleVar(); */
-                ImGui::Separator();
+                ImGui::PopStyleVar();
+                ImGui::Separator(); */
+
                 sprintf(id, "%s##settings", lang_strings[STR_CLOSE]);
                 if (ImGui::Button(id, ImVec2(835, 0)))
                 {
@@ -2143,7 +2099,7 @@ namespace Windows
             StatusPanel();
             ShowProgressDialog();
             ShowActionsDialog();
-            // ShowFavoriteUrlsDialog();
+            ShowFavoriteUrlsDialog();
             ShowEditorDialog();
             ShowSettingsDialog();
             ShowImageDialog();
@@ -2625,7 +2581,7 @@ namespace Windows
 
     void AfterPackageUrlCallback(int ime_result)
     {
-        selected_action = ACTION_NONE;
+        selected_action = ACTION_INSTALL_URL_PKG;
     }
 
     void AfterExtractFolderCallback(int ime_result)

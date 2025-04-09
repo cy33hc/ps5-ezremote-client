@@ -1061,8 +1061,6 @@ namespace HttpServer
 
         svr->Post("/__local__/install_url", [&](const Request &req, Response &res)
         {
-            return failed(res, 200, "Function not supported");
-
             std::string url;
             const char *url_param;
             bool use_alldebrid = false;

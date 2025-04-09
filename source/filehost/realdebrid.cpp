@@ -22,7 +22,7 @@ bool RealDebridHost::IsValidUrl()
     std::string path = std::string("https://api.real-debrid.com/rest/1.0/unrestrict/check");
     std::string post_data = std::string("link=") + CHTTPClient::EncodeUrl(this->url) + "&password=";
 
-    if (tmp_client.Post(url, headers, post_data, res))
+    if (tmp_client.Post(path, headers, post_data, res))
     {
         if (HTTP_SUCCESS(res.iCode))
         {

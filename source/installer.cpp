@@ -25,6 +25,8 @@ struct BgProgressCheck
 	SplitPkgInstallData *split_pkg_data;
 	content_id_t content_id;
 	std::string hash;
+	std::string url;
+	std::string title;
 };
 
 static bool sceAppInst_done = false;
@@ -190,6 +192,35 @@ namespace INSTALLER
 		BgProgressCheck *bg_check_data = (BgProgressCheck *)argp;
 		int ret;
 
+		PlayGoInfo playgo_info;
+		SceAppInstallPkgInfo pkg_info;
+		memset(&playgo_info, 0, sizeof(playgo_info));
+		
+		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+		}	
+
+		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+		}	
+
+		MetaInfo metainfo = (MetaInfo){
+			.uri = bg_check_data->url.c_str(),
+			.ex_uri = "",
+			.playgo_scenario_id = "",
+			.content_id = "",
+			.content_name = bg_check_data->title.c_str(),
+			.icon_url = ""
+		};
+
+		ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+		if (ret != 0)
+		{
+			return 0;
+		}
+		Util::Notify("%s queued", bg_check_data->title.c_str());
+
 		SceAppInstallStatusInstalled progress_info;
 		while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 		{
@@ -241,42 +272,42 @@ namespace INSTALLER
 		if (url.empty())
 			return 0;
 
-		int ret;
-		PlayGoInfo playgo_info;
-		SceAppInstallPkgInfo pkg_info;
-		memset(&playgo_info, 0, sizeof(playgo_info));
-		
-		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-		}
-
-		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-		}
-
 		std::string cid = std::string((char *)header->pkg_content_id);
 		cid = cid.substr(cid.find_first_of("-") + 1, 9);
 		std::string display_title = title.length() > 0 ? title : cid;
 
-		MetaInfo metainfo = (MetaInfo){
-			.uri = url.c_str(),
-			.ex_uri = "",
-			.playgo_scenario_id = "",
-			.content_id = "",
-			.content_name = display_title.c_str(),
-			.icon_url = ""
-		};
-
-		ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
-		if (ret != 0)
-		{
-			return 0;
-		}
-		Util::Notify("%s queued", display_title.c_str());
-
+		int ret;	
 		if (prompt)
 		{
+			PlayGoInfo playgo_info;
+			SceAppInstallPkgInfo pkg_info;
+			memset(&playgo_info, 0, sizeof(playgo_info));
+			
+			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+			}	
+
+			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+			}	
+
+			MetaInfo metainfo = (MetaInfo){
+				.uri = url.c_str(),
+				.ex_uri = "",
+				.playgo_scenario_id = "",
+				.content_id = "",
+				.content_name = display_title.c_str(),
+				.icon_url = ""
+			};
+
+			ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+			if (ret != 0)
+			{
+				return 0;
+			}
+			Util::Notify("%s queued", display_title.c_str());
+
 			file_transfering = true;
 			sprintf(activity_message, "%s", lang_strings[STR_WAIT_FOR_INSTALL_MSG]);
 			bytes_to_download = header->pkg_content_size;
@@ -300,6 +331,8 @@ namespace INSTALLER
 			memset(bg_check_data, 0, sizeof(BgProgressCheck));
 			bg_check_data->archive_pkg_data = nullptr;
 			bg_check_data->split_pkg_data = nullptr;
+			bg_check_data->url = url;
+			bg_check_data->title = display_title;
 			snprintf(bg_check_data->content_id, sizeof(bg_check_data->content_id), "%s", header->pkg_content_id);
 			bg_check_data->hash = "";
 			ret = pthread_create(&bk_install_thid, NULL, CheckBgInstallTaskThread, bg_check_data);
@@ -586,21 +619,6 @@ namespace INSTALLER
 		pkg_header header;
 		pkg_data->split_file->Read((char *)&header, sizeof(pkg_header), 0);
 
-
-
-		PlayGoInfo playgo_info;
-		SceAppInstallPkgInfo pkg_info;
-		memset(&playgo_info, 0, sizeof(playgo_info));
-		
-		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-		}
-
-		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-		}
-
 		std::string cid = std::string((char *)header.pkg_content_id);
 		cid = cid.substr(cid.find_first_of("-") + 1, 9);
 		std::string display_title = cid;
@@ -609,26 +627,39 @@ namespace INSTALLER
 		std::string full_url = std::string("http://localhost:") + std::to_string(http_server_port) + "/archive_inst/" + hash;
 		AddArchivePkgInstallData(hash, pkg_data);
 
-		MetaInfo metainfo = (MetaInfo){
-			.uri = full_url.c_str(),
-			.ex_uri = "",
-			.playgo_scenario_id = "",
-			.content_id = "",
-			.content_name = display_title.c_str(),
-			.icon_url = ""
-		};
-
-		ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
-		if (ret)
-		{
-			ret = 0;
-			goto finish;
-		}
-
-		Util::Notify("%s queued", display_title.c_str());
-
 		if (!bg)
 		{
+			PlayGoInfo playgo_info;
+			SceAppInstallPkgInfo pkg_info;
+			memset(&playgo_info, 0, sizeof(playgo_info));
+			
+			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+			}
+
+			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+			}
+
+			MetaInfo metainfo = (MetaInfo){
+				.uri = full_url.c_str(),
+				.ex_uri = "",
+				.playgo_scenario_id = "",
+				.content_id = "",
+				.content_name = display_title.c_str(),
+				.icon_url = ""
+			};
+
+			ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+			if (ret)
+			{
+				ret = 0;
+				goto finish;
+			}
+
+			Util::Notify("%s queued", display_title.c_str());
+
 			file_transfering = true;
 			bytes_to_download = header.pkg_content_size;
 			bytes_transfered = 0;
@@ -652,6 +683,8 @@ namespace INSTALLER
 			memset(bg_check_data, 0, sizeof(BgProgressCheck));
 			bg_check_data->archive_pkg_data = pkg_data;
 			bg_check_data->split_pkg_data = nullptr;
+			bg_check_data->url = full_url;
+			bg_check_data->title = display_title;
 			snprintf(bg_check_data->content_id, sizeof(bg_check_data->content_id), "%s", (char *)header.pkg_content_id);
 			bg_check_data->hash = hash;
 			ret = pthread_create(&bk_install_thid, NULL, CheckBgInstallTaskThread, bg_check_data);
@@ -698,39 +731,39 @@ namespace INSTALLER
 		std::string full_url = std::string("http://localhost:") + std::to_string(http_server_port) + "/split_inst/" + hash;
 		AddSplitPkgInstallData(hash, pkg_data);
 
-		PlayGoInfo playgo_info;
-		SceAppInstallPkgInfo pkg_info;
-		memset(&playgo_info, 0, sizeof(playgo_info));
-		
-		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-		}
-
-		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-		}
-
-		MetaInfo metainfo = (MetaInfo){
-			.uri = full_url.c_str(),
-			.ex_uri = "",
-			.playgo_scenario_id = "",
-			.content_id = "",
-			.content_name = display_title.c_str(),
-			.icon_url = ""
-		};
-
-		ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
-		if (ret)
-		{
-			ret = 0;
-			goto finish;
-		}
-
-		Util::Notify("%s queued", display_title.c_str());
-
 		if (!bg)
 		{
+			PlayGoInfo playgo_info;
+			SceAppInstallPkgInfo pkg_info;
+			memset(&playgo_info, 0, sizeof(playgo_info));
+			
+			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+			}
+
+			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+			}
+
+			MetaInfo metainfo = (MetaInfo){
+				.uri = full_url.c_str(),
+				.ex_uri = "",
+				.playgo_scenario_id = "",
+				.content_id = "",
+				.content_name = display_title.c_str(),
+				.icon_url = ""
+			};
+
+			ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+			if (ret)
+			{
+				ret = 0;
+				goto finish;
+			}
+
+			Util::Notify("%s queued", display_title.c_str());
+
 			file_transfering = true;
 			bytes_to_download = pkg_data->size;
 			bytes_transfered = 0;
@@ -754,6 +787,8 @@ namespace INSTALLER
 			memset(bg_check_data, 0, sizeof(BgProgressCheck));
 			bg_check_data->split_pkg_data = pkg_data;
 			bg_check_data->archive_pkg_data = nullptr;
+			bg_check_data->url = full_url;
+			bg_check_data->title = display_title;
 			snprintf(bg_check_data->content_id, sizeof(bg_check_data->content_id), "%s", (char *)header.pkg_content_id);
 			bg_check_data->hash = hash;
 			ret = pthread_create(&bk_install_thid, NULL, CheckBgInstallTaskThread, bg_check_data);

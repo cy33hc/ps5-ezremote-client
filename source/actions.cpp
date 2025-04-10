@@ -1117,7 +1117,7 @@ namespace Actions
         sprintf(status_message, "%s", "");
         pkg_header header;
         char filename[2000];
-        sprintf(filename, "%s/%lu.pkg", TMP_FOLDER_PATH, prev_tick);
+        sprintf(filename, "%s/%lu.pkg", temp_folder, prev_tick);
 
         std::string full_url = std::string(install_pkg_url.url);
         FileHost *filehost = FileHost::getFileHost(full_url, install_pkg_url.enable_alldebrid, install_pkg_url.enable_realdebrid);

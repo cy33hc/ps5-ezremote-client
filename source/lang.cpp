@@ -177,6 +177,7 @@ char lang_strings[LANG_STRINGS_NUM][LANG_STR_SIZE] = {
 	"Install Via AllDebrid",                                                                          // STR_ENABLE_ALLDEBRID_MSG
 	"Install Via RealDebrid",                                                                         // STR_ENABLE_REALDEBRID_MSG
 	"Enable Disk Cache",                                                                              // STR_ENABLE_DISKCACHE_DESC
+	"Cannot perform operation while activity is in progress",                                        // STR_ACTIVITY_IN_PROGRESS_MSG
 };
 
 bool needs_extended_font = false;

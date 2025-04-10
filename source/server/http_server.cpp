@@ -293,7 +293,7 @@ namespace HttpServer
                 }); });
 
         svr->Post("/__local__/list", [&](const Request &req, Response &res)
-                  {
+        {
             const char *path;
             bool onlyFolders = false;
             json_object *jobj = json_tokener_parse(req.body.c_str());
@@ -342,7 +342,7 @@ namespace HttpServer
             res.set_content(results_str, strlen(results_str), "application/json"); });
 
         svr->Post("/__local__/rename", [&](const Request &req, Response &res)
-                  {
+        {
             const char *item;
             const char *newItemPath;
             json_object *jobj = json_tokener_parse(req.body.c_str());
@@ -367,7 +367,13 @@ namespace HttpServer
             return; });
 
         svr->Post("/__local__/move", [&](const Request &req, Response &res)
-                  {
+        {
+            if (activity_inprogess)
+            {
+                failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
+                return;
+            }
+
             const json_object *items;
             const char *newPath;
             json_object *jobj = json_tokener_parse(req.body.c_str());
@@ -421,7 +427,13 @@ namespace HttpServer
                 success(res); });
 
         svr->Post("/__local__/copy", [&](const Request &req, Response &res)
-                  {
+        {
+            if (activity_inprogess)
+            {
+                failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
+                return;
+            }
+
             const json_object *items;
             const char *newPath;
             const char *singleFilename;
@@ -495,7 +507,13 @@ namespace HttpServer
                 success(res); });
 
         svr->Post("/__local__/remove", [&](const Request &req, Response &res)
-                  {
+        {
+            if (activity_inprogess)
+            {
+                failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
+                return;
+            }
+
             json_object *items;
             json_object *jobj = json_tokener_parse(req.body.c_str());
             if (jobj != nullptr)
@@ -535,6 +553,12 @@ namespace HttpServer
 
         svr->Post("/__local__/install", [&](const Request &req, Response &res)
         {
+            if (activity_inprogess)
+            {
+                failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
+                return;
+            }
+
             json_object *items;
             json_object *jobj = json_tokener_parse(req.body.c_str());
             if (jobj != nullptr)
@@ -604,7 +628,7 @@ namespace HttpServer
             success(res); });
 
         svr->Post("/__local__/getContent", [&](const Request &req, Response &res)
-                  {
+        {
             const char *item;
             json_object *jobj = json_tokener_parse(req.body.c_str());
             if (jobj != nullptr)
@@ -630,7 +654,7 @@ namespace HttpServer
             res.set_content(result_str, strlen(result_str), "application/json"); });
 
         svr->Post("/__local__/createFolder", [&](const Request &req, Response &res)
-                  {
+        {
             const char *newPath;
             json_object *jobj = json_tokener_parse(req.body.c_str());
             if (jobj != nullptr)
@@ -655,7 +679,13 @@ namespace HttpServer
                   { failed(res, 200, "Operation not supported"); });
 
         svr->Post("/__local__/compress", [&](const Request &req, Response &res)
-                  {
+        {
+            if (activity_inprogess)
+            {
+                failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
+                return;
+            }
+
             json_object *items;
             const char* destination;
             const char* compressedFilename;
@@ -708,7 +738,13 @@ namespace HttpServer
             } });
 
         svr->Post("/__local__/extract", [&](const Request &req, Response &res)
-                  {
+        {
+            if (activity_inprogess)
+            {
+                failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
+                return;
+            }
+
             const char* item;
             const char* destination;
             const char* folderName;
@@ -747,7 +783,7 @@ namespace HttpServer
                 success(res); });
 
         svr->Get("/__local__/uploadResumeSize", [&](const Request &req, Response &res)
-                 {
+        {
             std::string destination = req.get_param_value("destination");
             std::string filename = req.get_param_value("filename");
             std::string file_path = destination + "/" + filename;
@@ -759,7 +795,7 @@ namespace HttpServer
             res.set_content(result_str.c_str(), result_str.length(), "application/json"); });
 
         svr->Post("/__local__/upload", [&](const Request &req, Response &res, const ContentReader &content_reader)
-                  {
+        {
             MultipartFormDataItems items;
             std::string destination;
             size_t chunk_size = 0;
@@ -829,7 +865,7 @@ namespace HttpServer
 
         // Download multiple files as ZIP
         svr->Get("/__local__/downloadMultiple", [&](const Request &req, Response &res)
-                 {
+        {
             if (req.get_param_value_count("items") == 0 || req.get_param_value_count("toFilename") == 0)
             {
                 failed(res, 200, "Required items and toFilename parameter missing");
@@ -887,7 +923,7 @@ namespace HttpServer
 
         // Download single file
         svr->Get("/__local__/downloadFile", [&](const Request &req, Response &res)
-                 {
+        {
             std::string path = req.get_param_value("path", 0);
             if (path.empty())
             {
@@ -1061,11 +1097,18 @@ namespace HttpServer
 
         svr->Post("/__local__/install_url", [&](const Request &req, Response &res)
         {
+            if (activity_inprogess)
+            {
+                failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
+                return;
+            }
+
             std::string url;
             const char *url_param;
             bool use_alldebrid = false;
             bool use_realdebrid = false;
             bool use_disk_cache = false;
+            bool enable_rpi = false;
 
             json_object *jobj = json_tokener_parse(req.body.c_str());
             if (jobj != nullptr)
@@ -1074,6 +1117,7 @@ namespace HttpServer
                 use_alldebrid  = json_object_get_boolean(json_object_object_get(jobj, "use_alldebrid"));
                 use_realdebrid = json_object_get_boolean(json_object_object_get(jobj, "use_realdebrid"));
                 use_disk_cache = json_object_get_boolean(json_object_object_get(jobj, "use_disk_cache"));
+                enable_rpi = json_object_get_boolean(json_object_object_get(jobj, "enable_rpi"));
 
                 if (url_param == nullptr)
                 {
@@ -1148,7 +1192,7 @@ namespace HttpServer
                 FileHost::AddCacheDownloadUrl(hash, download_url);
                 std::string title = INSTALLER::GetRemotePkgTitle(baseclient, path, &header);
 
-                if (!use_disk_cache)
+                if (enable_rpi && !use_disk_cache)
                 {
                     std::string remote_install_url = std::string("http://localhost:") + std::to_string(http_server_port) + "/rmt_inst/Site%2099/" + hash;
                     int rc = INSTALLER::InstallRemotePkg(remote_install_url, &header, title, false);
@@ -1161,7 +1205,7 @@ namespace HttpServer
                         return;
                     }
                 }
-                else
+                else if (enable_rpi && use_disk_cache)
                 {
                     SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
                     memset(install_data, 0, sizeof(SplitPkgInstallData));
@@ -1188,6 +1232,15 @@ namespace HttpServer
                         Windows::SetModalMode(false);
                         return;
                     }
+                }
+                else
+                {
+                    install_pkg_url.enable_rpi = enable_rpi;
+                    install_pkg_url.enable_alldebrid = use_alldebrid;
+                    install_pkg_url.enable_realdebrid = use_realdebrid;
+                    install_pkg_url.enable_disk_cache = use_disk_cache;
+                    snprintf(install_pkg_url.url, 511, "%s", url.c_str());
+                    Actions::InstallUrlPkg();
                 }
             }
             else

@@ -770,6 +770,10 @@ socket_t create_socket(const std::string &host, const std::string &ip, int port,
 #endif
     }
 
+    int const size = 1048576;
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
+    setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
+
     if (socket_options) { socket_options(sock); }
 
     if (rp->ai_family == AF_INET6) {
@@ -3953,6 +3957,10 @@ bool Server::listen_internal() {
                    reinterpret_cast<const void *>(&tv), sizeof(tv));
 #endif
       }
+
+      int const size = 1048576;
+      setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
+      setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
 
       task_queue->enqueue([this, sock]() { process_and_close_socket(sock); });
     }

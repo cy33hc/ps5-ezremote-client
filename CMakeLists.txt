@@ -104,12 +104,11 @@ target_link_libraries(ezremote_client.elf
   SceUserService
   SceLibcInternal
   SceAppInstUtil
-  SceIpmi
-  kernel
+  kernel_sys
 )
 
 set(APPDIR "ezremote-client")
-set(APP_VERSION "1.06")
+set(APP_VERSION "1.07")
 
 add_custom_target(package
    DEPENDS ezremote_client.elf

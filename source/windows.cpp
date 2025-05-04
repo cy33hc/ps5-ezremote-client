@@ -1770,6 +1770,12 @@ namespace Windows
                 ImGui::SetCursorPosX(805);
                 ImGui::Checkbox("##show_hidden_files", &show_hidden_files);
                 ImGui::Separator();
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
+                ImGui::Text("%s", lang_strings[STR_INSTALL_VIA_ETAHEN_DPIV2]);
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(805);
+                ImGui::Checkbox("##install_via_etahen_dpi", &install_via_etahen_dpi);
+                ImGui::Separator();
 
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
                 ImGui::Text("%s", lang_strings[STR_TEMP_DIRECTORY]);
@@ -2286,29 +2292,50 @@ namespace Windows
             done = true;
             break;
         case ACTION_INSTALL_REMOTE_PKG:
-            sprintf(status_message, "%s", "");
-            activity_inprogess = true;
-            file_transfering = true;
-            sprintf(activity_message, "%s", "");
-            stop_activity = false;
-            Actions::InstallRemotePkgs();
+            if (install_via_etahen_dpi && !INSTALLER::IsEtaHenInstallerEnabled())
+            {
+                sprintf(status_message, "%s", lang_strings[STR_ETAHEN_DPI_ERROR_MSG]);
+            }
+            else
+            {
+                sprintf(status_message, "%s", "");
+                activity_inprogess = true;
+                file_transfering = true;
+                sprintf(activity_message, "%s", "");
+                stop_activity = false;
+                Actions::InstallRemotePkgs();
+            }
             selected_action = ACTION_NONE;
             break;
         case ACTION_INSTALL_LOCAL_PKG:
-            activity_inprogess = true;
-            file_transfering = true;
-            sprintf(status_message, "%s", "");
-            sprintf(activity_message, "%s", "");
-            stop_activity = false;
-            Actions::InstallLocalPkgs();
+            if (install_via_etahen_dpi && !INSTALLER::IsEtaHenInstallerEnabled())
+            {
+                sprintf(status_message, "%s", lang_strings[STR_ETAHEN_DPI_ERROR_MSG]);
+            }
+            else
+            {
+                activity_inprogess = true;
+                file_transfering = true;
+                sprintf(status_message, "%s", "");
+                sprintf(activity_message, "%s", "");
+                stop_activity = false;
+                Actions::InstallLocalPkgs();
+            }
             selected_action = ACTION_NONE;
             break;
         case ACTION_INSTALL_URL_PKG:
-            activity_inprogess = true;
-            sprintf(status_message, "%s", "");
-            sprintf(activity_message, "%s", "");
-            stop_activity = false;
-            Actions::InstallUrlPkg();
+            if (install_via_etahen_dpi && !INSTALLER::IsEtaHenInstallerEnabled())
+            {
+                sprintf(status_message, "%s", lang_strings[STR_ETAHEN_DPI_ERROR_MSG]);
+            }
+            else
+            {
+                activity_inprogess = true;
+                sprintf(status_message, "%s", "");
+                sprintf(activity_message, "%s", "");
+                stop_activity = false;
+                Actions::InstallUrlPkg();
+            }
             selected_action = ACTION_NONE;
             break;
         case ACTION_LOCAL_CUT:

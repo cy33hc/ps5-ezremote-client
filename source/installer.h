@@ -165,4 +165,6 @@ namespace INSTALLER
     void AddSplitPkgInstallData(const std::string &hash, SplitPkgInstallData *pkg_data);
     void RemoveSplitPkgInstallData(const std::string &hash);
     bool InstallSplitPkg(const std::string &path, SplitPkgInstallData* pkg_data, bool bg = false);
+    bool IsEtaHenInstallerEnabled();
+    int InstallUrlViaEtaHen(const std::string &url);
 }

@@ -76,6 +76,8 @@
 #define CONFIG_LOCAL_DIRECTORY "local_directory"
 #define CONFIG_TMP_FOLDER_PATH "temp_folder"
 
+#define CONFIG_INSTALL_VIA_ETAHEN_DPI_V2 "install_via_etahen_dpi_v2"
+
 #define CONFIG_LANGUAGE "language"
 
 #define HTTP_SERVER_APACHE "Apache"
@@ -155,6 +157,7 @@ extern bool show_hidden_files;
 extern char alldebrid_api_key[64];
 extern char realdebrid_api_key[64];
 extern char temp_folder[256];
+extern bool install_via_etahen_dpi;
 
 namespace CONFIG
 {

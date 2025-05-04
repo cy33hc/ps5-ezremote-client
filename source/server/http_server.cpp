@@ -1137,6 +1137,12 @@ namespace HttpServer
                 return;
             }
 
+            if (install_via_etahen_dpi && !INSTALLER::IsEtaHenInstallerEnabled())
+            {
+                failed(res, 200, lang_strings[STR_ETAHEN_DPI_ERROR_MSG]);
+                return;
+            }
+
             url = std::string(url_param);
             FileHost *filehost = FileHost::getFileHost(url, use_alldebrid, use_realdebrid);
 

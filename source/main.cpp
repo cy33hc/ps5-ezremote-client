@@ -267,8 +267,8 @@ static void terminate()
 
 int main()
 {
-	//dbglogger_init();
-	//dbglogger_log("If you see this you've set up dbglogger correctly.");
+	// dbglogger_init();
+	// dbglogger_log("If you see this you've set up dbglogger correctly.");
 
 	// No buffering
 	setvbuf(stdout, NULL, _IONBF, 0);

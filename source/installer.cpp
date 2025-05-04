@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
+#include "httpclient/HTTPClient.h"
 #include "clients/webdav.h"
 #include "clients/remote_client.h"
 #include "server/http_server.h"
@@ -214,7 +215,10 @@ namespace INSTALLER
 			.icon_url = ""
 		};
 
-		ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+		if (install_via_etahen_dpi)
+			ret = InstallUrlViaEtaHen(bg_check_data->url);
+		else
+			ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
 		if (ret != 0)
 		{
 			return 0;
@@ -301,7 +305,10 @@ namespace INSTALLER
 				.icon_url = ""
 			};
 
-			ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+			if (install_via_etahen_dpi)
+				ret = InstallUrlViaEtaHen(url);
+			else
+				ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
 			if (ret != 0)
 			{
 				return 0;
@@ -404,7 +411,10 @@ namespace INSTALLER
 			.icon_url = ""
 		};
 
-		ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+		if (install_via_etahen_dpi)
+			ret = InstallUrlViaEtaHen(filepath);
+		else
+			ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
 		if (ret != 0)
 		{
 			goto err;
@@ -651,7 +661,10 @@ namespace INSTALLER
 				.icon_url = ""
 			};
 
-			ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+			if (install_via_etahen_dpi)
+				ret = InstallUrlViaEtaHen(full_url);
+			else
+				ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
 			if (ret)
 			{
 				ret = 0;
@@ -755,7 +768,10 @@ namespace INSTALLER
 				.icon_url = ""
 			};
 
-			ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+			if (install_via_etahen_dpi)
+				ret = InstallUrlViaEtaHen(full_url);
+			else
+				ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
 			if (ret)
 			{
 				ret = 0;
@@ -813,4 +829,54 @@ namespace INSTALLER
 		return ret;
 	}
 	
+	bool IsEtaHenInstallerEnabled()
+	{
+		CHTTPClient *client = new CHTTPClient([](const std::string& log){});
+		client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+		client->SetCertificateFile(CACERT_FILE);
+	
+		CHTTPClient::HeadersMap headers;
+		CHTTPClient::HttpResponse res;
+	
+		std::string encoded_path = "http://127.0.0.1:12800";
+
+		if (client->Get(encoded_path, headers, res))
+		{
+			if (HTTP_SUCCESS(res.iCode))
+			{
+				delete client;
+				return true;
+			}
+		}
+	
+		delete client;
+		return false;
+	}
+
+	int InstallUrlViaEtaHen(const std::string &url)
+	{
+		CHTTPClient *client = new CHTTPClient([](const std::string& log){});
+		client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+		client->SetCertificateFile(CACERT_FILE);
+	
+		CHTTPClient::HeadersMap headers;
+		CHTTPClient::HttpResponse res;
+	
+		std::string encoded_path = "http://127.0.0.1:12800/upload";
+
+		CHTTPClient::PostFormInfo formdata;
+		formdata.AddFormContent("url", url);
+	
+		if (client->UploadForm(encoded_path, headers, formdata, res))
+		{
+			if (HTTP_SUCCESS(res.iCode))
+			{
+				delete client;
+				return 0;
+			}
+		}
+	
+		delete client;
+		return 1;
+	}
 }

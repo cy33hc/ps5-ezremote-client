@@ -1,0 +1,3 @@
+[submodule "ps5-ezremote-dpi"]
+	path = ps5-ezremote-dpi
+	url = git@github.com:cy33hc/ps5-ezremote-dpi.git

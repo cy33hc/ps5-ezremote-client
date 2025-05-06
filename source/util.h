@@ -12,6 +12,17 @@
 #include "common.h"
 #include "lang.h"
 
+typedef struct notify_request
+{
+    char useless1[45];
+    char message[3075];
+} notify_request_t;
+
+extern "C"
+{
+    int sceKernelSendNotificationRequest(int, notify_request_t *, size_t, int);
+}
+
 namespace Util
 {
 
@@ -158,18 +169,15 @@ namespace Util
 
     static inline void Notify(const char *fmt, ...)
     {
-        /* OrbisNotificationRequest request;
-
+        notify_request_t req;
         va_list args;
+    
+        bzero(&req, sizeof req);
         va_start(args, fmt);
-        vsprintf(request.message, fmt, args);
+        vsnprintf(req.message, sizeof req.message, fmt, args);
         va_end(args);
-
-        request.type = OrbisNotificationRequestType::NotificationRequest;
-        request.unk3 = 0;
-        request.useIconImageUri = 0;
-        request.targetId = -1;
-        sceKernelSendNotificationRequest(0, &request, sizeof(request), 0); */
+    
+        sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
     }
 
     static inline void SetupPreviousFolder(const std::string &path, DirEntry *entry)

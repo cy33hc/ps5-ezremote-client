@@ -215,15 +215,11 @@ namespace INSTALLER
 			.icon_url = ""
 		};
 
-		if (install_via_etahen_dpi)
-			ret = InstallUrlViaEtaHen(bg_check_data->url);
-		else
-			ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+		ret = InstallWithDirectPackageInstaller(bg_check_data->url);
 		if (ret != 0)
 		{
 			return 0;
 		}
-		Util::Notify("%s queued", bg_check_data->title.c_str());
 
 		SceAppInstallStatusInstalled progress_info;
 		while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
@@ -305,15 +301,11 @@ namespace INSTALLER
 				.icon_url = ""
 			};
 
-			if (install_via_etahen_dpi)
-				ret = InstallUrlViaEtaHen(url);
-			else
-				ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+			ret = InstallWithDirectPackageInstaller(url);
 			if (ret != 0)
 			{
 				return 0;
 			}
-			Util::Notify("%s queued", display_title.c_str());
 
 			file_transfering = true;
 			sprintf(activity_message, "%s", lang_strings[STR_WAIT_FOR_INSTALL_MSG]);
@@ -411,10 +403,7 @@ namespace INSTALLER
 			.icon_url = ""
 		};
 
-		if (install_via_etahen_dpi)
-			ret = InstallUrlViaEtaHen(filepath);
-		else
-			ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+		ret = InstallWithDirectPackageInstaller(filepath);
 		if (ret != 0)
 		{
 			goto err;
@@ -422,7 +411,6 @@ namespace INSTALLER
 
 		if (!remove_after_install)
 		{
-			Util::Notify("%s queued", (char *)header->pkg_content_id);
 			return 1;
 		} 
 
@@ -661,17 +649,12 @@ namespace INSTALLER
 				.icon_url = ""
 			};
 
-			if (install_via_etahen_dpi)
-				ret = InstallUrlViaEtaHen(full_url);
-			else
-				ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+			ret = InstallWithDirectPackageInstaller(full_url);
 			if (ret)
 			{
 				ret = 0;
 				goto finish;
 			}
-
-			Util::Notify("%s queued", display_title.c_str());
 
 			file_transfering = true;
 			bytes_to_download = header.pkg_content_size;
@@ -768,17 +751,12 @@ namespace INSTALLER
 				.icon_url = ""
 			};
 
-			if (install_via_etahen_dpi)
-				ret = InstallUrlViaEtaHen(full_url);
-			else
-				ret = sceAppInstUtilInstallByPackage(&metainfo, &pkg_info, &playgo_info);
+			ret = InstallWithDirectPackageInstaller(full_url);
 			if (ret)
 			{
 				ret = 0;
 				goto finish;
 			}
-
-			Util::Notify("%s queued", display_title.c_str());
 
 			file_transfering = true;
 			bytes_to_download = pkg_data->size;
@@ -829,54 +807,185 @@ namespace INSTALLER
 		return ret;
 	}
 	
-	bool IsEtaHenInstallerEnabled()
+	bool IsDirectPackageInstallerEnabled()
 	{
-		CHTTPClient *client = new CHTTPClient([](const std::string& log){});
-		client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
-		client->SetCertificateFile(CACERT_FILE);
+		char buffer[256];
+		in_addr_t in_addr;
+		in_addr_t server_addr;
+		int sockfd;
+		ssize_t i;
+		ssize_t ret;
+		struct hostent *hostent;
+		struct sockaddr_in sockaddr_in;
+		unsigned short server_port = 9040;
 	
-		CHTTPClient::HeadersMap headers;
-		CHTTPClient::HttpResponse res;
-	
-		std::string encoded_path = "http://127.0.0.1:12800";
-
-		if (client->Get(encoded_path, headers, res))
+		sockfd = socket(AF_INET, SOCK_STREAM, 0);
+		if (sockfd == -1)
 		{
-			if (HTTP_SUCCESS(res.iCode))
-			{
-				delete client;
-				return true;
-			}
+			return false;
 		}
 	
-		delete client;
-		return false;
+		/* Prepare sockaddr_in. */
+		hostent = gethostbyname("127.0.0.1");
+		if (hostent == NULL)
+		{
+			printf("error: gethostbyname(\"%s\")\n", "127.0.0.1");
+			return false;
+		}
+	
+		in_addr = inet_addr(inet_ntoa(*(struct in_addr *)*(hostent->h_addr_list)));
+		if (in_addr == (in_addr_t)-1)
+		{
+			printf("error: inet_addr(\"%s\")\n", *(hostent->h_addr_list));
+			return false;
+		}
+	
+		sockaddr_in.sin_addr.s_addr = in_addr;
+		sockaddr_in.sin_family = AF_INET;
+		sockaddr_in.sin_port = htons(server_port);
+		/* Do the actual connection. */
+		if (connect(sockfd, (struct sockaddr *)&sockaddr_in, sizeof(sockaddr_in)) == -1)
+		{
+			printf("Couldn't connect to ELF loader\n");
+			return false;
+		}
+
+		return true;
 	}
 
-	int InstallUrlViaEtaHen(const std::string &url)
+	int StartDirectPackageInstaller()
 	{
-		CHTTPClient *client = new CHTTPClient([](const std::string& log){});
-		client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
-		client->SetCertificateFile(CACERT_FILE);
+		char buffer[8192];
+		in_addr_t in_addr;
+		in_addr_t server_addr;
+		int filefd;
+		int sockfd;
+		ssize_t i;
+		ssize_t read_return;
+		struct hostent *hostent;
+		struct sockaddr_in sockaddr_in;
+		unsigned short server_port = 9021;
 	
-		CHTTPClient::HeadersMap headers;
-		CHTTPClient::HttpResponse res;
-	
-		std::string encoded_path = "http://127.0.0.1:12800/upload";
+		if (IsDirectPackageInstallerEnabled())
+			return 0;
 
-		CHTTPClient::PostFormInfo formdata;
-		formdata.AddFormContent("url", url);
-	
-		if (client->UploadForm(encoded_path, headers, formdata, res))
+		filefd = open(DPI_ELF_PATH, O_RDONLY);
+		if (filefd == -1)
 		{
-			if (HTTP_SUCCESS(res.iCode))
+			return -1;
+		}
+	
+		sockfd = socket(AF_INET, SOCK_STREAM, 0);
+		if (sockfd == -1)
+		{
+			return -1;
+		}
+	
+		/* Prepare sockaddr_in. */
+		hostent = gethostbyname("127.0.0.1");
+		if (hostent == NULL)
+		{
+			return -1;
+		}
+	
+		in_addr = inet_addr(inet_ntoa(*(struct in_addr *)*(hostent->h_addr_list)));
+		if (in_addr == (in_addr_t)-1)
+		{
+			return -1;
+		}
+	
+		sockaddr_in.sin_addr.s_addr = in_addr;
+		sockaddr_in.sin_family = AF_INET;
+		sockaddr_in.sin_port = htons(server_port);
+		/* Do the actual connection. */
+		if (connect(sockfd, (struct sockaddr *)&sockaddr_in, sizeof(sockaddr_in)) == -1)
+		{
+			return -1;
+		}
+	
+		while (1)
+		{
+			read_return = read(filefd, buffer, 8192);
+			if (read_return == 0)
+				break;
+			if (read_return == -1)
 			{
-				delete client;
-				return 0;
+				return -1;
+			}
+			if (write(sockfd, buffer, read_return) == -1)
+			{
+				return -1;
 			}
 		}
 	
-		delete client;
-		return 1;
+		close(filefd);
+		close(sockfd);
+	
+		return 0;
+	}
+
+	int InstallWithDirectPackageInstaller(const std::string &url)
+	{
+		char buffer[256];
+		in_addr_t in_addr;
+		in_addr_t server_addr;
+		int sockfd;
+		ssize_t i;
+		ssize_t ret;
+		struct hostent *hostent;
+		struct sockaddr_in sockaddr_in;
+		unsigned short server_port = 9040;
+	
+		sockfd = socket(AF_INET, SOCK_STREAM, 0);
+		if (sockfd == -1)
+		{
+			return -1;
+		}
+	
+		/* Prepare sockaddr_in. */
+		int yes = 1;
+		setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *) &yes, sizeof(int));
+
+		hostent = gethostbyname("127.0.0.1");
+		if (hostent == NULL)
+		{
+			return -1;
+		}
+	
+		in_addr = inet_addr(inet_ntoa(*(struct in_addr *)*(hostent->h_addr_list)));
+		if (in_addr == (in_addr_t)-1)
+		{
+			return -1;
+		}
+	
+		sockaddr_in.sin_addr.s_addr = in_addr;
+		sockaddr_in.sin_family = AF_INET;
+		sockaddr_in.sin_port = htons(server_port);
+		/* Do the actual connection. */
+		if (connect(sockfd, (struct sockaddr *)&sockaddr_in, sizeof(sockaddr_in)) == -1)
+		{
+			return -1;
+		}
+	
+		ret = send(sockfd, url.c_str(), url.length(), MSG_DONTWAIT);
+		if (ret < 0)
+		{
+			goto cleanup;
+		}
+
+		memset(buffer, 0, sizeof buffer);
+		ret = read(sockfd, buffer, 256);
+		if (ret <= 0)
+		{
+			goto cleanup;
+		}
+
+		ret = atoi(buffer);
+
+	cleanup:
+		shutdown(sockfd, SHUT_RDWR);
+		close(sockfd);
+	
+		return ret;
 	}
 }

@@ -2,10 +2,12 @@ cmake_minimum_required(VERSION 3.5)
 
 project(ezremote_client)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDONT_HAVE_STRUPR")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDONT_HAVE_STRUPR -fstack-protector-all")
+set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -fpermissive")
 
 add_definitions(-DCPPHTTPLIB_THREAD_POOL_COUNT=16)
+
+add_subdirectory(ps5-ezremote-dpi)
 
 include_directories(
   source
@@ -100,23 +102,26 @@ target_link_libraries(ezremote_client.elf
   SceKeyboard
   ScePad
   SceNet
+  SceSysCore
   SceSystemService
   SceUserService
   SceLibcInternal
-  SceAppInstUtil
   kernel_sys
+  SceAppInstUtil
 )
 
 set(APPDIR "ezremote-client")
 set(APP_VERSION "1.09")
 
 add_custom_target(package
+   DEPENDS ezremote-dpi.elf
    DEPENDS ezremote_client.elf
    COMMAND rm -rf ${APPDIR}
    COMMAND rm -f ezremote-client.zip
    COMMAND mkdir -p ${APPDIR}
    COMMAND cp -R ${PROJECT_SOURCE_DIR}/data/* ${APPDIR}
    COMMAND cp ezremote_client.elf ${APPDIR}
+   COMMAND cp ps5-ezremote-dpi/ezremote-dpi.elf ${APPDIR}
    COMMAND sed -i "s/ezRemote Client/ezRemote Client v${APP_VERSION}/g"  ${APPDIR}/homebrew.js
 
    COMMAND zip -r ezremote-client.zip ${APPDIR}/

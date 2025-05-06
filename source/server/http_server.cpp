@@ -1137,9 +1137,9 @@ namespace HttpServer
                 return;
             }
 
-            if (install_via_etahen_dpi && !INSTALLER::IsEtaHenInstallerEnabled())
+            if (!INSTALLER::IsDirectPackageInstallerEnabled())
             {
-                failed(res, 200, lang_strings[STR_ETAHEN_DPI_ERROR_MSG]);
+                failed(res, 200, lang_strings[STR_DPI_NOT_STARTED_ERROR_MSG]);
                 return;
             }
 

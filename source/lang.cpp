@@ -178,8 +178,7 @@ char lang_strings[LANG_STRINGS_NUM][LANG_STR_SIZE] = {
 	"Install Via RealDebrid",                                                                         // STR_ENABLE_REALDEBRID_MSG
 	"Enable Disk Cache",                                                                              // STR_ENABLE_DISKCACHE_DESC
 	"Cannot perform operation while activity is in progress",                                         // STR_ACTIVITY_IN_PROGRESS_MSG
-	"Install PKGs with etaHEN Direct Package Installer V2",                                           // STR_INSTALL_VIA_ETAHEN_DPIV2
-	"etaHEN Direct Package Installer V2 is not enabled",                                              // STR_ETAHEN_DPI_ERROR_MSG
+	"ezRemote Direct Package Installer payload is not loaded",                                        // STR_ETAHEN_DPI_ERROR_MSG
 };
 
 bool needs_extended_font = false;

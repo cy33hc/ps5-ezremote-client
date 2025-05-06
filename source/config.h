@@ -19,6 +19,7 @@
 #define TMP_ICON_PATH DATA_PATH "/tmp_icon.png"
 #define TMP_FOLDER_PATH DATA_PATH "/tmp"
 #define CACERT_FILE DATA_PATH "/assets/certs/cacert.pem"
+#define DPI_ELF_PATH DATA_PATH "/ezremote-dpi.elf"
 
 #define CONFIG_GLOBAL "Global"
 
@@ -157,7 +158,6 @@ extern bool show_hidden_files;
 extern char alldebrid_api_key[64];
 extern char realdebrid_api_key[64];
 extern char temp_folder[256];
-extern bool install_via_etahen_dpi;
 
 namespace CONFIG
 {

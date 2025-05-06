@@ -14,6 +14,7 @@
 #include "config.h"
 #include "lang.h"
 #include "gui.h"
+#include "installer.h"
 #include "util.h"
 #include "textures.h"
 
@@ -286,6 +287,7 @@ int main()
 
 	CONFIG::LoadConfig();
 	HttpServer::Start();
+	INSTALLER::StartDirectPackageInstaller();
 
 	// Create a window context
 	window = SDL_CreateWindow("main", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, FRAME_WIDTH, FRAME_HEIGHT, 0);

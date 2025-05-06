@@ -1770,12 +1770,6 @@ namespace Windows
                 ImGui::SetCursorPosX(805);
                 ImGui::Checkbox("##show_hidden_files", &show_hidden_files);
                 ImGui::Separator();
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
-                ImGui::Text("%s", lang_strings[STR_INSTALL_VIA_ETAHEN_DPIV2]);
-                ImGui::SameLine();
-                ImGui::SetCursorPosX(805);
-                ImGui::Checkbox("##install_via_etahen_dpi", &install_via_etahen_dpi);
-                ImGui::Separator();
 
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
                 ImGui::Text("%s", lang_strings[STR_TEMP_DIRECTORY]);
@@ -2292,9 +2286,9 @@ namespace Windows
             done = true;
             break;
         case ACTION_INSTALL_REMOTE_PKG:
-            if (install_via_etahen_dpi && !INSTALLER::IsEtaHenInstallerEnabled())
+            if (!INSTALLER::IsDirectPackageInstallerEnabled())
             {
-                sprintf(status_message, "%s", lang_strings[STR_ETAHEN_DPI_ERROR_MSG]);
+                sprintf(status_message, "%s", lang_strings[STR_DPI_NOT_STARTED_ERROR_MSG]);
             }
             else
             {
@@ -2308,9 +2302,9 @@ namespace Windows
             selected_action = ACTION_NONE;
             break;
         case ACTION_INSTALL_LOCAL_PKG:
-            if (install_via_etahen_dpi && !INSTALLER::IsEtaHenInstallerEnabled())
+            if (!INSTALLER::IsDirectPackageInstallerEnabled())
             {
-                sprintf(status_message, "%s", lang_strings[STR_ETAHEN_DPI_ERROR_MSG]);
+                sprintf(status_message, "%s", lang_strings[STR_DPI_NOT_STARTED_ERROR_MSG]);
             }
             else
             {
@@ -2324,9 +2318,9 @@ namespace Windows
             selected_action = ACTION_NONE;
             break;
         case ACTION_INSTALL_URL_PKG:
-            if (install_via_etahen_dpi && !INSTALLER::IsEtaHenInstallerEnabled())
+            if (!INSTALLER::IsDirectPackageInstallerEnabled())
             {
-                sprintf(status_message, "%s", lang_strings[STR_ETAHEN_DPI_ERROR_MSG]);
+                sprintf(status_message, "%s", lang_strings[STR_DPI_NOT_STARTED_ERROR_MSG]);
             }
             else
             {

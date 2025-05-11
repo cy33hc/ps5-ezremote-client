@@ -43,10 +43,12 @@ public:
     uint32_t SupportedActions();
     static std::string Escape(const std::string &url);
     static std::string UnEscape(const std::string &url);
+    static size_t WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data);
+    #ifndef NO_GUI
     static int DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
     static int UploadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
-    static size_t WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data);
     static int NothingCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
+    #endif
 
 protected:
     CHTTPClient *client;

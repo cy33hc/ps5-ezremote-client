@@ -72,7 +72,7 @@ static pthread_t ftp_keep_alive_thid;
 
 namespace Actions
 {
-
+    #ifndef NO_GUI
     void RefreshLocalFiles(bool apply_filter);
     void RefreshRemoteFiles(bool apply_filter);
     void HandleChangeLocalDirectory(const DirEntry entry);
@@ -99,9 +99,6 @@ namespace Actions
     void InstallRemotePkgs();
     void *InstallLocalPkgsThread(void *argp);
     void InstallLocalPkgs();
-    void *InstallLocalUrlPkgThread(void *argp);
-    void *InstallRpiUrlPkgThread(void *argp);
-    void InstallUrlPkg();
     void *KeepAliveThread(void *argp);
     void *ExtractZipThread(void *argp);
     void ExtractLocalZips();
@@ -120,7 +117,11 @@ namespace Actions
     int DownloadAndInstallPkg(const std::string &filename, pkg_header *header);
     void CreateLocalFile(char *filename);
     void CreateRemoteFile(char *filename);
+    #endif
     void *ExtractArchivePkg(void *argp);
+    void *InstallRpiUrlPkgThread(void *argp);
+    void *InstallLocalUrlPkgThread(void *argp);
+    void InstallUrlPkg();
     void *DownloadSplitPkg(void *argp);
 }
 

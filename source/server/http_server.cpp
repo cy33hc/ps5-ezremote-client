@@ -17,9 +17,13 @@
 #include "clients/npxserve.h"
 #include "clients/rclone.h"
 #include "filehost/filehost.h"
+#include "actions.h"
 #include "config.h"
 #include "fs.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
+#include "installer.h"
 #include "lang.h"
 #include "zip_util.h"
 #include "util.h"
@@ -103,7 +107,7 @@ namespace HttpServer
     void failed(Response &res, int status, const std::string &msg)
     {
         res.status = status;
-        char response_msg[msg.length() + strlen(FAILURE_MSG) + 2];
+        char response_msg[4096];
         snprintf(response_msg, sizeof(response_msg), "{ \"result\": { \"success\": false, \"error\": \"%s\" } }", msg.c_str());
         res.set_content(response_msg, strlen(response_msg), "application/json");
         return;
@@ -262,11 +266,12 @@ namespace HttpServer
                 size, "text/html",
                 [in](size_t offset, size_t length, DataSink &sink) {
                     size_t size_to_read = std::min(static_cast<size_t>(length), (size_t)1048576);
-                    char buff[size_to_read];
+                    char *buff = (char*)malloc(size_to_read);
                     size_t read_len;
                     FS::Seek(in, offset);
                     read_len = FS::Read(in, buff, size_to_read);
                     sink.write(buff, read_len);
+                    free(buff);
                     return read_len == size_to_read;
                 },
                 [in](bool success) {
@@ -274,23 +279,25 @@ namespace HttpServer
                 }); });
 
         svr->Get("/favicon.ico", [&](const Request &req, Response &res)
-                 {
+        {
             FILE *in = FS::OpenRead("/data/homebrew/ezremote-client/assets/favicon.ico");
             size_t size = FS::GetSize("/data/homebrew/ezremote-client/assets/favicon.ico");
             res.set_content_provider(
                 size, "image/vnd.microsoft.icon",
                 [in](size_t offset, size_t length, DataSink &sink) {
                     size_t size_to_read = std::min(static_cast<size_t>(length), (size_t)1048576);
-                    char buff[size_to_read];
+                    char *buff = (char*)malloc(size_to_read);
                     size_t read_len;
                     FS::Seek(in, offset);
                     read_len = FS::Read(in, buff, size_to_read);
                     sink.write(buff, read_len);
+                    free(buff);
                     return read_len == size_to_read;
                 },
                 [in](bool success) {
                     FS::Close(in);
-                }); });
+                });
+        });
 
         svr->Post("/__local__/list", [&](const Request &req, Response &res)
         {
@@ -368,11 +375,13 @@ namespace HttpServer
 
         svr->Post("/__local__/move", [&](const Request &req, Response &res)
         {
+            #ifndef NO_GUI
             if (activity_inprogess)
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
             }
+            #endif
 
             const json_object *items;
             const char *newPath;
@@ -428,11 +437,13 @@ namespace HttpServer
 
         svr->Post("/__local__/copy", [&](const Request &req, Response &res)
         {
+            #ifndef NO_GUI
             if (activity_inprogess)
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
             }
+            #endif
 
             const json_object *items;
             const char *newPath;
@@ -508,11 +519,13 @@ namespace HttpServer
 
         svr->Post("/__local__/remove", [&](const Request &req, Response &res)
         {
+            #ifndef NO_GUI
             if (activity_inprogess)
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
             }
+            #endif
 
             json_object *items;
             json_object *jobj = json_tokener_parse(req.body.c_str());
@@ -553,11 +566,13 @@ namespace HttpServer
 
         svr->Post("/__local__/install", [&](const Request &req, Response &res)
         {
+            #ifndef NO_GUI
             if (activity_inprogess)
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
             }
+            #endif
 
             json_object *items;
             json_object *jobj = json_tokener_parse(req.body.c_str());
@@ -680,11 +695,13 @@ namespace HttpServer
 
         svr->Post("/__local__/compress", [&](const Request &req, Response &res)
         {
+            #ifndef NO_GUI
             if (activity_inprogess)
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
             }
+            #endif
 
             json_object *items;
             const char* destination;
@@ -739,11 +756,13 @@ namespace HttpServer
 
         svr->Post("/__local__/extract", [&](const Request &req, Response &res)
         {
+            #ifndef NO_GUI
             if (activity_inprogess)
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
             }
+            #endif
 
             const char* item;
             const char* destination;
@@ -904,11 +923,12 @@ namespace HttpServer
                     size, "application/octet-stream",
                     [in](size_t offset, size_t length, DataSink &sink) {
                         size_t size_to_read = std::min(static_cast<size_t>(length), (size_t)1048576);
-                        char buff[size_to_read];
+                        char *buff = (char*)malloc(size_to_read);
                         size_t read_len;
                         FS::Seek(in, offset);
                         read_len = FS::Read(in, buff, size_to_read);
                         sink.write(buff, read_len);
+                        free(buff);
                         return read_len == size_to_read;
                     },
                     [in, zip_file](bool success) {
@@ -944,11 +964,12 @@ namespace HttpServer
                 size, "application/octet-stream",
                 [in](size_t offset, size_t length, DataSink &sink) {
                     size_t size_to_read = std::min(static_cast<size_t>(length), (size_t)1048576);
-                    char buff[size_to_read];
+                    char *buff = (char*)malloc(size_to_read);
                     size_t read_len;
                     FS::Seek(in, offset);
                     read_len = FS::Read(in, buff, size_to_read);
                     sink.write(buff, read_len);
+                    free(buff);
                     return read_len == size_to_read;
                 },
                 [in](bool success) {
@@ -1097,11 +1118,13 @@ namespace HttpServer
 
         svr->Post("/__local__/install_url", [&](const Request &req, Response &res)
         {
+            #ifndef NO_GUI
             if (activity_inprogess)
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
             }
+            #endif
 
             std::string url;
             const char *url_param;
@@ -1153,22 +1176,25 @@ namespace HttpServer
             }
 
             std::string hash = Util::UrlHash(filehost->GetUrl());
+            #ifndef NO_GUI
             snprintf(activity_message, 1023, "%s %s", lang_strings[STR_INSTALLING], filehost->GetUrl().c_str());
             activity_inprogess = true;
             file_transfering = true;
             bytes_to_download = 100;
             bytes_transfered = 0;
             prev_tick = Util::GetTick();
-
             Windows::SetModalMode(true);
+            #endif
 
             std::string download_url = filehost->GetDownloadUrl();
             if (download_url.empty())
             {
                 failed(res, 200, lang_strings[STR_CANT_EXTRACT_URL_MSG]);
+                #ifndef NO_GUI
                 activity_inprogess = false;
                 file_transfering = false;
                 Windows::SetModalMode(false);
+                #endif
                 return;
             }
             delete(filehost);
@@ -1185,16 +1211,20 @@ namespace HttpServer
             if (!baseclient->FileExists(path))
             {
                 failed(res, 200, baseclient->LastResponse());
+                #ifndef NO_GUI
                 activity_inprogess = false;
                 file_transfering = false;
                 Windows::SetModalMode(false);
+                #endif
                 return;
             }
             baseclient->Head(path, &header, sizeof(pkg_header));
 
             if (BE32(header.pkg_magic) == 0x7F434E54)
             {
+                #ifndef NO_GUI
                 bytes_to_download = header.pkg_content_size;
+                #endif
                 FileHost::AddCacheDownloadUrl(hash, download_url);
                 std::string title = INSTALLER::GetRemotePkgTitle(baseclient, path, &header);
 
@@ -1205,9 +1235,11 @@ namespace HttpServer
                     if (rc == 0)
                     {
                         failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
+                        #ifndef NO_GUI
                         activity_inprogess = false;
                         file_transfering = false;
                         Windows::SetModalMode(false);
+                        #endif
                         return;
                     }
                 }
@@ -1233,9 +1265,11 @@ namespace HttpServer
                     if (ret == 0)
                     {
                         failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
+                        #ifndef NO_GUI
                         activity_inprogess = false;
                         file_transfering = false;
                         Windows::SetModalMode(false);
+                        #endif
                         return;
                     }
                 }
@@ -1271,19 +1305,23 @@ namespace HttpServer
                     if (ret == 0)
                     {
                         failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
+                        #ifndef NO_GUI
                         activity_inprogess = false;
                         file_transfering = false;
                         free(install_data);
                         Windows::SetModalMode(false);
+                        #endif
                         return;
                     }
                 }
                 else
                 {
                     failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
+                    #ifndef NO_GUI
                     activity_inprogess = false;
                     file_transfering = false;
                     Windows::SetModalMode(false);
+                    #endif
                     return;
                 }
             }

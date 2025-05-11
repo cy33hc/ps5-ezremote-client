@@ -6,7 +6,9 @@
 #include "clients/rclone.h"
 #include "lang.h"
 #include "util.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 
 std::vector<DirEntry> RCloneClient::ListDir(const std::string &path)
 {

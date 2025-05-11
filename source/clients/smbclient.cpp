@@ -13,7 +13,9 @@
 #include "fs.h"
 #include "lang.h"
 #include "clients/smbclient.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 #include "util.h"
 
 SmbClient::SmbClient()
@@ -141,15 +143,19 @@ int SmbClient::_Rmdir(const std::string &ppath)
  */
 int SmbClient::Rmdir(const std::string &path, bool recursive)
 {
+	#ifndef NO_GUI
 	if (stop_activity)
 		return 1;
+	#endif
 
 	std::vector<DirEntry> list = ListDir(path);
 	int ret;
 	for (int i = 0; i < list.size(); i++)
 	{
+		#ifndef NO_GUI
 		if (stop_activity)
 			return 1;
+		#endif
 
 		if (list[i].isDir && recursive)
 		{
@@ -158,17 +164,23 @@ int SmbClient::Rmdir(const std::string &path, bool recursive)
 			ret = Rmdir(list[i].path, recursive);
 			if (ret == 0)
 			{
+				#ifndef NO_GUI
 				sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_DIR_MSG], list[i].path);
+				#endif
 				return 0;
 			}
 		}
 		else
 		{
+			#ifndef NO_GUI
 			sprintf(activity_message, "%s %s\n", lang_strings[STR_DELETING], list[i].path);
+			#endif
 			ret = Delete(list[i].path);
 			if (ret == 0)
 			{
+				#ifndef NO_GUI
 				sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_FILE_MSG], list[i].path);
+				#endif
 				return 0;
 			}
 		}
@@ -176,7 +188,9 @@ int SmbClient::Rmdir(const std::string &path, bool recursive)
 	ret = _Rmdir(path);
 	if (ret == 0)
 	{
+		#ifndef NO_GUI
 		sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_DIR_MSG], path.c_str());
+		#endif
 		return 0;
 	}
 
@@ -193,11 +207,15 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 {
 	std::string path = std::string(ppath);
 	path = Util::Trim(path, "/");
-	if (!Size(path.c_str(), &bytes_to_download))
+	uint64_t file_size;
+	if (!Size(path.c_str(), &file_size))
 	{
 		sprintf(response, "%s", smb2_get_error(smb2));
 		return 0;
 	}
+	#ifndef NO_GUI
+	bytes_to_download = file_size;
+	#endif
 
 	struct smb2fh* in = smb2_open(smb2, path.c_str(), O_RDONLY);
 	if (in == NULL)
@@ -215,8 +233,10 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 
 	uint8_t *buff = (uint8_t*)malloc(max_read_size);
 	int count = 0;
+	#ifndef NO_GUI
 	bytes_transfered = 0;
 	prev_tick = Util::GetTick();
+	#endif
 	while ((count = smb2_read(smb2, in, buff, max_read_size)) > 0)
 	{
 		if (count < 0)
@@ -228,7 +248,9 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 			return 0;
 		}
 		FS::Write(out, buff, count);
+		#ifndef NO_GUI
 		bytes_transfered += count;
+		#endif
 	}
 	FS::Close(out);
 	smb2_close(smb2, in);
@@ -413,12 +435,15 @@ int SmbClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 	std::string path = std::string(ppath);
 	path = Util::Trim(path, "/");
 
-	bytes_to_download = FS::GetSize(inputfile);
-	if (bytes_to_download < 0)
+	uint64_t file_size = FS::GetSize(inputfile);
+	if (file_size < 0)
 	{
 		sprintf(response, "%s", lang_strings[STR_FAILED]);
 		return 0;
 	}
+	#ifndef NO_GUI
+	bytes_to_download = file_size;
+	#endif
 
 	FILE* in = FS::OpenRead(inputfile);
 	if (in == NULL)
@@ -436,8 +461,10 @@ int SmbClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 
 	uint8_t* buff = (uint8_t*)malloc(max_write_size);
 	int count = 0;
+	#ifndef NO_GUI
 	bytes_transfered = 0;
 	prev_tick = Util::GetTick();
+	#endif
 	while ((count = FS::Read(in, buff, max_write_size)) > 0)
 	{
 		if (count < 0)
@@ -449,7 +476,9 @@ int SmbClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 			return 0;
 		}
 		smb2_write(smb2, out, buff, count);
+		#ifndef NO_GUI
 		bytes_transfered += count;
+		#endif
 	}
 	FS::Close(in);
 	smb2_close(smb2, out);
@@ -516,7 +545,9 @@ std::vector<DirEntry> SmbClient::ListDir(const std::string &path)
 	dir = smb2_opendir(smb2, Util::Ltrim(ppath, "/").c_str());
 	if (dir == NULL)
 	{
+		#ifndef NO_GUI
 		sprintf(status_message, "%s - %s", lang_strings[STR_FAIL_READ_LOCAL_DIR_MSG], smb2_get_error(smb2));
+		#endif
 		return out;
 	}
 
@@ -585,10 +616,14 @@ int SmbClient::Head(const std::string &ppath, void *buffer, uint64_t len)
 {
 	std::string path = std::string(ppath);
 	path = Util::Trim(path, "/");
-	if (!Size(path.c_str(), &bytes_to_download))
+	uint64_t file_size;
+	if (!Size(path.c_str(), &file_size))
 	{
 		return 0;
 	}
+	#ifndef NO_GUI
+	bytes_to_download = file_size;
+	#endif
 
 	struct smb2fh* in = smb2_open(smb2, path.c_str(), O_RDONLY);
 	if (in == NULL)

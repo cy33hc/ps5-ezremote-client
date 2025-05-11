@@ -23,7 +23,9 @@
 #include "common.h"
 #include "fs.h"
 #include "config.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 #include "util.h"
 #include "lang.h"
 #include "actions.h"
@@ -34,6 +36,7 @@
 
 namespace Actions
 {
+#ifndef NO_GUI
     static int FtpCallback(int64_t xfered, void *arg)
     {
         bytes_transfered = xfered;
@@ -816,53 +819,6 @@ namespace Actions
         }
     }
 
-    void *ExtractArchivePkg(void *argp)
-    {
-        ssize_t len;
-        char *buffer = (char*) malloc(ARCHIVE_TRANSFER_SIZE);
-
-        ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) argp;
-        SplitFile *sp = install_data->split_file;
-
-        /* loop over file contents and write to fd */
-        sp->Open();
-        while (!install_data->stop_write_thread)
-        {
-            len = archive_read_data(install_data->archive_entry->archive, buffer, ARCHIVE_TRANSFER_SIZE);
-
-            if (len == 0)
-                break;
-
-            if (len < 0)
-            {
-                sprintf(status_message, "error archive_read_data('%s')", install_data->archive_entry->filename.c_str());
-                break;
-            }
-
-            if (sp->Write(buffer, len) != len)
-            {
-                sprintf(status_message, "error write('%s')", install_data->archive_entry->filename.c_str());
-                break;;
-            }
-        }
-
-        sp->Close();
-        free(buffer);
-        return NULL;
-    }
-
-    void *DownloadSplitPkg(void *argp)
-    {
-        SplitPkgInstallData *install_data = (SplitPkgInstallData*) argp;
-        SplitFile *sp = install_data->split_file;
-
-        /* loop over file contents and write to fd */
-        sp->Open();
-        install_data->remote_client->Get(sp, install_data->path);
-        sp->Close();
-        return NULL;
-    }
-
     void *InstallLocalPkgsThread(void *argp)
     {
         int failed = 0;
@@ -1106,183 +1062,6 @@ namespace Actions
             file_transfering = false;
             activity_inprogess = false;
             multi_selected_local_files.clear();
-            Windows::SetModalMode(false);
-        }
-    }
-
-    void *InstallLocalUrlPkgThread(void *argp)
-    {
-        bytes_transfered = 0;
-        prev_tick = Util::GetTick();
-        sprintf(status_message, "%s", "");
-        pkg_header header;
-        char filename[2000];
-        sprintf(filename, "%s/%lu.pkg", temp_folder, prev_tick);
-
-        std::string full_url = std::string(install_pkg_url.url);
-        FileHost *filehost = FileHost::getFileHost(full_url, install_pkg_url.enable_alldebrid, install_pkg_url.enable_realdebrid);
-        if (!filehost->IsValidUrl())
-        {
-            sprintf(status_message, "%s", lang_strings[STR_FAIL_TO_OBTAIN_GG_DL_MSG]);
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
-            return NULL;
-        }
-        full_url = filehost->GetDownloadUrl();
-        delete(filehost);
-
-        if (full_url.empty())
-        {
-            sprintf(status_message, "%s", lang_strings[STR_FAIL_TO_OBTAIN_GG_DL_MSG]);
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
-            return NULL;
-        }
-        size_t scheme_pos = full_url.find_first_of("://");
-        size_t path_pos = full_url.find_first_of("/", scheme_pos + 3);
-        std::string host = full_url.substr(0, path_pos);
-        std::string path = full_url.substr(path_pos);
-
-        BaseClient tmp_client;
-        tmp_client.Connect(host.c_str(), install_pkg_url.username, install_pkg_url.password);
-
-        sprintf(activity_message, "%s URL to %s", lang_strings[STR_DOWNLOADING], filename);
-        int s = sizeof(pkg_header);
-        memset(&header, 0, s);
-
-        int ret = tmp_client.Size(path, &bytes_to_download);
-        if (ret == 0)
-        {
-            sprintf(status_message, "%s", tmp_client.LastResponse());
-            tmp_client.Quit();
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
-            return NULL;
-        }
-
-        file_transfering = 1;
-        int is_performed = tmp_client.Get(filename, path);
-
-        if (is_performed == 0)
-        {
-            sprintf(status_message, "%s - %s", lang_strings[STR_FAILED], tmp_client.LastResponse());
-            tmp_client.Quit();
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
-            return NULL;
-        }
-        tmp_client.Quit();
-
-        FILE *in = FS::OpenRead(filename);
-        if (in == NULL)
-        {
-            sprintf(status_message, "%s - Error opening temp pkg file - %s", lang_strings[STR_FAILED], filename);
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
-            return NULL;
-        }
-
-        FS::Read(in, (void *)&header, s);
-        FS::Close(in);
-        if (BE32(header.pkg_magic) == PS4_PKG_MAGIC)
-        {
-            int ret;
-            if ((ret = INSTALLER::InstallLocalPkg(filename, &header, true)) != 1)
-            {
-                if (ret == -1)
-                {
-                    sprintf(activity_message, "%s", lang_strings[STR_INSTALL_FROM_DATA_MSG]);
-                    usleep(3000000);
-                }
-                else if (ret == -2)
-                {
-                    sprintf(activity_message, "%s", lang_strings[STR_ALREADY_INSTALLED_MSG]);
-                    usleep(3000000);
-                }
-                else if (ret == -3)
-                {
-                    sprintf(activity_message, "%s", lang_strings[STR_FAIL_INSTALL_TMP_PKG_MSG]);
-                    usleep(5000000);
-                }
-                if (ret != -3 && auto_delete_tmp_pkg)
-                    FS::Rm(filename);
-            }
-        }
-
-        activity_inprogess = false;
-        Windows::SetModalMode(false);
-        return NULL;
-    }
-
-    void *InstallRpiUrlPkgThread(void *argp)
-    {
-        json_object *params = json_object_new_object();
-        json_object_object_add(params, "url", json_object_new_string(install_pkg_url.url));
-        json_object_object_add(params, "use_alldebrid", json_object_new_boolean(install_pkg_url.enable_alldebrid));
-        json_object_object_add(params, "use_realdebrid", json_object_new_boolean(install_pkg_url.enable_realdebrid));
-        json_object_object_add(params, "use_disk_cache", json_object_new_boolean(install_pkg_url.enable_disk_cache));
-
-        const char *params_str = json_object_to_json_string(params);
-
-        char host[128];
-        sprintf(host, "http://127.0.0.1:%d", http_server_port);
-
-        CHTTPClient::HttpResponse res;
-        CHTTPClient::HeadersMap headers;
-        CHTTPClient tmp_client([](const std::string& log){});
-        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
-        tmp_client.SetCertificateFile(CACERT_FILE);
-        headers["Content-Type"] = "application/json";
-
-        if (tmp_client.Post("/__local__/install_url", headers, params_str, res))
-        {
-            if (HTTP_SUCCESS(res.iCode))
-            {
-                json_object *jobj = json_tokener_parse(res.strBody.data());
-                if (jobj != nullptr)
-                {
-                    json_object *result = json_object_object_get(jobj, "result");
-                    if (result != nullptr)
-                    {
-                        bool success = json_object_get_boolean(json_object_object_get(result, "success"));
-                        if (!success)
-                        {
-                            const char* error_message = json_object_get_string(json_object_object_get(result, "error"));
-                            sprintf(status_message, "%s", error_message);
-                            activity_inprogess = false;
-                            Windows::SetModalMode(false);
-                        }
-                    }
-                }
-                else
-                {
-                    activity_inprogess = false;
-                    Windows::SetModalMode(false);
-                }
-            }
-            else
-            {
-                activity_inprogess = false;
-                Windows::SetModalMode(false);
-            }
-        }
-
-        return NULL;
-    }
-
-    void InstallUrlPkg()
-    {
-        int res;
-        sprintf(status_message, "%s", "");
-
-        if (!install_pkg_url.enable_rpi)
-            res = pthread_create(&bk_activity_thid, NULL, InstallLocalUrlPkgThread, NULL);
-        else
-            res = pthread_create(&bk_activity_thid, NULL, InstallRpiUrlPkgThread, NULL);
-
-        if (res != 0)
-        {
-            activity_inprogess = false;
             Windows::SetModalMode(false);
         }
     }
@@ -1830,8 +1609,8 @@ namespace Actions
         uint64_t tick = Util::GetTick();
         sprintf(local_file, "%s/%lu.pkg", temp_folder, tick);
 
-        sprintf(activity_message, "%s %s to %s", lang_strings[STR_DOWNLOADING], filename.c_str(), local_file);
         remoteclient->Size(filename, &bytes_to_download);
+        sprintf(activity_message, "%s %s to %s", lang_strings[STR_DOWNLOADING], filename.c_str(), local_file);
         bytes_transfered = 0;
         prev_tick = Util::GetTick();
 
@@ -1883,5 +1662,262 @@ namespace Actions
         RefreshRemoteFiles(false);
         sprintf(remote_file_to_select, "%s", temp_file.c_str());
     }
+#endif
+    void *ExtractArchivePkg(void *argp)
+    {
+        ssize_t len;
+        char *buffer = (char*) malloc(ARCHIVE_TRANSFER_SIZE);
 
+        ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) argp;
+        SplitFile *sp = install_data->split_file;
+
+        /* loop over file contents and write to fd */
+        sp->Open();
+        while (!install_data->stop_write_thread)
+        {
+            len = archive_read_data(install_data->archive_entry->archive, buffer, ARCHIVE_TRANSFER_SIZE);
+
+            if (len == 0)
+                break;
+
+            if (len < 0)
+            {
+                #ifndef NO_GUI
+                sprintf(status_message, "error archive_read_data('%s')", install_data->archive_entry->filename.c_str());
+                #endif
+                break;
+            }
+
+            if (sp->Write(buffer, len) != len)
+            {
+                #ifndef NO_GUI
+                sprintf(status_message, "error write('%s')", install_data->archive_entry->filename.c_str());
+                #endif
+                break;;
+            }
+        }
+
+        sp->Close();
+        free(buffer);
+        return NULL;
+    }
+
+    void *InstallLocalUrlPkgThread(void *argp)
+    {
+        #ifndef NO_GUI
+        bytes_transfered = 0;
+        prev_tick = Util::GetTick();
+        sprintf(status_message, "%s", "");
+        #else
+        uint64_t prev_tick = Util::GetTick();
+        #endif
+        pkg_header header;
+        char filename[2000];
+        sprintf(filename, "%s/%lu.pkg", temp_folder, prev_tick);
+
+        std::string full_url = std::string(install_pkg_url.url);
+        FileHost *filehost = FileHost::getFileHost(full_url, install_pkg_url.enable_alldebrid, install_pkg_url.enable_realdebrid);
+        if (!filehost->IsValidUrl())
+        {
+            #ifndef NO_GUI
+            sprintf(status_message, "%s", lang_strings[STR_FAIL_TO_OBTAIN_GG_DL_MSG]);
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            #endif
+            return NULL;
+        }
+        full_url = filehost->GetDownloadUrl();
+        delete(filehost);
+
+        if (full_url.empty())
+        {
+            #ifndef NO_GUI
+            sprintf(status_message, "%s", lang_strings[STR_FAIL_TO_OBTAIN_GG_DL_MSG]);
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            #endif
+            return NULL;
+        }
+        size_t scheme_pos = full_url.find_first_of("://");
+        size_t path_pos = full_url.find_first_of("/", scheme_pos + 3);
+        std::string host = full_url.substr(0, path_pos);
+        std::string path = full_url.substr(path_pos);
+
+        BaseClient tmp_client;
+        tmp_client.Connect(host.c_str(), install_pkg_url.username, install_pkg_url.password);
+
+        #ifndef NO_GUI
+        sprintf(activity_message, "%s URL to %s", lang_strings[STR_DOWNLOADING], filename);
+        #endif
+        int s = sizeof(pkg_header);
+        memset(&header, 0, s);
+
+        #ifndef NO_GUI
+        int ret = tmp_client.Size(path, &bytes_to_download);
+        if (ret == 0)
+        {
+            sprintf(status_message, "%s", tmp_client.LastResponse());
+            tmp_client.Quit();
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            return NULL;
+        }
+        file_transfering = 1;
+        #endif
+
+        int is_performed = tmp_client.Get(filename, path);
+
+        if (is_performed == 0)
+        {
+            #ifndef NO_GUI
+            sprintf(status_message, "%s - %s", lang_strings[STR_FAILED], tmp_client.LastResponse());
+            tmp_client.Quit();
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            #endif
+            return NULL;
+        }
+        tmp_client.Quit();
+
+        FILE *in = FS::OpenRead(filename);
+        if (in == NULL)
+        {
+            #ifndef NO_GUI
+            sprintf(status_message, "%s - Error opening temp pkg file - %s", lang_strings[STR_FAILED], filename);
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            #endif
+            return NULL;
+        }
+
+        FS::Read(in, (void *)&header, s);
+        FS::Close(in);
+        if (BE32(header.pkg_magic) == PS4_PKG_MAGIC)
+        {
+            int ret;
+            if ((ret = INSTALLER::InstallLocalPkg(filename, &header, true)) != 1)
+            {
+                #ifndef NO_GUI
+                if (ret == -1)
+                {
+                    sprintf(activity_message, "%s", lang_strings[STR_INSTALL_FROM_DATA_MSG]);
+                    usleep(3000000);
+                }
+                else if (ret == -2)
+                {
+                    sprintf(activity_message, "%s", lang_strings[STR_ALREADY_INSTALLED_MSG]);
+                    usleep(3000000);
+                }
+                else if (ret == -3)
+                {
+                    sprintf(activity_message, "%s", lang_strings[STR_FAIL_INSTALL_TMP_PKG_MSG]);
+                    usleep(5000000);
+                }
+                #endif
+                if (ret != -3 && auto_delete_tmp_pkg)
+                    FS::Rm(filename);
+            }
+        }
+
+        #ifndef NO_GUI
+        activity_inprogess = false;
+        Windows::SetModalMode(false);
+        #endif
+        return NULL;
+    }
+
+    void *InstallRpiUrlPkgThread(void *argp)
+    {
+        json_object *params = json_object_new_object();
+        json_object_object_add(params, "url", json_object_new_string(install_pkg_url.url));
+        json_object_object_add(params, "use_alldebrid", json_object_new_boolean(install_pkg_url.enable_alldebrid));
+        json_object_object_add(params, "use_realdebrid", json_object_new_boolean(install_pkg_url.enable_realdebrid));
+        json_object_object_add(params, "use_disk_cache", json_object_new_boolean(install_pkg_url.enable_disk_cache));
+
+        const char *params_str = json_object_to_json_string(params);
+
+        char host[128];
+        sprintf(host, "http://127.0.0.1:%d", http_server_port);
+
+        CHTTPClient::HttpResponse res;
+        CHTTPClient::HeadersMap headers;
+        CHTTPClient tmp_client([](const std::string& log){});
+        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+        tmp_client.SetCertificateFile(CACERT_FILE);
+        headers["Content-Type"] = "application/json";
+
+        if (tmp_client.Post("/__local__/install_url", headers, params_str, res))
+        {
+            if (HTTP_SUCCESS(res.iCode))
+            {
+                json_object *jobj = json_tokener_parse(res.strBody.data());
+                if (jobj != nullptr)
+                {
+                    json_object *result = json_object_object_get(jobj, "result");
+                    if (result != nullptr)
+                    {
+                        bool success = json_object_get_boolean(json_object_object_get(result, "success"));
+                        #ifndef NO_GUI
+                        if (!success)
+                        {
+                            const char* error_message = json_object_get_string(json_object_object_get(result, "error"));
+                            sprintf(status_message, "%s", error_message);
+                            activity_inprogess = false;
+                            Windows::SetModalMode(false);
+                        }
+                        #endif
+                    }
+                }
+                #ifndef NO_GUI
+                else
+                {
+                    activity_inprogess = false;
+                    Windows::SetModalMode(false);
+                }
+                #endif
+            }
+            #ifndef NO_GUI
+            else
+            {
+                activity_inprogess = false;
+                Windows::SetModalMode(false);
+            }
+            #endif
+        }
+
+        return NULL;
+    }
+
+    void InstallUrlPkg()
+    {
+        int res;
+        #ifndef NO_GUI
+        sprintf(status_message, "%s", "");
+        #endif
+
+        if (!install_pkg_url.enable_rpi)
+            res = pthread_create(&bk_activity_thid, NULL, InstallLocalUrlPkgThread, NULL);
+        else
+            res = pthread_create(&bk_activity_thid, NULL, InstallRpiUrlPkgThread, NULL);
+
+        #ifndef NO_GUI
+        if (res != 0)
+        {
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+        }
+        #endif
+    }
+
+    void *DownloadSplitPkg(void *argp)
+    {
+        SplitPkgInstallData *install_data = (SplitPkgInstallData*) argp;
+        SplitFile *sp = install_data->split_file;
+
+        /* loop over file contents and write to fd */
+        sp->Open();
+        install_data->remote_client->Get(sp, install_data->path);
+        sp->Close();
+        return NULL;
+    }
 }

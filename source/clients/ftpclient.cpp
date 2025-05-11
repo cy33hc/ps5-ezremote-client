@@ -15,7 +15,9 @@
 #include "lang.h"
 #include "clients/ftpclient.h"
 #include "util.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 
 #define FTP_CLIENT_BUFSIZ 1048576
 #define ACCEPT_TIMEOUT 30
@@ -24,8 +26,6 @@
 #define FTP_CLIENT_CONTROL 0
 #define FTP_CLIENT_READ 1
 #define FTP_CLIENT_WRITE 2
-
-#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
 FtpClient::FtpClient()
 {
@@ -1223,15 +1223,19 @@ int FtpClient::Rmdir(const std::string &path)
  */
 int FtpClient::Rmdir(const std::string &path, bool recursive)
 {
+	#ifndef NO_GUI
 	if (stop_activity)
 		return 1;
+	#endif
 
 	std::vector<DirEntry> list = ListDir(path);
 	int ret;
 	for (int i = 0; i < list.size(); i++)
 	{
+		#ifndef NO_GUI
 		if (stop_activity)
 			return 1;
+		#endif
 
 		if (list[i].isDir && recursive)
 		{
@@ -1240,17 +1244,23 @@ int FtpClient::Rmdir(const std::string &path, bool recursive)
 			ret = Rmdir(list[i].path, recursive);
 			if (ret == 0)
 			{
+				#ifndef NO_GUI
 				sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_DIR_MSG], list[i].path);
+				#endif
 				return 0;
 			}
 		}
 		else
 		{
+			#ifndef NO_GUI
 			sprintf(activity_message, "%s %s\n", lang_strings[STR_DELETING], list[i].path);
+			#endif
 			ret = Delete(list[i].path);
 			if (ret == 0)
 			{
+				#ifndef NO_GUI
 				sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_FILE_MSG], list[i].path);
+				#endif
 				return 0;
 			}
 		}

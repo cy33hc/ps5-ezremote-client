@@ -10,7 +10,9 @@
 #include "fs.h"
 #include "lang.h"
 #include "util.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 
 #define FTP_CLIENT_BUFSIZ 1048576
 
@@ -201,15 +203,19 @@ int SFTPClient::Mkdir(const std::string &path)
 
 int SFTPClient::Rmdir(const std::string &path, bool recursive)
 {
+    #ifndef NO_GUI
     if (stop_activity)
         return 1;
+    #endif
 
     std::vector<DirEntry> list = ListDir(path);
     int ret;
     for (int i = 0; i < list.size(); i++)
     {
+        #ifndef NO_GUI
         if (stop_activity)
             return 1;
+        #endif
 
         if (list[i].isDir && recursive)
         {
@@ -218,17 +224,23 @@ int SFTPClient::Rmdir(const std::string &path, bool recursive)
             ret = Rmdir(list[i].path, recursive);
             if (ret == 0)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_DIR_MSG], list[i].path);
+                #endif
                 return 0;
             }
         }
         else
         {
+            #ifndef NO_GUI
             sprintf(activity_message, "%s %s\n", lang_strings[STR_DELETING], list[i].path);
+            #endif
             ret = Delete(list[i].path);
             if (ret == 0)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_FILE_MSG], list[i].path);
+                #endif
                 return 0;
             }
         }
@@ -262,10 +274,14 @@ int SFTPClient::Size(const std::string &path, uint64_t *size)
 
 int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
 {
-    if (!Size(path, &bytes_to_download))
+    uint64_t file_size;
+    if (!Size(path, &file_size))
     {
         return 0;
     }
+    #ifndef NO_GUI
+    bytes_to_download = file_size;
+    #endif
 
     LIBSSH2_SFTP_HANDLE *sftp_handle = libssh2_sftp_open(sftp_session, path.c_str(), LIBSSH2_FXF_READ, 0);
     if (!sftp_handle)
@@ -283,15 +299,18 @@ int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint
 
     char *buff = (char *)malloc(FTP_CLIENT_BUFSIZ);
     int rc, count = 0;
+    #ifndef NO_GUI
     bytes_transfered = 0;
     prev_tick = Util::GetTick();
-
+    #endif
     do
     {
         rc = libssh2_sftp_read(sftp_handle, buff, FTP_CLIENT_BUFSIZ);
         if (rc > 0)
         {
+            #ifndef NO_GUI
             bytes_transfered += rc;
+            #endif
             FS::Write(out, buff, rc);
         }
         else
@@ -446,12 +465,15 @@ int SFTPClient::Put(const std::string &inputfile, const std::string &path, uint6
     char *ptr, *buff;
     int rc;
 
-    bytes_to_download = FS::GetSize(inputfile);
-    if (bytes_to_download < 0)
+    uint64_t file_size = FS::GetSize(inputfile);
+    if (file_size < 0)
     {
         sprintf(response, "%s", lang_strings[STR_FAILED]);
         return 0;
     }
+    #ifndef NO_GUI
+    bytes_to_download = file_size;
+    #endif
 
     FILE *in = FS::OpenRead(inputfile);
     if (in == NULL)
@@ -473,9 +495,10 @@ int SFTPClient::Put(const std::string &inputfile, const std::string &path, uint6
 
     buff = (char *)malloc(FTP_CLIENT_BUFSIZ);
     int nread, count = 0;
+    #ifndef NO_GUI
     bytes_transfered = 0;
     prev_tick = Util::GetTick();
-
+    #endif
     do
     {
         nread = FS::Read(in, buff, FTP_CLIENT_BUFSIZ);
@@ -495,7 +518,9 @@ int SFTPClient::Put(const std::string &inputfile, const std::string &path, uint6
                 break;
             ptr += rc;
             nread -= rc;
+            #ifndef NO_GUI
             bytes_transfered += rc;
+            #endif
         } while (nread);
     } while (rc > 0);
 
@@ -540,10 +565,14 @@ int SFTPClient::Move(const std::string &from, const std::string &to)
 
 int SFTPClient::Head(const std::string &path, void *buffer, uint64_t len)
 {
-    if (!Size(path.c_str(), &bytes_to_download))
+    uint64_t file_size;
+    if (!Size(path.c_str(), &file_size))
     {
         return 0;
     }
+    #ifndef NO_GUI
+    bytes_to_download = file_size;
+    #endif
 
     LIBSSH2_SFTP_HANDLE *sftp_handle = libssh2_sftp_open(sftp_session, path.c_str(), LIBSSH2_FXF_READ, 0);
     if (!sftp_handle)

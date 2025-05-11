@@ -51,7 +51,7 @@ namespace CONFIG
 {
     int Encrypt(const std::string &text, std::string &encrypt_text)
     {
-        unsigned char tmp_encrypt_text[text.length() * 2];
+        unsigned char tmp_encrypt_text[4096];
         int encrypt_text_len;
         memset(tmp_encrypt_text, 0, sizeof(tmp_encrypt_text));
         int ret = openssl_encrypt((unsigned char *)text.c_str(), text.length(), cipher_key, cipher_iv, tmp_encrypt_text, &encrypt_text_len);
@@ -67,7 +67,7 @@ namespace CONFIG
         if (ret == 0)
             return 0;
 
-        unsigned char tmp_decrypt_text[tmp_decode_text.length() * 2];
+        unsigned char tmp_decrypt_text[4096];
         int decrypt_text_len;
         memset(tmp_decrypt_text, 0, sizeof(tmp_decrypt_text));
         ret = openssl_decrypt((unsigned char *)tmp_decode_text.c_str(), tmp_decode_text.length(), cipher_key, cipher_iv, tmp_decrypt_text, &decrypt_text_len);

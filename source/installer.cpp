@@ -11,7 +11,9 @@
 #include "server/http_server.h"
 #include "util.h"
 #include "config.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 #include "lang.h"
 #include "fs.h"
 #include "sfo.h"
@@ -193,34 +195,13 @@ namespace INSTALLER
 		BgProgressCheck *bg_check_data = (BgProgressCheck *)argp;
 		int ret;
 
-		PlayGoInfo playgo_info;
-		SceAppInstallPkgInfo pkg_info;
-		memset(&playgo_info, 0, sizeof(playgo_info));
-		
-		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-		}	
-
-		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-		}	
-
-		MetaInfo metainfo = (MetaInfo){
-			.uri = bg_check_data->url.c_str(),
-			.ex_uri = "",
-			.playgo_scenario_id = "",
-			.content_id = "",
-			.content_name = bg_check_data->title.c_str(),
-			.icon_url = ""
-		};
-
 		ret = InstallWithDirectPackageInstaller(bg_check_data->url);
 		if (ret != 0)
 		{
 			return 0;
 		}
 
+		#ifndef NO_GUI
 		SceAppInstallStatusInstalled progress_info;
 		while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 		{
@@ -233,7 +214,7 @@ namespace INSTALLER
 			sceSystemServicePowerTick();
 			usleep(500000);
 		}
-
+		#endif
 	finish:
 		if (bg_check_data->archive_pkg_data != nullptr)
 		{
@@ -256,9 +237,11 @@ namespace INSTALLER
 			RemoveSplitPkgInstallData(bg_check_data->hash);
 			free(bg_check_data);
 		}
+		#ifndef NO_GUI
 		activity_inprogess = false;
 		file_transfering = false;
 		Windows::SetModalMode(false);
+		#endif
 		return nullptr;
 	}
 
@@ -279,34 +262,13 @@ namespace INSTALLER
 		int ret;	
 		if (prompt)
 		{
-			PlayGoInfo playgo_info;
-			SceAppInstallPkgInfo pkg_info;
-			memset(&playgo_info, 0, sizeof(playgo_info));
-			
-			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-			}	
-
-			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-			}	
-
-			MetaInfo metainfo = (MetaInfo){
-				.uri = url.c_str(),
-				.ex_uri = "",
-				.playgo_scenario_id = "",
-				.content_id = "",
-				.content_name = display_title.c_str(),
-				.icon_url = ""
-			};
-
 			ret = InstallWithDirectPackageInstaller(url);
 			if (ret != 0)
 			{
 				return 0;
 			}
 
+			#ifndef NO_GUI
 			file_transfering = true;
 			sprintf(activity_message, "%s", lang_strings[STR_WAIT_FOR_INSTALL_MSG]);
 			bytes_to_download = header->pkg_content_size;
@@ -323,6 +285,7 @@ namespace INSTALLER
 				bytes_transfered = progress_info.downloaded_size;
 				sceSystemServicePowerTick();
 			}
+			#endif
 		}
 		else
 		{
@@ -372,37 +335,6 @@ namespace INSTALLER
 		if (strncmp(path.c_str(), "/data/", 6) == 0)
 			snprintf(filepath, 1023, "/user%s", path.c_str());
 
-		PlayGoInfo playgo_info;
-		SceAppInstallPkgInfo pkg_info;
-		memset(&playgo_info, 0, sizeof(playgo_info));
-		
-		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-		}
-
-		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-		}
-
-		std::string title;
-		if (BE32(header->pkg_magic) == PS4_PKG_MAGIC)
-		{
-			title = GetLocalPkgTitle(filepath, header);
-		}
-		else
-		{
-			title = filename;
-		}
-		MetaInfo metainfo = (MetaInfo){
-			.uri = filepath,
-			.ex_uri = "",
-			.playgo_scenario_id = "",
-			.content_id = "",
-			.content_name = title.c_str(),
-			.icon_url = ""
-		};
-
 		ret = InstallWithDirectPackageInstaller(filepath);
 		if (ret != 0)
 		{
@@ -414,6 +346,7 @@ namespace INSTALLER
 			return 1;
 		} 
 
+		#ifndef NO_GUI
 		sprintf(activity_message, "%s", lang_strings[STR_WAIT_FOR_INSTALL_MSG]);
 		bytes_to_download = header->pkg_content_size;
 		bytes_transfered = 0;
@@ -430,6 +363,7 @@ namespace INSTALLER
 			bytes_transfered = progress_info.downloaded_size;
 			sceSystemServicePowerTick();
 		}
+		#endif
 
 		if (remove_after_install)
 			FS::Rm(path);
@@ -627,28 +561,6 @@ namespace INSTALLER
 
 		if (!bg)
 		{
-			PlayGoInfo playgo_info;
-			SceAppInstallPkgInfo pkg_info;
-			memset(&playgo_info, 0, sizeof(playgo_info));
-			
-			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-			}
-
-			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-			}
-
-			MetaInfo metainfo = (MetaInfo){
-				.uri = full_url.c_str(),
-				.ex_uri = "",
-				.playgo_scenario_id = "",
-				.content_id = "",
-				.content_name = display_title.c_str(),
-				.icon_url = ""
-			};
-
 			ret = InstallWithDirectPackageInstaller(full_url);
 			if (ret)
 			{
@@ -656,6 +568,7 @@ namespace INSTALLER
 				goto finish;
 			}
 
+			#ifndef NO_GUI
 			file_transfering = true;
 			bytes_to_download = header.pkg_content_size;
 			bytes_transfered = 0;
@@ -672,6 +585,7 @@ namespace INSTALLER
 				bytes_transfered = progress_info.downloaded_size;
 				sceSystemServicePowerTick();
 			}
+			#endif
 		}
 		else
 		{
@@ -729,28 +643,6 @@ namespace INSTALLER
 
 		if (!bg)
 		{
-			PlayGoInfo playgo_info;
-			SceAppInstallPkgInfo pkg_info;
-			memset(&playgo_info, 0, sizeof(playgo_info));
-			
-			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-			}
-
-			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-			}
-
-			MetaInfo metainfo = (MetaInfo){
-				.uri = full_url.c_str(),
-				.ex_uri = "",
-				.playgo_scenario_id = "",
-				.content_id = "",
-				.content_name = display_title.c_str(),
-				.icon_url = ""
-			};
-
 			ret = InstallWithDirectPackageInstaller(full_url);
 			if (ret)
 			{
@@ -758,6 +650,7 @@ namespace INSTALLER
 				goto finish;
 			}
 
+			#ifndef NO_GUI
 			file_transfering = true;
 			bytes_to_download = pkg_data->size;
 			bytes_transfered = 0;
@@ -774,6 +667,7 @@ namespace INSTALLER
 				bytes_transfered = progress_info.downloaded_size;
 				sceSystemServicePowerTick();
 			}
+			#endif
 		}
 		else
 		{
@@ -801,9 +695,11 @@ namespace INSTALLER
 		}
 		free(pkg_data);
 		RemoveSplitPkgInstallData(hash);
+		#ifndef NO_GUI
 		activity_inprogess = false;
 		file_transfering = false;
 		Windows::SetModalMode(false);
+		#endif
 		return ret;
 	}
 	

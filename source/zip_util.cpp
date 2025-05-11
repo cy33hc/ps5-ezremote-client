@@ -17,7 +17,9 @@
 #include "fs.h"
 #include "ime_dialog.h"
 #include "lang.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 #include "util.h"
 #include "zip_util.h"
 
@@ -28,7 +30,9 @@ namespace ZipUtil
 
     void callback_7zip(const char *fileName, unsigned long fileSize, unsigned fileNum, unsigned numFiles)
     {
+        #ifndef NO_GUI
         sprintf(activity_message, "%s %s: %s", lang_strings[STR_EXTRACTING], filename_extracted, fileName);
+        #endif
     }
 
     void convertToZipTime(time_t time, tm_zip *tmzip)
@@ -57,10 +61,11 @@ namespace ZipUtil
         memset(&zi, 0, sizeof(zip_fileinfo));
         convertToZipTime(file_stat.st_mtim.tv_sec, &zi.tmz_date);
 
+        #ifndef NO_GUI
         bytes_transfered = 0;
         prev_tick = Util::GetTick();
-
         bytes_to_download = file_stat.st_size;
+        #endif
 
         // Large file?
         int use_zip64 = (file_stat.st_size >= 0xFFFFFFFF);
@@ -112,7 +117,9 @@ namespace ZipUtil
             }
 
             seek += written;
+            #ifndef NO_GUI
             bytes_transfered += read;
+            #endif
         }
 
         free(buf);
@@ -170,8 +177,11 @@ namespace ZipUtil
             do
             {
                 dirent = readdir(dfd);
+                #ifndef NO_GUI
                 if (stop_activity)
                     return 1;
+                #endif
+
                 if (dirent != NULL && strcmp(dirent->d_name, ".") != 0 && strcmp(dirent->d_name, "..") != 0)
                 {
                     int new_path_length = path.length() + strlen(dirent->d_name) + 2;
@@ -186,7 +196,9 @@ namespace ZipUtil
                     }
                     else
                     {
+                        #ifndef NO_GUI
                         sprintf(activity_message, "%s %s", lang_strings[STR_COMPRESSING], new_path);
+                        #endif
                         ret = ZipAddFile(zf, new_path, filename_start, level);
                     }
 
@@ -205,7 +217,9 @@ namespace ZipUtil
         }
         else
         {
+            #ifndef NO_GUI
             sprintf(activity_message, "%s %s", lang_strings[STR_COMPRESSING], path.c_str());
+            #endif
             return ZipAddFile(zf, path, filename_start, level);
         }
 
@@ -280,8 +294,10 @@ namespace ZipUtil
     {
         ssize_t len;
         unsigned char *buffer = (unsigned char *)malloc(ARCHIVE_TRANSFER_SIZE);
+        #ifndef NO_GUI
         bytes_transfered = 0;
         prev_tick = Util::GetTick();
+        #endif
 
         /* loop over file contents and write to fd */
         for (int n = 0;; n++)
@@ -296,15 +312,21 @@ namespace ZipUtil
 
             if (len < 0)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "error archive_read_data('%s')", pathname.c_str());
+                #endif
                 free(buffer);
                 return 0;
             }
+            #ifndef NO_GUI
             bytes_transfered += len;
+            #endif
 
             if (write(fd, buffer, len) != len)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "error write('%s')", pathname.c_str());
+                #endif
                 free(buffer);
                 return 0;
             }
@@ -336,7 +358,9 @@ namespace ZipUtil
         {
             if (symlink(linkname, path.c_str()) != 0)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "error symlink('%s')", path.c_str());
+                #endif
                 return;
             }
 
@@ -344,10 +368,14 @@ namespace ZipUtil
             return;
         }
 
+        #ifndef NO_GUI
         bytes_to_download = archive_entry_size(e);
+        #endif
         if ((fd = open(path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0777)) < 0)
         {
+            #ifndef NO_GUI
             sprintf(status_message, "error open('%s')", path.c_str());
+            #endif
             return;
         }
 
@@ -396,7 +424,9 @@ namespace ZipUtil
             extract_dir(a, e, realpathname);
         else
         {
+            #ifndef NO_GUI
             snprintf(activity_message, 255, "%s: %s", lang_strings[STR_EXTRACTING], pathname);
+            #endif
             
             /* ensure that parent directory exists */
             FS::MkDirs(realpathname, true);
@@ -414,6 +444,7 @@ namespace ZipUtil
      */
     static const char *passphrase_callback(struct archive *a, void *_client_data)
     {
+#ifndef NO_GUI
         Dialog::initImeDialog(lang_strings[STR_PASSWORD], password, 127, SCE_IME_TYPE_DEFAULT, 560, 200);
         int ime_result = Dialog::updateImeDialog();
         if (ime_result == IME_DIALOG_RESULT_FINISHED || ime_result == IME_DIALOG_RESULT_CANCELED)
@@ -428,7 +459,7 @@ namespace ZipUtil
                 memset(password, 0, sizeof(password));
             }
         }
-
+#endif
         memset(password, 0, sizeof(password));
         return password;
     }
@@ -533,7 +564,12 @@ namespace ZipUtil
         uintmax_t total_size, file_count, error_count;
 
         if ((a = archive_read_new()) == NULL)
+        {
+            #ifndef NO_GUI
             sprintf(status_message, "%s", "archive_read_new failed");
+            #endif
+            return 0;
+        }
 
         archive_read_support_format_all(a);
         archive_read_support_filter_all(a);
@@ -544,7 +580,9 @@ namespace ZipUtil
             ret = archive_read_open_filename(a, file.path, ARCHIVE_TRANSFER_SIZE);
             if (ret < ARCHIVE_OK)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s", "archive_read_open_filename failed");
+                #endif
                 return 0;
             }
         }
@@ -553,21 +591,27 @@ namespace ZipUtil
             client_data = OpenRemoteArchive(file.path, client);
             if (client_data == nullptr)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s", "archive_read_open_filename failed");
+                #endif
                 return 0;
             }
 
             ret = archive_read_set_seek_callback(a, SeekRemoteArchive);
             if (ret < ARCHIVE_OK)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "archive_read_set_seek_callback failed - %s", archive_error_string(a));
+                #endif
                 return 0;
             }
 
             ret = archive_read_open2(a, client_data, NULL, ReadRemoteArchive, SkipRemoteArchive, CloseRemoteArchive);
             if (ret < ARCHIVE_OK)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s", "archive_read_open failed");
+                #endif
                 return 0;
             }
         }
@@ -575,14 +619,18 @@ namespace ZipUtil
         FS::MkDirs(basepath.c_str());
         for (;;)
         {
+            #ifndef NO_GUI
             if (stop_activity)
                 break;
-
+            #endif
+            
             ret = archive_read_next_header(a, &e);
 
             if (ret < ARCHIVE_OK)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s", "archive_read_next_header failed");
+                #endif
                 archive_read_free(a);
                 return 0;
             }
@@ -610,7 +658,9 @@ namespace ZipUtil
 
         if ((a = archive_read_new()) == NULL)
         {
+            #ifndef NO_GUI
             sprintf(status_message, "%s", "archive_read_new failed");
+            #endif
             return nullptr;
         }
 
@@ -623,7 +673,9 @@ namespace ZipUtil
             ret = archive_read_open_filename(a, zip_file.c_str(), ARCHIVE_TRANSFER_SIZE);
             if (ret < ARCHIVE_OK)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s", "archive_read_open_filename failed");
+                #endif
                 return nullptr;
             }
         }
@@ -632,21 +684,27 @@ namespace ZipUtil
             client_data = OpenRemoteArchive(zip_file, client);
             if (client_data == nullptr)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s", "archive_read_open_filename failed");
+                #endif
                 return nullptr;
             }
 
             ret = archive_read_set_seek_callback(a, SeekRemoteArchive);
             if (ret < ARCHIVE_OK)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "archive_read_set_seek_callback failed - %s", archive_error_string(a));
+                #endif
                 return 0;
             }
 
             ret = archive_read_open2(a, client_data, NULL, ReadRemoteArchive, SkipRemoteArchive, CloseRemoteArchive);
             if (ret < ARCHIVE_OK)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s", "archive_read_open_filename failed");
+                #endif
                 return nullptr;
             }
         }
@@ -657,7 +715,9 @@ namespace ZipUtil
 
             if (ret < ARCHIVE_OK)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s", "archive_read_next_header failed");
+                #endif
                 archive_read_free(a);
                 return nullptr;
             }
@@ -733,7 +793,9 @@ namespace ZipUtil
 
             if (ret < ARCHIVE_OK)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s", "archive_read_next_header failed");
+                #endif
                 archive_read_free(a);
                 return nullptr;
             }

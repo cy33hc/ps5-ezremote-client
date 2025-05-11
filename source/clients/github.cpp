@@ -9,7 +9,9 @@
 #include "config.h"
 #include "lang.h"
 #include "util.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 
 int GithubClient::Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping)
 {
@@ -131,7 +133,9 @@ int GithubClient::Head(const std::string &path, void *buffer, uint64_t size)
     headers["Range"] = range_header;
 
     std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
+    #ifndef NO_GUI
     client->SetProgressFnCallback(nullptr, NothingCallback);
+    #endif
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());
@@ -147,6 +151,7 @@ int GithubClient::Head(const std::string &path, void *buffer, uint64_t size)
 
 int GithubClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
 {
+    uint64_t file_size;
     if (!ParseReleases())
         return 0;
 
@@ -158,17 +163,22 @@ int GithubClient::Get(const std::string &outputfile, const std::string &path, ui
     }
 
     long status;
+    #ifndef NO_GUI
     bytes_transfered = 0;
     prev_tick = Util::GetTick();
+    #endif
     CHTTPClient::HeadersMap headers;
 
-    if (!Size(path, &bytes_to_download))
+    if (!Size(path, &file_size))
     {
         sprintf(this->response, "%s", lang_strings[STR_FAIL_DOWNLOAD_MSG]);
         return 0;
     }
-
+    #ifndef NO_GUI
+    bytes_to_download = file_size;
     client->SetProgressFnCallback(&bytes_transfered, DownloadProgressCallback);
+    #endif
+
     std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
     if (client->DownloadFile(outputfile, encoded_url, status))
     {
@@ -196,9 +206,11 @@ int GithubClient::Get(SplitFile *split_file, const std::string &path, uint64_t o
     long status;
     CHTTPClient::HeadersMap headers;
 
+    #ifndef NO_GUI
     prev_tick = Util::GetTick();
-    std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
     client->SetProgressFnCallback(nullptr, NothingCallback);
+    #endif
+    std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
     if (client->DownloadFile((void*)split_file, encoded_url, (void*)WriteToSplitFileCallback, status))
     {
         return 1;
@@ -232,7 +244,9 @@ int GithubClient::GetRange(const std::string &path, void *buffer, uint64_t size,
     headers["Range"] = range_header;
 
     std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
+    #ifndef NO_GUI
     client->SetProgressFnCallback(nullptr, NothingCallback);
+    #endif
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());
@@ -266,7 +280,9 @@ int GithubClient::GetRange(const std::string &path, DataSink &sink, uint64_t siz
     headers["Range"] = range_header;
 
     std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
+    #ifndef NO_GUI
     client->SetProgressFnCallback(nullptr, NothingCallback);
+    #endif
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());
@@ -289,7 +305,9 @@ bool GithubClient::ParseReleases()
     if (!releases_parsed)
     {
         std::string encoded_url = this->host_url + this->base_path + "?per_page=100&page=1";
+        #ifndef NO_GUI
         client->SetProgressFnCallback(&bytes_transfered, DownloadProgressCallback);
+        #endif
         if (client->Get(encoded_url, headers, res))
         {
             if (HTTP_SUCCESS(res.iCode))

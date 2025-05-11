@@ -8,7 +8,9 @@
 #include "clients/nginx.h"
 #include "lang.h"
 #include "util.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 
 static std::map<std::string, int> months = {
     {"Jan", 1}, {"Feb", 2}, {"Mar", 3}, {"Apr", 4}, {"May", 5}, {"Jun", 6},

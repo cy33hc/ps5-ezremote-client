@@ -13,7 +13,9 @@
 #include <sys/stat.h>
 #include "util.h"
 #include "lang.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 
 namespace FS
 {
@@ -393,8 +395,10 @@ namespace FS
 
     int RmRecursive(const std::string &path)
     {
+        #ifndef NO_GUI
         if (stop_activity)
             return 1;
+        #endif
 
         DIR *dfd = opendir(path.c_str());
         if (dfd != NULL)
@@ -416,46 +420,66 @@ namespace FS
                     int ret = RmRecursive(new_path);
                     if (ret <= 0)
                     {
+                        #ifndef NO_GUI
                         sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_DIR_MSG], new_path);
+                        #endif
                         closedir(dfd);
                         return ret;
                     }
                 }
                 else
                 {
+                    #ifndef NO_GUI
                     snprintf(activity_message, 1024, "%s %s", lang_strings[STR_DELETING], new_path);
+                    #endif
                     int ret = remove(new_path);
                     if (ret < 0)
                     {
+                        #ifndef NO_GUI
                         sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_FILE_MSG], new_path);
+                        #endif
                         closedir(dfd);
                         return ret;
                     }
                 }
+            #ifndef NO_GUI
             } while (dir != NULL && !stop_activity);
+            #else
+            } while (dir != NULL);
+            #endif
 
             closedir(dfd);
 
+            #ifndef NO_GUI
             if (stop_activity)
                 return 0;
+            #endif
 
             int ret = rmdir(path.c_str());
             if (ret < 0)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_DIR_MSG], path.c_str());
+                #endif
                 return ret;
             }
+            #ifndef NO_GUI
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_DELETED], path.c_str());
+            #endif
         }
         else
         {
             int ret = remove(path.c_str());
             if (ret < 0)
             {
+                #ifndef NO_GUI
                 sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_FILE_MSG], path.c_str());
+                #endif
                 return ret;
             }
+            #ifndef NO_GUI
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_DELETED], path.c_str());
+            #endif
         }
 
         return 1;
@@ -485,7 +509,7 @@ namespace FS
     }
 
     bool Copy(const std::string &from, const std::string &to)
-    {
+    {       
         MkDirs(to, true);
         if (from.compare(to) == 0)
             return true;
@@ -502,7 +526,11 @@ namespace FS
             return false;
         }
 
+        #ifndef NO_GUI
         bytes_to_download = file_stat.st_size;
+        #else
+        uint64_t bytes_to_download = file_stat.st_size;
+        #endif
 
         FILE *dest = fopen(to.c_str(), "wb");
         if (!dest)
@@ -512,8 +540,12 @@ namespace FS
         }
 
         size_t bytes_read = 0;
+        #ifndef NO_GUI
         bytes_transfered = 0;
         prev_tick = Util::GetTick();
+        #else
+        uint64_t bytes_transfered = 0;
+        #endif
         const size_t buf_size = 0x10000;
         unsigned char *buf = new unsigned char[buf_size];
 

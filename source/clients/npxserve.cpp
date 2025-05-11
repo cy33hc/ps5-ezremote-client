@@ -6,7 +6,9 @@
 #include "clients/npxserve.h"
 #include "lang.h"
 #include "util.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 
 std::vector<DirEntry> NpxServeClient::ListDir(const std::string &path)
 {

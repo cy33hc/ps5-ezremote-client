@@ -14,7 +14,9 @@
 #include "config.h"
 #include "fs.h"
 #include "lang.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 #include "util.h"
 
 #define BUF_SIZE 1048576
@@ -139,15 +141,19 @@ int NfsClient::_Rmdir(const std::string &ppath)
  */
 int NfsClient::Rmdir(const std::string &path, bool recursive)
 {
+	#ifndef NO_GUI
 	if (stop_activity)
 		return 1;
+	#endif
 
 	std::vector<DirEntry> list = ListDir(path);
 	int ret;
 	for (int i = 0; i < list.size(); i++)
 	{
+		#ifndef NO_GUI
 		if (stop_activity)
 			return 1;
+		#endif
 
 		if (list[i].isDir && recursive)
 		{
@@ -156,17 +162,23 @@ int NfsClient::Rmdir(const std::string &path, bool recursive)
 			ret = Rmdir(list[i].path, recursive);
 			if (ret == 0)
 			{
+				#ifndef NO_GUI
 				sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_DIR_MSG], list[i].path);
+				#endif
 				return 0;
 			}
 		}
 		else
 		{
+			#ifndef NO_GUI
 			sprintf(activity_message, "%s %s\n", lang_strings[STR_DELETING], list[i].path);
+			#endif
 			ret = Delete(list[i].path);
 			if (ret == 0)
 			{
+				#ifndef NO_GUI
 				sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_FILE_MSG], list[i].path);
+				#endif
 				return 0;
 			}
 		}
@@ -174,7 +186,9 @@ int NfsClient::Rmdir(const std::string &path, bool recursive)
 	ret = _Rmdir(path);
 	if (ret == 0)
 	{
+		#ifndef NO_GUI
 		sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_DIR_MSG], path.c_str());
+		#endif
 		return 0;
 	}
 
@@ -189,11 +203,15 @@ int NfsClient::Rmdir(const std::string &path, bool recursive)
 
 int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint64_t offset)
 {
-	if (!Size(ppath.c_str(), &bytes_to_download))
+	uint64_t file_size;
+	if (!Size(ppath.c_str(), &file_size))
 	{
 		sprintf(response, "%s", nfs_get_error(nfs));
 		return 0;
 	}
+	#ifndef NO_GUI
+	bytes_to_download = file_size;
+	#endif
 
 	struct nfsfh *nfsfh = nullptr;
 	int ret = nfs_open(nfs, ppath.c_str(), 0400, &nfsfh);
@@ -212,8 +230,10 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 
 	void *buff = malloc(BUF_SIZE);
 	int count = 0;
+	#ifndef NO_GUI
 	bytes_transfered = 0;
 	prev_tick = Util::GetTick();
+	#endif
 	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) > 0)
 	{
 		if (count < 0)
@@ -225,7 +245,9 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 			return 0;
 		}
 		FS::Write(out, buff, count);
+		#ifndef NO_GUI
 		bytes_transfered += count;
+		#endif
 	}
 	FS::Close(out);
 	nfs_close(nfs, nfsfh);
@@ -404,13 +426,15 @@ bool NfsClient::FileExists(const std::string &ppath)
  */
 int NfsClient::Put(const std::string &inputfile, const std::string &ppath, uint64_t offset)
 {
-	bytes_to_download = FS::GetSize(inputfile);
-	if (bytes_to_download < 0)
+	uint64_t file_size = FS::GetSize(inputfile);
+	if (file_size < 0)
 	{
 		sprintf(response, "%s", lang_strings[STR_FAILED]);
 		return 0;
 	}
-
+	#ifndef NO_GUI
+	bytes_to_download = file_size;
+	#endif
 	FILE* in = FS::OpenRead(inputfile);
 	if (in == NULL)
 	{
@@ -435,8 +459,10 @@ int NfsClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 
 	void* buff = malloc(BUF_SIZE);
 	uint64_t count = 0;
+	#ifndef NO_GUI
 	bytes_transfered = 0;
 	prev_tick = Util::GetTick();
+	#endif
 	while ((count = FS::Read(in, buff, BUF_SIZE)) > 0)
 	{
 		if (count < 0)
@@ -457,7 +483,9 @@ int NfsClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 			free(buff);
 			return 0;
 		}
+		#ifndef NO_GUI
 		bytes_transfered += count;
+		#endif
 	}
 	FS::Close(in);
 	nfs_close(nfs, nfsfh);

@@ -6,7 +6,9 @@
 #include "clients/iis.h"
 #include "lang.h"
 #include "util.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 
 std::vector<DirEntry> IISClient::ListDir(const std::string &path)
 {

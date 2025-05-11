@@ -7,7 +7,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -fpermissive")
 
 add_definitions(-DCPPHTTPLIB_THREAD_POOL_COUNT=16)
 
-add_subdirectory(ps5-ezremote-dpi)
+add_subdirectory(ezremote-dpi)
 
 include_directories(
   source

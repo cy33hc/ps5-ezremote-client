@@ -7,7 +7,9 @@
 #include "lang.h"
 #include "split_file.h"
 #include "util.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 #include "common.h"
 
 using httplib::DataSink;
@@ -20,6 +22,7 @@ BaseClient::~BaseClient()
         delete client;
 };
 
+#ifndef NO_GUI
 int BaseClient::NothingCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     return 0;
@@ -40,6 +43,7 @@ int BaseClient::UploadProgressCallback(void* ptr, double dTotalToDownload, doubl
     *bytes_transfered = dNowUploaded;
     return 0;
 }
+#endif
 
 size_t BaseClient::WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data)
 {
@@ -105,7 +109,11 @@ int BaseClient::Size(const std::string &path, uint64_t *size)
     CHTTPClient::HttpResponse res;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+
+#ifndef NO_GUI
     client->SetProgressFnCallback(nullptr, NothingCallback);
+#endif
+
     if (client->Head(encoded_url, headers, res))
     {
         if (HTTP_SUCCESS(res.iCode))
@@ -147,17 +155,22 @@ int BaseClient::Size(const std::string &path, uint64_t *size)
 int BaseClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
 {
     long status;
-    bytes_transfered = 0;
-    prev_tick = Util::GetTick();
+    u_int64_t file_size;
     CHTTPClient::HeadersMap headers;
 
-    if (!Size(path, &bytes_to_download))
+    if (!Size(path, &file_size))
     {
         sprintf(this->response, "%s", lang_strings[STR_FAIL_DOWNLOAD_MSG]);
         return 0;
     }
 
+#ifndef NO_GUI
+    prev_tick = Util::GetTick();
+    bytes_transfered = 0;
+    bytes_to_download = file_size;
     client->SetProgressFnCallback(&bytes_transfered, DownloadProgressCallback);
+#endif
+
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
     if (client->DownloadFile(outputfile, encoded_url, status))
     {
@@ -175,9 +188,13 @@ int BaseClient::Get(SplitFile *split_file, const std::string &path, uint64_t off
     long status;
     CHTTPClient::HeadersMap headers;
 
-    prev_tick = Util::GetTick();
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+    
+#ifndef NO_GUI
+    prev_tick = Util::GetTick();
     client->SetProgressFnCallback(nullptr, NothingCallback);
+#endif
+
     if (client->DownloadFile((void*)split_file, encoded_url, (void*)WriteToSplitFileCallback, status))
     {
         return 1;
@@ -199,7 +216,11 @@ int BaseClient::GetRange(const std::string &path, DataSink &sink, uint64_t size,
     headers["Range"] = range_header;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+
+#ifndef NO_GUI
     client->SetProgressFnCallback(nullptr, NothingCallback);
+#endif
+
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());
@@ -224,7 +245,11 @@ int BaseClient::GetRange(const std::string &path, void *buffer, uint64_t size, u
     headers["Range"] = range_header;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+
+#ifndef NO_GUI
     client->SetProgressFnCallback(nullptr, NothingCallback);
+#endif
+
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());
@@ -278,7 +303,11 @@ int BaseClient::Head(const std::string &path, void *buffer, uint64_t size)
     headers["Range"] = range_header;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
+
+#ifndef NO_GUI
     client->SetProgressFnCallback(nullptr, NothingCallback);
+#endif
+
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());

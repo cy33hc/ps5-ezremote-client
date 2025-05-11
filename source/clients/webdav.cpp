@@ -8,7 +8,9 @@
 #include "fs.h"
 #include "lang.h"
 #include "util.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 
 static const char *months[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
@@ -175,10 +177,12 @@ std::vector<DirEntry> WebDAVClient::ListDir(const std::string &path)
 int WebDAVClient::Put(const std::string &inputfile, const std::string &path, uint64_t offset)
 {
     size_t bytes_remaining = FS::GetSize(inputfile);
+    #ifndef NO_GUI
     bytes_transfered = 0;
     prev_tick = Util::GetTick();
-
     client->SetProgressFnCallback(&bytes_transfered, UploadProgressCallback);
+    #endif
+    
     std::string encode_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
     long status;
 

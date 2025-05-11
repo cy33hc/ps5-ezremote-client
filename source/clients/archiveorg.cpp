@@ -9,7 +9,9 @@
 #include "clients/archiveorg.h"
 #include "lang.h"
 #include "util.h"
+#ifndef NO_GUI
 #include "windows.h"
+#endif
 
 static std::map<std::string, int> month_map = {{"Jan", 1}, {"Feb", 2}, {"Mar", 3}, {"Apr", 4}, {"May", 5}, {"Jun", 6}, {"Jul", 7}, {"Aug", 8}, {"Sep", 9}, {"Oct", 10}, {"Nov", 11}, {"Dec", 12}};
 
@@ -106,7 +108,6 @@ std::vector<DirEntry> ArchiveOrgClient::ListDir(const std::string &path)
         std::string tmp_string;
         const lxb_char_t *value;
         size_t value_len;
-        std::string lower_filter = Util::ToLower(remote_filter);
 
         // Extract first 100 tr in the <table id="list"> element
         std::string res_body = std::string(res.strBody.data());

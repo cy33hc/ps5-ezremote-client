@@ -22,6 +22,7 @@
 #include "sceSystemService.h"
 #include "installer.h"
 
+#ifndef NO_GUI
 struct BgProgressCheck
 {
 	ArchivePkgInstallData *archive_pkg_data;
@@ -36,9 +37,11 @@ static bool sceAppInst_done = false;
 
 static std::map<std::string, ArchivePkgInstallData *> archive_pkg_install_data_list;
 static std::map<std::string, SplitPkgInstallData *> split_pkg_install_data_list;
+#endif
 
 namespace INSTALLER
 {
+#ifndef NO_GUI
 	int Init(void)
 	{
 		int ret;
@@ -819,6 +822,7 @@ namespace INSTALLER
 	
 		return 0;
 	}
+#endif // NO_GUI
 
 	int InstallWithDirectPackageInstaller(const std::string &url)
 	{
@@ -830,7 +834,7 @@ namespace INSTALLER
 		ssize_t ret;
 		struct hostent *hostent;
 		struct sockaddr_in sockaddr_in;
-		unsigned short server_port = 9040;
+		unsigned short server_port = 9041;
 	
 		sockfd = socket(AF_INET, SOCK_STREAM, 0);
 		if (sockfd == -1)

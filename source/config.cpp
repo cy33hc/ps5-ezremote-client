@@ -6,7 +6,9 @@
 #include <vector>
 #include <regex>
 #include <stdlib.h>
+#ifndef NO_GUI
 #include "server/http_server.h"
+#endif
 #include "config.h"
 #include "fs.h"
 #include "lang.h"
@@ -254,6 +256,7 @@ namespace CONFIG
         sprintf(gg_app.permissions, "%s", ReadString(CONFIG_GOOGLE, CONFIG_GOOGLE_PERMISSIONS, GOOGLE_DEFAULT_PERMISSIONS));
         WriteString(CONFIG_GOOGLE, CONFIG_GOOGLE_PERMISSIONS, gg_app.permissions);
 
+        #ifndef NO_GUI
         // Http Server Info
         http_server_port = ReadInt(CONFIG_HTTP_SERVER, CONFIG_HTTP_SERVER_PORT, 9090);
         WriteInt(CONFIG_HTTP_SERVER, CONFIG_HTTP_SERVER_PORT, http_server_port);
@@ -263,6 +266,7 @@ namespace CONFIG
 
         web_server_enabled = ReadBool(CONFIG_HTTP_SERVER, CONFIG_HTTP_SERVER_ENABLED, true);
         WriteBool(CONFIG_HTTP_SERVER, CONFIG_HTTP_SERVER_ENABLED, web_server_enabled);
+        #endif
 
         for (int i = 0; i < sites.size(); i++)
         {
@@ -430,9 +434,11 @@ namespace CONFIG
         WriteBool(CONFIG_GLOBAL, CONFIG_AUTO_DELETE_TMP_PKG, auto_delete_tmp_pkg);
         WriteBool(CONFIG_GLOBAL, CONFIG_SHOW_HIDDEN_FILES, show_hidden_files);
         WriteString(CONFIG_GLOBAL, CONFIG_LANGUAGE, language);
+        #ifndef NO_GUI
         WriteInt(CONFIG_HTTP_SERVER, CONFIG_HTTP_SERVER_PORT, http_server_port);
         WriteString(CONFIG_HTTP_SERVER, CONFIG_HTTP_SERVER_COMPRESSED_FILE_PATH, compressed_file_path);
         WriteBool(CONFIG_HTTP_SERVER, CONFIG_HTTP_SERVER_ENABLED, web_server_enabled);
+        #endif
 
         WriteIniFile(CONFIG_INI_FILE);
         CloseIniFile();
@@ -442,10 +448,12 @@ namespace CONFIG
             FS::MkDirs(temp_folder);
         }
 
+        #ifndef NO_GUI
         if (!FS::FolderExists(compressed_file_path))
         {
             FS::MkDirs(compressed_file_path);
         }
+        #endif
     }
 
     void SaveLocalDirecotry(const std::string &path)

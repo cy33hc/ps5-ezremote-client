@@ -5,6 +5,7 @@
 #include "split_file.h"
 #include "pthread.h"
 
+#ifndef NO_GUI
 #define SWAP16(x)                                         \
     ((uint16_t)((((uint16_t)(x)&UINT16_C(0x00FF)) << 8) | \
                 (((uint16_t)(x)&UINT16_C(0xFF00)) >> 8)))
@@ -142,9 +143,11 @@ struct SplitPkgInstallData
 };
 
 static pthread_t bk_install_thid;
+#endif
 
 namespace INSTALLER
 {
+    #ifndef NO_GUI
     int Init(void);
     void Exit(void);
 
@@ -167,5 +170,6 @@ namespace INSTALLER
     bool InstallSplitPkg(const std::string &path, SplitPkgInstallData* pkg_data, bool bg = false);
     bool IsDirectPackageInstallerEnabled();
     int StartDirectPackageInstaller();
+    #endif
     int InstallWithDirectPackageInstaller(const std::string &url);
 }

@@ -48,19 +48,19 @@ int BaseClient::UploadProgressCallback(void* ptr, double dTotalToDownload, doubl
 size_t BaseClient::WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data)
 {
     if ((size == 0) || (nmemb == 0) || ((size * nmemb) < 1) || (data == nullptr))
-        return 0;
-
+    return 0;
+    
     SplitFile *split_file = reinterpret_cast<SplitFile *>(data);
     if (!split_file->IsClosed())
     {
         if (split_file->Write(reinterpret_cast<char *>(buff), size * nmemb) < 0)
-            return 0;
+        return 0;
     }
     else
     {
         return 0;
     }
-
+    
     return size * nmemb;
 }
 

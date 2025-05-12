@@ -12,11 +12,12 @@
 #include "config.h"
 #include "server/http_server.h"
 #include "sceAppInstUtil.h"
+#include "dbglogger.h"
 
 using namespace std;
 
 #define BUF_SIZE 4096
-#define PORT 9040
+#define PORT 9041
 
 typedef struct notify_request
 {
@@ -54,7 +55,9 @@ int main(int argc, char *argv[])
     SceAppInstallPkgInfo pkg_info;
     MetaInfo metainfo;
 
-    CONFIG::LoadConfig();
+    dbglogger_init();
+	dbglogger_log("If you see this you've set up dbglogger correctly.");
+
 	HttpServer::Start();
 
     // Creating socket file descriptor

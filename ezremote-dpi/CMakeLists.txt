@@ -20,19 +20,7 @@ include_directories(
 add_executable(${PROJECT_NAME}.elf
   ../source/pugixml/pugixml.cpp
   ../source/clients/baseclient.cpp
-  ../source/clients/apache.cpp
-  ../source/clients/archiveorg.cpp
-  ../source/clients/ftpclient.cpp
-  ../source/clients/github.cpp
-  ../source/clients/myrient.cpp
-  ../source/clients/iis.cpp
-  ../source/clients/nginx.cpp
-  ../source/clients/npxserve.cpp
-  ../source/clients/nfsclient.cpp
   ../source/clients/smbclient.cpp
-  ../source/clients/sftpclient.cpp
-  ../source/clients/rclone.cpp
-  ../source/clients/webdav.cpp
   ../source/filehost/1fichier.cpp
   ../source/filehost/alldebrid.cpp
   ../source/filehost/directhost.cpp
@@ -42,8 +30,6 @@ add_executable(${PROJECT_NAME}.elf
   ../source/filehost/pixeldrain.cpp
   ../source/filehost/realdebrid.cpp
   ../source/http/httplib.cpp
-  ../source/server/http_server.cpp
-  ../source/actions.cpp
   ../source/config.cpp
   ../source/crypt.c
   ../source/dbglogger.c
@@ -51,9 +37,8 @@ add_executable(${PROJECT_NAME}.elf
   ../source/inifile.c
   ../source/installer.cpp
   ../source/lang.cpp
-  ../source/sfo.cpp
-  ../source/zip_util.cpp
   ../source/split_file.cpp
+  source/server/http_server.cpp
   source/main.cpp
 )
 

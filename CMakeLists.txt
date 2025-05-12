@@ -80,10 +80,8 @@ target_link_libraries(ezremote_client.elf
   zstd
   z
   psl
-  mbedtls
-  mbedcrypto
-  mbedx509
-  wolfssl
+  crypto
+  ssl
   curl
   lzma
   bz2
@@ -111,7 +109,7 @@ target_link_libraries(ezremote_client.elf
 )
 
 set(APPDIR "ezremote-client")
-set(APP_VERSION "1.09")
+set(APP_VERSION "1.10")
 
 add_custom_target(package
    DEPENDS ezremote-dpi.elf

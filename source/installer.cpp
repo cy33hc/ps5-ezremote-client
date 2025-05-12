@@ -187,6 +187,32 @@ namespace INSTALLER
 		return "";
 	}
 
+	void *CleanArchivePkgDataThread(void *argp)
+	{
+		ArchivePkgInstallData *archive_pkg_data = (ArchivePkgInstallData*)argp;
+		archive_pkg_data->stop_write_thread = true;
+		archive_pkg_data->split_file->Close();
+		sleep(3);
+		pthread_join(archive_pkg_data->thread, NULL);
+		delete (archive_pkg_data->split_file);
+		free(archive_pkg_data);
+		return nullptr;
+	}
+
+	void *CleanSplitPkgDataThread(void *argp)
+	{
+		SplitPkgInstallData *split_pkg_data = (SplitPkgInstallData*)argp;
+		split_pkg_data->stop_write_thread = true;
+		split_pkg_data->split_file->Close();
+		sleep(3);
+		pthread_join(split_pkg_data->thread, NULL);
+		delete (split_pkg_data->split_file);
+		if (split_pkg_data->delete_client)
+			delete (split_pkg_data->remote_client);
+		free(split_pkg_data);
+		return nullptr;
+	}
+
 	void *CheckBgInstallTaskThread(void *argp)
 	{
 		bool completed = false;
@@ -237,22 +263,13 @@ namespace INSTALLER
 	finish:
 		if (bg_check_data->archive_pkg_data != nullptr)
 		{
-			bg_check_data->archive_pkg_data->stop_write_thread = true;
-			pthread_join(bg_check_data->archive_pkg_data->thread, NULL);
-			delete (bg_check_data->archive_pkg_data->split_file);
-			free(bg_check_data->archive_pkg_data);
+			ret = pthread_create(&bk_clean_thid, NULL, CleanArchivePkgDataThread, bg_check_data->archive_pkg_data);
 			RemoveArchivePkgInstallData(bg_check_data->hash);
 			free(bg_check_data);
 		}
 		else if (bg_check_data->split_pkg_data != nullptr)
 		{
-			bg_check_data->split_pkg_data->stop_write_thread = true;
-			bg_check_data->split_pkg_data->split_file->Close();
-			pthread_join(bg_check_data->split_pkg_data->thread, NULL);
-			delete (bg_check_data->split_pkg_data->split_file);
-			if (bg_check_data->split_pkg_data->delete_client)
-				delete (bg_check_data->split_pkg_data->remote_client);
-			free(bg_check_data->split_pkg_data);
+			ret = pthread_create(&bk_clean_thid, NULL, CleanSplitPkgDataThread, bg_check_data->split_pkg_data);
 			RemoveSplitPkgInstallData(bg_check_data->hash);
 			free(bg_check_data);
 		}
@@ -688,10 +705,7 @@ namespace INSTALLER
 		}
 		ret = 1;
 	finish:
-		pkg_data->stop_write_thread = true;
-		pthread_join(pkg_data->thread, NULL);
-		delete (pkg_data->split_file);
-		free(pkg_data);
+		ret = pthread_create(&bk_clean_thid, NULL, CleanArchivePkgDataThread, pkg_data);
 		RemoveArchivePkgInstallData(hash);
 		return ret;
 	}
@@ -790,16 +804,7 @@ namespace INSTALLER
 		}
 		ret = 1;
 	finish:
-		pkg_data->stop_write_thread = true;
-		pkg_data->split_file->Close();
-		pthread_join(pkg_data->thread, NULL);
-		usleep(2000000);
-		delete (pkg_data->split_file);
-		if (pkg_data->delete_client)
-		{
-			delete (pkg_data->remote_client);
-		}
-		free(pkg_data);
+		ret = pthread_create(&bk_clean_thid, NULL, CleanSplitPkgDataThread, pkg_data);
 		RemoveSplitPkgInstallData(hash);
 		activity_inprogess = false;
 		file_transfering = false;

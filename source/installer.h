@@ -142,6 +142,7 @@ struct SplitPkgInstallData
 };
 
 static pthread_t bk_install_thid;
+static pthread_t bk_clean_thid;
 
 namespace INSTALLER
 {

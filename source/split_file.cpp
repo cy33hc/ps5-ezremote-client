@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdio.h>
+#include "unistd.h"
 #include <string>
 
 #include "common.h"
@@ -204,6 +205,9 @@ int SplitFile::Close()
     if (this->complete)
         return 0;
 
+    this->complete = true;
+    sleep(1);
+
     if (block_in_progress->fd != nullptr)
     {
         fflush(block_in_progress->fd);
@@ -213,7 +217,6 @@ int SplitFile::Close()
     block_in_progress->status = BLOCK_STATUS_CREATED;
     block_in_progress->is_last = true;
     this->file_blocks.push_back(block_in_progress);
-    this->complete = true;
     sem_post(&this->block_ready);
 
     return 0;

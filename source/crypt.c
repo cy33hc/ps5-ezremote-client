@@ -3,12 +3,12 @@
 int openssl_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *key,
                     unsigned char *iv, unsigned char *ciphertext, int *ciphertext_len)
 {
-    WOLFSSL_EVP_CIPHER_CTX *ctx;
+    EVP_CIPHER_CTX *ctx;
 
     int len;
 
     /* Create and initialise the context */
-    if (!(ctx = wolfSSL_EVP_CIPHER_CTX_new()))
+    if (!(ctx = EVP_CIPHER_CTX_new()))
         return 0;
 
     /*
@@ -18,14 +18,14 @@ int openssl_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *
      * IV size for *most* modes is the same as the block size. For AES this
      * is 128 bits
      */
-    if (1 != wolfSSL_EVP_EncryptInit_ex(ctx, wolfSSL_EVP_aes_256_cbc(), NULL, key, iv))
+    if (1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv))
         return 0;
 
     /*
      * Provide the message to be encrypted, and obtain the encrypted output.
      * EVP_EncryptUpdate can be called multiple times if necessary
      */
-    if (1 != wolfSSL_EVP_CipherUpdate(ctx, ciphertext, &len, plaintext, plaintext_len))
+    if (1 != EVP_CipherUpdate(ctx, ciphertext, &len, plaintext, plaintext_len))
         return 0;
     *ciphertext_len = len;
 
@@ -33,12 +33,12 @@ int openssl_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *
      * Finalise the encryption. Further ciphertext bytes may be written at
      * this stage.
      */
-    if (1 != wolfSSL_EVP_EncryptFinal_ex(ctx, ciphertext + len, &len))
+    if (1 != EVP_EncryptFinal_ex(ctx, ciphertext + len, &len))
         return 0;
     *ciphertext_len += len;
 
     /* Clean up */
-    wolfSSL_EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_CTX_free(ctx);
 
     return 1;
 }
@@ -46,12 +46,12 @@ int openssl_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *
 int openssl_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *key,
                     unsigned char *iv, unsigned char *plaintext, int *plaintext_len)
 {
-    WOLFSSL_EVP_CIPHER_CTX *ctx;
+    EVP_CIPHER_CTX *ctx;
 
     int len;
 
     /* Create and initialise the context */
-    if (!(ctx = wolfSSL_EVP_CIPHER_CTX_new()))
+    if (!(ctx = EVP_CIPHER_CTX_new()))
         return 0;
 
     /*
@@ -61,14 +61,14 @@ int openssl_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char
      * IV size for *most* modes is the same as the block size. For AES this
      * is 128 bits
      */
-    if (1 != wolfSSL_EVP_DecryptInit_ex(ctx, wolfSSL_EVP_aes_256_cbc(), NULL, key, iv))
+    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv))
         return 0;
 
     /*
      * Provide the message to be decrypted, and obtain the plaintext output.
      * EVP_DecryptUpdate can be called multiple times if necessary.
      */
-    if (1 != wolfSSL_EVP_CipherUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
+    if (1 != EVP_CipherUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
         return 0;
     *plaintext_len = len;
 
@@ -76,12 +76,12 @@ int openssl_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char
      * Finalise the decryption. Further plaintext bytes may be written at
      * this stage.
      */
-    if (1 != wolfSSL_EVP_DecryptFinal_ex(ctx, plaintext + len, &len))
+    if (1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len))
         return 0;
     *plaintext_len += len;
 
     /* Clean up */
-    wolfSSL_EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_CTX_free(ctx);
 
     return 1;
 }

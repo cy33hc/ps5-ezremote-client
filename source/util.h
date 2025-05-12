@@ -8,7 +8,7 @@
 #include <stdarg.h>
 #include <sys/time.h>
 #include "base64.h"
-#include "wolfssl/openssl/md5.h"
+#include "openssl/md5.h"
 #include "common.h"
 #include "lang.h"
 
@@ -156,7 +156,7 @@ namespace Util
     static inline std::string UrlHash(const std::string &text)
     {
         std::vector<unsigned char> res(16);
-        wolfSSL_MD5((const unsigned char *)text.c_str(), text.length(), res.data());
+        MD5((const unsigned char *)text.c_str(), text.length(), res.data());
 
         std::string out;
         Base64::Encode(res.data(), res.size(), out);

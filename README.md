@@ -8,7 +8,7 @@ ezRemote Client is an application that allows you to connect the PS5 to remote F
 
 ## Installation
 1. Extract the **ezremote_client.zip** in to the **/data/homebrew** folder on the PS5.
-2. Must load websrv payload. You won't tbe able to start ezRemote Client without this.
+2. Must load websrv payload. You won't be able to start ezRemote Client without this.
 3. Install PS-ezRemoteClient.pkg (This create a shortcut on the dashboard to launch the app directly via websrv)
 
 ## Updating the app

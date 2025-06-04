@@ -109,7 +109,7 @@ target_link_libraries(ezremote_client.elf
 )
 
 set(APPDIR "ezremote-client")
-set(APP_VERSION "1.10")
+set(APP_VERSION "1.12")
 
 add_custom_target(package
    DEPENDS ezremote-dpi.elf
@@ -118,6 +118,8 @@ add_custom_target(package
    COMMAND rm -f ezremote-client.zip
    COMMAND mkdir -p ${APPDIR}
    COMMAND cp -R ${PROJECT_SOURCE_DIR}/data/* ${APPDIR}
+   COMMAND ${PS5_PAYLOAD_SDK}/bin/prospero-strip ezremote_client.elf
+   COMMAND ${PS5_PAYLOAD_SDK}/bin/prospero-strip ps5-ezremote-dpi/ezremote-dpi.elf
    COMMAND cp ezremote_client.elf ${APPDIR}
    COMMAND cp ps5-ezremote-dpi/ezremote-dpi.elf ${APPDIR}
    COMMAND sed -i "s/ezRemote Client/ezRemote Client v${APP_VERSION}/g"  ${APPDIR}/homebrew.js

@@ -1462,6 +1462,16 @@ namespace Actions
         if (src.isDir)
         {
             int err;
+            if (!isCopy && !FS::FolderExists(dest))
+            {
+                errno = 0;
+                int ret = rename(src.path, dest);
+                if (ret != 0 && errno != EXDEV && errno != EEXIST)
+                {
+                    return 0;
+                }
+            }
+
             std::vector<DirEntry> entries = FS::ListDir(src.path, &err);
             FS::MkDirs(dest);
             for (int i = 0; i < entries.size(); i++)
@@ -1476,9 +1486,11 @@ namespace Actions
                 if (entries[i].isDir)
                 {
                     if (strcmp(entries[i].name, "..") == 0)
+                    {
+                        free(new_path);
                         continue;
+                    }
 
-                    FS::MkDirs(new_path);
                     ret = CopyOrMove(entries[i], new_path, isCopy);
                     if (ret <= 0)
                     {
@@ -1501,6 +1513,11 @@ namespace Actions
                     }
                 }
                 free(new_path);
+            }
+
+            if (!isCopy && FS::FolderExists(src.path))
+            {
+                FS::RmDir(src.path);
             }
         }
         else
@@ -1543,7 +1560,6 @@ namespace Actions
                 char new_dir[512];
                 sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", it->name);
                 CopyOrMove(*it, new_dir, false);
-                FS::RmRecursive(it->path);
             }
             else
             {

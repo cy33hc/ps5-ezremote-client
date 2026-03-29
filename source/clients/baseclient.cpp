@@ -20,6 +20,14 @@ BaseClient::~BaseClient()
         delete client;
 };
 
+int BaseClient::SocketOptCallback(void* ptr, int fd, uint32_t socktype)
+{
+    int size = 1048576;
+    setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
+    setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
+    return 0;
+}
+
 int BaseClient::NothingCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     return 0;
@@ -78,6 +86,7 @@ int BaseClient::Connect(const std::string &url, const std::string &username, con
     }
     client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
     client->SetCertificateFile(CACERT_FILE);
+    client->SetSocketOptFnCallback(SocketOptCallback);
 
     if (!send_ping)
         this->connected = true;

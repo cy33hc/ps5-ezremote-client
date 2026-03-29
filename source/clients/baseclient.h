@@ -47,6 +47,7 @@ public:
     static int UploadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
     static size_t WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data);
     static int NothingCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
+    static int SocketOptCallback(void* ptr, int fd, uint32_t socktype);
 
 protected:
     CHTTPClient *client;

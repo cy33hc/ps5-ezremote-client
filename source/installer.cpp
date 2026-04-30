@@ -5,9 +5,24 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
+#include <json-c/json.h>
 #include "httpclient/HTTPClient.h"
 #include "clients/webdav.h"
 #include "clients/remote_client.h"
+#include "clients/smbclient.h"
+#include "clients/sftpclient.h"
+#include "clients/ftpclient.h"
+#include "clients/nfsclient.h"
+#include "clients/webdav.h"
+#include "clients/apache.h"
+#include "clients/archiveorg.h"
+#include "clients/iis.h"
+#include "clients/github.h"
+#include "clients/myrient.h"
+#include "clients/nginx.h"
+#include "clients/npxserve.h"
+#include "clients/rclone.h"
+
 #include "server/http_server.h"
 #include "util.h"
 #include "config.h"
@@ -37,6 +52,11 @@ static std::map<std::string, SplitPkgInstallData *> split_pkg_install_data_list;
 
 namespace INSTALLER
 {
+    static int FtpCallback(int64_t xfered, void *arg)
+    {
+        return 1;
+    }
+
 	int Init(void)
 	{
 		int ret;
@@ -156,6 +176,50 @@ namespace INSTALLER
 		return title;
 	}
 
+	std::string StoreBgInstallHostData(RemoteSettings *settings, const std::string &path)
+	{
+		std::string hash = Util::UrlHash(settings->server + path);
+		json_object *history_item_obj = json_object_new_object();
+		json_object_object_add(history_item_obj, "hash", json_object_new_string(hash.c_str()));
+		json_object_object_add(history_item_obj, "url", json_object_new_string(settings->server));
+		json_object_object_add(history_item_obj, "path", json_object_new_string(path.c_str()));
+		json_object_object_add(history_item_obj, "username", json_object_new_string(settings->username));
+		json_object_object_add(history_item_obj, "password", json_object_new_string(settings->password));
+
+		std::string url = settings->server;
+		size_t pos = url.find("://");
+        if (pos != std::string::npos)
+		{
+			std::string type = url.substr(0, pos);
+			if (type.compare("http") == 0 || type.compare("https") == 0)
+			{
+				json_object_object_add(history_item_obj, "http_server_type", json_object_new_string(settings->http_server_type));
+			}
+		}
+
+		const char *params_str = json_object_to_json_string(history_item_obj);
+
+		CHTTPClient::HttpResponse res;
+		CHTTPClient::HeadersMap headers;
+		CHTTPClient tmp_client([](const std::string& log){});
+		tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+		tmp_client.SetCertificateFile(CACERT_FILE);
+		headers["Content-Type"] = "application/json";
+
+		std::string store_bg_install_data_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/store_bg_install_data";
+		if (tmp_client.Post(store_bg_install_data_url, headers, params_str, res))
+		{
+			if (HTTP_SUCCESS(res.iCode))
+			{
+	  		}
+			else
+			{
+				return "";
+			}
+		}
+		return hash;
+	}
+
 	std::string getRemoteUrl(const std::string path, bool encodeUrl)
 	{
 		if (strlen(remote_settings->username) == 0 && strlen(remote_settings->password) == 0 &&
@@ -178,9 +242,8 @@ namespace INSTALLER
 		}
 		else
 		{
-			std::string encoded_path = httplib::detail::encode_url(path);
-			std::string encoded_site_name = httplib::detail::encode_url(remote_settings->site_name);
-			std::string full_url = std::string("http://localhost:") + std::to_string(http_server_port) + "/rmt_inst/" + encoded_site_name + encoded_path;
+			std::string hash = StoreBgInstallHostData(remote_settings, path);
+			std::string full_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
 			return full_url;
 		}
 
@@ -218,28 +281,6 @@ namespace INSTALLER
 		bool completed = false;
 		BgProgressCheck *bg_check_data = (BgProgressCheck *)argp;
 		int ret;
-
-		PlayGoInfo playgo_info;
-		SceAppInstallPkgInfo pkg_info;
-		memset(&playgo_info, 0, sizeof(playgo_info));
-		
-		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-		}	
-
-		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-		}	
-
-		MetaInfo metainfo = (MetaInfo){
-			.uri = bg_check_data->url.c_str(),
-			.ex_uri = "",
-			.playgo_scenario_id = "",
-			.content_id = "",
-			.content_name = bg_check_data->title.c_str(),
-			.icon_url = ""
-		};
 
 		ret = InstallWithDirectPackageInstaller(bg_check_data->url);
 		if (ret != 0)
@@ -296,28 +337,6 @@ namespace INSTALLER
 		int ret;	
 		if (prompt)
 		{
-			PlayGoInfo playgo_info;
-			SceAppInstallPkgInfo pkg_info;
-			memset(&playgo_info, 0, sizeof(playgo_info));
-			
-			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-			}	
-
-			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-			}	
-
-			MetaInfo metainfo = (MetaInfo){
-				.uri = url.c_str(),
-				.ex_uri = "",
-				.playgo_scenario_id = "",
-				.content_id = "",
-				.content_name = display_title.c_str(),
-				.icon_url = ""
-			};
-
 			ret = InstallWithDirectPackageInstaller(url);
 			if (ret != 0)
 			{
@@ -389,19 +408,6 @@ namespace INSTALLER
 		if (strncmp(path.c_str(), "/data/", 6) == 0)
 			snprintf(filepath, 1023, "/user%s", path.c_str());
 
-		PlayGoInfo playgo_info;
-		SceAppInstallPkgInfo pkg_info;
-		memset(&playgo_info, 0, sizeof(playgo_info));
-		
-		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-		}
-
-		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-		}
-
 		std::string title;
 		if (BE32(header->pkg_magic) == PS4_PKG_MAGIC)
 		{
@@ -411,14 +417,6 @@ namespace INSTALLER
 		{
 			title = filename;
 		}
-		MetaInfo metainfo = (MetaInfo){
-			.uri = filepath,
-			.ex_uri = "",
-			.playgo_scenario_id = "",
-			.content_id = "",
-			.content_name = title.c_str(),
-			.icon_url = ""
-		};
 
 		ret = InstallWithDirectPackageInstaller(filepath);
 		if (ret != 0)
@@ -644,28 +642,6 @@ namespace INSTALLER
 
 		if (!bg)
 		{
-			PlayGoInfo playgo_info;
-			SceAppInstallPkgInfo pkg_info;
-			memset(&playgo_info, 0, sizeof(playgo_info));
-			
-			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-			}
-
-			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-			}
-
-			MetaInfo metainfo = (MetaInfo){
-				.uri = full_url.c_str(),
-				.ex_uri = "",
-				.playgo_scenario_id = "",
-				.content_id = "",
-				.content_name = display_title.c_str(),
-				.icon_url = ""
-			};
-
 			ret = InstallWithDirectPackageInstaller(full_url);
 			if (ret)
 			{
@@ -743,28 +719,6 @@ namespace INSTALLER
 
 		if (!bg)
 		{
-			PlayGoInfo playgo_info;
-			SceAppInstallPkgInfo pkg_info;
-			memset(&playgo_info, 0, sizeof(playgo_info));
-			
-			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-			}
-
-			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-			}
-
-			MetaInfo metainfo = (MetaInfo){
-				.uri = full_url.c_str(),
-				.ex_uri = "",
-				.playgo_scenario_id = "",
-				.content_id = "",
-				.content_name = display_title.c_str(),
-				.icon_url = ""
-			};
-
 			ret = InstallWithDirectPackageInstaller(full_url);
 			if (ret)
 			{
@@ -992,5 +946,155 @@ namespace INSTALLER
 		close(sockfd);
 	
 		return ret;
+	}
+
+	bool IsEzRemoteServerEnabled()
+	{
+		CHTTPClient::HttpResponse res;
+        CHTTPClient::HeadersMap headers;
+        CHTTPClient tmp_client([](const std::string& log){});
+        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+        tmp_client.SetCertificateFile(CACERT_FILE);
+		tmp_client.SetTimeout(1);
+
+		std::string version_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/version";
+        if (tmp_client.Get(version_url, headers, res))
+        {
+			if (HTTP_SUCCESS(res.iCode))
+            {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	int StartEzRemoteServer()
+	{
+		char buffer[8192];
+		in_addr_t in_addr;
+		in_addr_t server_addr;
+		int filefd;
+		int sockfd;
+		ssize_t i;
+		ssize_t read_return;
+		struct hostent *hostent;
+		struct sockaddr_in sockaddr_in;
+		unsigned short server_port = 9021;
+	
+		if (IsEzRemoteServerEnabled())
+			return 0;
+
+		filefd = open(SERVER_ELF_PATH, O_RDONLY);
+		if (filefd == -1)
+		{
+			return -1;
+		}
+	
+		sockfd = socket(AF_INET, SOCK_STREAM, 0);
+		if (sockfd == -1)
+		{
+			return -1;
+		}
+	
+		/* Prepare sockaddr_in. */
+		hostent = gethostbyname("127.0.0.1");
+		if (hostent == NULL)
+		{
+			return -1;
+		}
+	
+		in_addr = inet_addr(inet_ntoa(*(struct in_addr *)*(hostent->h_addr_list)));
+		if (in_addr == (in_addr_t)-1)
+		{
+			return -1;
+		}
+	
+		sockaddr_in.sin_addr.s_addr = in_addr;
+		sockaddr_in.sin_family = AF_INET;
+		sockaddr_in.sin_port = htons(server_port);
+		/* Do the actual connection. */
+		if (connect(sockfd, (struct sockaddr *)&sockaddr_in, sizeof(sockaddr_in)) == -1)
+		{
+			return -1;
+		}
+	
+		while (1)
+		{
+			read_return = read(filefd, buffer, 8192);
+			if (read_return == 0)
+				break;
+			if (read_return == -1)
+			{
+				return -1;
+			}
+			if (write(sockfd, buffer, read_return) == -1)
+			{
+				return -1;
+			}
+		}
+	
+		close(filefd);
+		close(sockfd);
+
+		return 0;
+	}
+
+    RemoteClient *GetRemoteClient(int site_idx)
+    {
+        RemoteClient *tmp_client = nullptr;
+        RemoteSettings *tmp_settings = &site_settings[sites[site_idx]];
+
+		return GetRemoteClient(tmp_settings);
+    }
+
+	RemoteClient *GetRemoteClient(RemoteSettings *settings)
+	{
+		RemoteClient *tmp_client = nullptr;;
+
+        if (settings->type == CLIENT_TYPE_HTTP_SERVER)
+        {
+            if (strcmp(remote_settings->http_server_type, HTTP_SERVER_APACHE) == 0)
+                tmp_client = new ApacheClient();
+            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MS_IIS) == 0)
+                tmp_client = new IISClient();
+            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_NGINX) == 0)
+                tmp_client = new NginxClient();
+            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_NPX_SERVE) == 0)
+                tmp_client = new NpxServeClient();
+            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_RCLONE) == 0)
+                tmp_client = new RCloneClient();
+            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_ARCHIVEORG) == 0)
+                tmp_client = new ArchiveOrgClient();
+            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
+                tmp_client = new GithubClient();
+            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MYRIENT) == 0)
+                tmp_client = new MyrientClient();
+        }
+        else if (settings->type == CLIENT_TYPE_WEBDAV)
+        {
+            tmp_client = new WebDAVClient();
+        }
+        else if (settings->type == CLIENT_TYPE_SMB)
+        {
+            tmp_client = new SmbClient();
+        }
+        else if (settings->type == CLIENT_TYPE_SFTP)
+        {
+            tmp_client = new SFTPClient();
+        }
+        else if (settings->type == CLIENT_TYPE_FTP)
+        {
+            tmp_client = new FtpClient();
+            FtpClient *ftp_client = (FtpClient*) tmp_client;
+            ftp_client->SetCallbackXferFunction(FtpCallback);
+        }
+        else if (settings->type == CLIENT_TYPE_NFS)
+        {
+            tmp_client = new NfsClient();
+        }
+
+        tmp_client->Connect(settings->server, settings->username, settings->password, false);
+
+        return tmp_client;
 	}
 }

@@ -652,39 +652,6 @@ namespace Actions
         else
             files.push_back(selected_remote_file);
 
-        bool download_and_install = false;
-        if (remote_settings->enable_rpi)
-        {
-            std::string url = INSTALLER::getRemoteUrl(files.begin()->path);
-            sprintf(activity_message, "%s", lang_strings[STR_CHECKING_REMOTE_SERVER_MSG]);
-            file_transfering = false;
-            if (!INSTALLER::canInstallRemotePkg(url))
-            {
-                confirm_state = CONFIRM_WAIT;
-                action_to_take = selected_action;
-                activity_inprogess = false;
-                while (confirm_state == CONFIRM_WAIT)
-                {
-                    usleep(100000);
-                }
-                activity_inprogess = true;
-                selected_action = action_to_take;
-
-                if (confirm_state == CONFIRM_YES)
-                {
-                    download_and_install = true;
-                }
-                else
-                {
-                    goto finish;
-                }
-            }
-        }
-        else
-        {
-            download_and_install = true;
-        }
-        
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (stop_activity)
@@ -706,7 +673,7 @@ namespace Actions
                     {
                         if (BE32(header.pkg_magic) == PS4_PKG_MAGIC)
                         {
-                            if (download_and_install)
+                            if (!remote_settings->enable_rpi)
                             {
                                 if (DownloadAndInstallPkg(it->path, &header) == 0)
                                     failed++;
@@ -725,11 +692,11 @@ namespace Actions
                                     SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
 
                                     install_data->split_file = sp;
-                                    install_data->remote_client = remoteclient;
+                                    install_data->remote_client = INSTALLER::GetRemoteClient(remote_settings);
                                     install_data->path = it->path;
                                     remoteclient->Size(it->path, &install_data->size);
                                     install_data->stop_write_thread = false;
-                                    install_data->delete_client = false;
+                                    install_data->delete_client = true;
 
                                     int ret = pthread_create(&install_data->thread, NULL, DownloadSplitPkg, install_data);
 
@@ -746,6 +713,11 @@ namespace Actions
                                         failed++;
                                     else
                                         success++;
+
+                                    if (it != files.end())
+                                    {
+                                        sleep(5);
+                                    }
                                 }
                             }
                         }
@@ -1900,4 +1872,23 @@ namespace Actions
         sprintf(remote_file_to_select, "%s", temp_file.c_str());
     }
 
+    void RestartServer()
+    {
+        StopServer();
+        sleep(2);
+        INSTALLER::StartEzRemoteServer();
+        sleep(2);
+    }
+
+    void StopServer()
+    {
+        CHTTPClient::HttpResponse res;
+        CHTTPClient::HeadersMap headers;
+        CHTTPClient tmp_client([](const std::string& log){});
+        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+        tmp_client.SetCertificateFile(CACERT_FILE);
+        tmp_client.SetTimeout(1);
+
+        tmp_client.Get("http://localhost:" + std::to_string(http_int_server_port) + "/stop", headers, res);
+    }
 }

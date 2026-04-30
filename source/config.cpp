@@ -116,33 +116,6 @@ namespace CONFIG
         }
     }
 
-    /* void LoadCipherKeys()
-    {
-        // Get the key and iv for encryption. Inject the account_id/MAC address as part of the key and iv.
-        int user_id;
-        uint64_t account_id = 0;
-        sceUserServiceGetForegroundUser(&user_id);
-        sceUserServiceGetNpAccountId(user_id, &account_id);
-        unsigned char data[sizeof(account_id)];
-        memcpy(data, &account_id, sizeof(account_id));
-        OrbisNetEtherAddr addr;
-        memset(&addr, 0x0, sizeof(OrbisNetEtherAddr));
-        sceNetGetMacAddress(&addr, 0);
-        for (int i = 0; i < sizeof(data); i++)
-        {
-            cipher_key[i] = data[i];
-            cipher_key[i + 16] = data[i];
-            cipher_iv[i] = data[i];
-        }
-        int offset = sizeof(data);
-        for (int i = 0; i < sizeof(addr.data); i++)
-        {
-            cipher_key[offset + i] = addr.data[i];
-            cipher_key[offset + i + 16] = data[i];
-            cipher_iv[offset + i] = addr.data[i];
-        }
-    } */
-
     void LoadConfig()
     {
         // LoadCipherKeys();

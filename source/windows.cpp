@@ -45,6 +45,7 @@ static int ime_field_size;
 
 static char txt_http_server_port[6];
 
+bool is_server_started = false;
 bool handle_updates = false;
 uint64_t bytes_transfered;
 uint64_t bytes_to_download;
@@ -492,6 +493,7 @@ namespace Windows
         if (ImGui::Button(ICON_FA_GEAR, ImVec2(35, 0)))
         {
             show_settings = true;
+            is_server_started = INSTALLER::IsEzRemoteServerEnabled();
         }
         if (ImGui::IsItemHovered())
         {
@@ -1844,6 +1846,33 @@ namespace Windows
                 ImGui::PopStyleVar();
                 ImGui::Separator();
 
+                sprintf(id, "%s##settings", lang_strings[STR_RESTART_SERVER]);
+                if (is_server_started)
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 1.0f, 0.0f, 1.0f)); // Green background
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f)); // Black Text
+                }
+                else
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 0.0f, 0.0f, 1.0f)); // Red background
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f)); // White Text
+                }
+                if (ImGui::Button(id, ImVec2(410, 0)))
+                {
+                    Actions::RestartServer();
+                    is_server_started = INSTALLER::IsEzRemoteServerEnabled();
+                }
+                ImGui::SameLine();
+
+                sprintf(id, "%s##settings", lang_strings[STR_STOP_SERVER]);
+                if (ImGui::Button(id, ImVec2(410, 0)))
+                {
+                    Actions::StopServer();
+                    is_server_started = INSTALLER::IsEzRemoteServerEnabled();
+                }
+                ImGui::PopStyleColor(2);
+                ImGui::Separator();
+
                 ImGui::TextColored(colors[ImGuiCol_ButtonHovered], "%s", lang_strings[STR_ALLDEBRID]);
                 ImGui::Separator();
 
@@ -1897,53 +1926,6 @@ namespace Windows
                 }
                 ImGui::PopStyleVar();
                 ImGui::Separator();
-
-                // Google settings
-                /*
-                ImGui::TextColored(colors[ImGuiCol_ButtonHovered], "%s", lang_strings[STR_GOOGLE]);
-                ImGui::Separator();
-
-                ImVec2 id_size, secret_size;
-                id_size = ImGui::CalcTextSize(lang_strings[STR_CLIENT_ID]);
-                secret_size = ImGui::CalcTextSize(lang_strings[STR_CLIENT_SECRET]);
-                width = MAX(id_size.x, secret_size.x) + 45;
-
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
-                ImGui::Text("%s", lang_strings[STR_CLIENT_ID]);
-                ImGui::SameLine();
-                ImGui::SetCursorPosX(width);
-                ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 1.0f));
-
-                sprintf(id, "%s##client_id_input", gg_app.client_id);
-                if (ImGui::Button(id, ImVec2(835-width, 0)))
-                {
-                    ResetImeCallbacks();
-                    ime_single_field = gg_app.client_id;
-                    ime_field_size = 139;
-                    ime_callback = SingleValueImeCallback;
-                    Dialog::initImeDialog(lang_strings[STR_CLIENT_ID], gg_app.client_id, 139, SCE_IME_TYPE_DEFAULT, 1050, 80);
-                    gui_mode = GUI_MODE_IME;
-                }
-                ImGui::Separator();
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
-                ImGui::Text("%s", lang_strings[STR_CLIENT_SECRET]);
-                ImGui::SameLine();
-                ImGui::SetCursorPosX(width);
-                if (strlen(gg_app.client_secret) > 0)
-                    sprintf(id, "%s", "*********************************************##client_secret_input");
-                else
-                    sprintf(id, "%s", "##client_secret_input");
-                if (ImGui::Button(id, ImVec2(835-width, 0)))
-                {
-                    ResetImeCallbacks();
-                    ime_single_field = gg_app.client_secret;
-                    ime_field_size = 63;
-                    ime_callback = SingleValueImeCallback;
-                    Dialog::initImeDialog(lang_strings[STR_CLIENT_SECRET], gg_app.client_secret, 63, SCE_IME_TYPE_DEFAULT, 1050, 80);
-                    gui_mode = GUI_MODE_IME;
-                }
-                ImGui::PopStyleVar();
-                ImGui::Separator(); */
 
                 sprintf(id, "%s##settings", lang_strings[STR_CLOSE]);
                 if (ImGui::Button(id, ImVec2(835, 0)))
@@ -2290,7 +2272,7 @@ namespace Windows
             done = true;
             break;
         case ACTION_INSTALL_REMOTE_PKG:
-            if (!INSTALLER::IsDirectPackageInstallerEnabled())
+            if (!INSTALLER::IsEzRemoteServerEnabled())
             {
                 sprintf(status_message, "%s", lang_strings[STR_DPI_NOT_STARTED_ERROR_MSG]);
             }

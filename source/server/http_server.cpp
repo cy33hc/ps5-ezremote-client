@@ -33,16 +33,12 @@ using namespace httplib;
 
 Server *svr;
 int http_server_port = 9090;
+int http_int_server_port = 6701;
 char compressed_file_path[1024];
 bool web_server_enabled = false;
 
 namespace HttpServer
 {
-    static int FtpCallback(int64_t xfered, void *arg)
-    {
-        return 1;
-    }
-
     std::string dump_headers(const Headers &headers)
     {
         std::string s;
@@ -189,58 +185,6 @@ namespace HttpServer
             free(new_path);
         }
         return 1;
-    }
-
-    static RemoteClient *GetRemoteClient(int site_idx)
-    {
-        RemoteClient *tmp_client = nullptr;
-        RemoteSettings *tmp_settings = &site_settings[sites[site_idx]];
-
-        if (tmp_settings->type == CLIENT_TYPE_HTTP_SERVER)
-        {
-            if (strcmp(remote_settings->http_server_type, HTTP_SERVER_APACHE) == 0)
-                tmp_client = new ApacheClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MS_IIS) == 0)
-                tmp_client = new IISClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_NGINX) == 0)
-                tmp_client = new NginxClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_NPX_SERVE) == 0)
-                tmp_client = new NpxServeClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_RCLONE) == 0)
-                tmp_client = new RCloneClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_ARCHIVEORG) == 0)
-                tmp_client = new ArchiveOrgClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
-                tmp_client = new GithubClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MYRIENT) == 0)
-                tmp_client = new MyrientClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_WEBDAV)
-        {
-            tmp_client = new WebDAVClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_SMB)
-        {
-            tmp_client = new SmbClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_SFTP)
-        {
-            tmp_client = new SFTPClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_FTP)
-        {
-            tmp_client = new FtpClient();
-            FtpClient *ftp_client = (FtpClient*) tmp_client;
-            ftp_client->SetCallbackXferFunction(FtpCallback);
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_NFS)
-        {
-            tmp_client = new NfsClient();
-        }
-
-        tmp_client->Connect(tmp_settings->server, tmp_settings->username, tmp_settings->password, false);
-
-        return tmp_client;
     }
 
     static void DeleteRemoteClient(RemoteClient *tmp_client)
@@ -1013,7 +957,7 @@ namespace HttpServer
             if (site_idx != 98)
             {
                 path = std::string("/") + std::string(req.matches[3]);
-                tmp_client = GetRemoteClient(site_idx);
+                tmp_client = INSTALLER::GetRemoteClient(site_idx);
             }
             else
             {

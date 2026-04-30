@@ -179,6 +179,8 @@ char lang_strings[LANG_STRINGS_NUM][LANG_STR_SIZE] = {
 	"Enable Disk Cache",                                                                              // STR_ENABLE_DISKCACHE_DESC
 	"Cannot perform operation while activity is in progress",                                         // STR_ACTIVITY_IN_PROGRESS_MSG
 	"ezRemote Direct Package Installer payload is not loaded",                                        // STR_ETAHEN_DPI_ERROR_MSG
+	"Start/Restart Server",                                                                           // STR_RESTART_SERVER
+	"Stop Server",                                                                                    // STR_STOP_SERVER
 };
 
 bool needs_extended_font = false;

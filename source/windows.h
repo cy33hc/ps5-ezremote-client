@@ -43,6 +43,7 @@ extern bool file_transfering;
 extern char extract_zip_folder[];
 extern char zip_file_path[];
 extern std::vector<std::string> edit_buffer;
+extern bool is_server_started;
 
 static ImVector<ImRect> s_GroupPanelLabelStack;
 

@@ -288,6 +288,7 @@ int main()
 	CONFIG::LoadConfig();
 	HttpServer::Start();
 	INSTALLER::StartDirectPackageInstaller();
+	INSTALLER::StartEzRemoteServer();
 
 	// Create a window context
 	window = SDL_CreateWindow("main", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, FRAME_WIDTH, FRAME_HEIGHT, 0);

@@ -173,6 +173,8 @@
 	FUNC(STR_ENABLE_DISKCACHE_DESC)         \
 	FUNC(STR_ACTIVITY_IN_PROGRESS_MSG)      \
 	FUNC(STR_DPI_NOT_STARTED_ERROR_MSG)     \
+	FUNC(STR_RESTART_SERVER)                \
+	FUNC(STR_STOP_SERVER)                   \
 
 #define GET_VALUE(x) x,
 #define GET_STRING(x) #x,
@@ -182,7 +184,7 @@ enum
 	FOREACH_STR(GET_VALUE)
 };
 
-#define LANG_STRINGS_NUM 169
+#define LANG_STRINGS_NUM 171
 #define LANG_ID_SIZE 64
 #define LANG_STR_SIZE 384
 extern char lang_identifiers[LANG_STRINGS_NUM][LANG_ID_SIZE];

@@ -20,6 +20,7 @@
 #define TMP_FOLDER_PATH DATA_PATH "/tmp"
 #define CACERT_FILE DATA_PATH "/assets/certs/cacert.pem"
 #define DPI_ELF_PATH DATA_PATH "/ezremote-dpi.elf"
+#define SERVER_ELF_PATH DATA_PATH "/ezremote-server.elf"
 
 #define CONFIG_GLOBAL "Global"
 

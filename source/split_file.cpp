@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "split_file.h"
+#include "dbglogger.h"
 
 SplitFile::SplitFile(const std::string &path, size_t block_size)
 {
@@ -137,7 +138,7 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
     // forward and won't read previously already read blocks. For safety, keeping only current block and 2 previous blocks
     for (int j=0; j < first_block_num - 13; j++)
     {
-        if (this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
+        if (this->file_blocks[j] != nullptr && this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
         {
             if (this->file_blocks[j]->fd != nullptr)
             {
@@ -146,6 +147,8 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
             }
             this->file_blocks[j]->status = BLOCK_STATUS_DELETED;
             remove(this->file_blocks[j]->block_file.c_str());
+            delete (this->file_blocks[j]);
+            this->file_blocks[j] = nullptr;
         }
     }
 
@@ -154,12 +157,14 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
 
 size_t SplitFile::Write(char *buf, size_t buf_size)
 {
-    size_t bytes_written;
+    size_t bytes_written = 0;
     size_t block_space_remaining;
     size_t bytes_to_write;
 
+    dbglogger_log("bytes_to_be_written=%lu", buf_size);
+
     char *p = buf;
-    size_t total_bytes_written = 0;
+    ssize_t total_bytes_written = 0;
     size_t remaining_to_write = buf_size;
 
     if (this->IsClosed())
@@ -169,6 +174,8 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
     {
         block_space_remaining = this->block_size - block_in_progress->size;
         bytes_to_write = MIN(remaining_to_write, block_space_remaining);
+        dbglogger_log("before block=%s, block_size=%lu, bytes_to_write=%lu, bytes_written=%lu, total_bytes_written=%lu, remaining_to_write=%lu, block_space_remaining=%lu",
+            block_in_progress->block_file.c_str(), block_in_progress->size, bytes_to_write, bytes_written, total_bytes_written, remaining_to_write, block_space_remaining);
 
         bytes_written = fwrite(p, 1, bytes_to_write, block_in_progress->fd);
         block_in_progress->size += bytes_written;
@@ -176,15 +183,19 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
         remaining_to_write -= bytes_written;
         block_space_remaining -= bytes_written;
         p += bytes_written;
+        dbglogger_log("after block=%s, block_size=%lu, bytes_to_write=%lu, bytes_written=%lu, total_bytes_written=%lu, remaining_to_write=%lu, block_space_remaining=%lu",
+            block_in_progress->block_file.c_str(), block_in_progress->size, bytes_to_write, bytes_written, total_bytes_written, remaining_to_write, block_space_remaining);
 
         // error if bytes_to_write != bytes_written
         if (bytes_written != bytes_to_write)
         {
+            dbglogger_log("bytes_written != bytes_to_write");
             break;
         }
 
         if (block_space_remaining == 0)
         {
+            dbglogger_log("Create new Block-0");
             fflush(block_in_progress->fd);
             fclose(block_in_progress->fd);
             block_in_progress->fd = nullptr;
@@ -193,7 +204,9 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
 
             sem_post(&this->block_ready);
 
+            dbglogger_log("Create new Block-1");
             block_in_progress = NewBlock();
+            dbglogger_log("Create new Block-2");
         }
     }
 
@@ -202,6 +215,7 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
 
 int SplitFile::Close()
 {
+    dbglogger_log("*******Close************");
     if (this->complete)
         return 0;
 

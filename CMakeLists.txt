@@ -5,8 +5,6 @@ project(ezremote_client)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDONT_HAVE_STRUPR -fstack-protector-all")
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -fpermissive")
 
-add_definitions(-DCPPHTTPLIB_THREAD_POOL_COUNT=16)
-
 add_subdirectory(ps5-ezremote-dpi)
 add_subdirectory(ps5-ezremote-server)
 
@@ -66,6 +64,8 @@ add_executable(ezremote_client.elf
   source/split_file.cpp
 )
 
+target_compile_definitions(ezremote_client.elf PRIVATE CPPHTTPLIB_THREAD_POOL_COUNT=64)
+
 target_link_libraries(ezremote_client.elf
   webp
   webpdemux
@@ -92,6 +92,7 @@ target_link_libraries(ezremote_client.elf
   smb2
   nfs
   minizip
+  xml2
   archive
   json-c
   ssh2

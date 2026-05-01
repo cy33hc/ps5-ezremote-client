@@ -31,6 +31,7 @@
 #include "sfo.h"
 #include "zip_util.h"
 #include "sceSystemService.h"
+#include "dbglogger.h"
 
 namespace Actions
 {
@@ -725,39 +726,6 @@ namespace Actions
                             skipped++;
                     }
                 }
-                else if (Util::EndsWith(path,".zip") || Util::EndsWith(path,".rar") || Util::EndsWith(path,".7z") ||
-                        Util::EndsWith(path,".tar.xz") || Util::EndsWith(path,".tar.gz"))
-                {
-                    ArchiveEntry *entry = ZipUtil::GetPackageEntry(it->path, remoteclient);
-                    if (entry != nullptr)
-                    {
-                        while (entry != nullptr)
-                        {
-                            snprintf(activity_message, 1023, "%s %s", lang_strings[STR_INSTALLING], entry->filename.c_str());
-
-                            ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) malloc(sizeof(ArchivePkgInstallData));
-                            memset(install_data, 0, sizeof(ArchivePkgInstallData));
-
-                            std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
-                            
-                            install_data->archive_entry = entry;
-                            install_data->split_file = sp;
-                            install_data->stop_write_thread = false;
-
-                            int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
-
-                            INSTALLER::InstallArchivePkg(entry->filename, install_data);
-
-                            ArchiveEntry *previos = entry;
-                            entry = ZipUtil::GetNextPackageEntry(entry);
-                            free(previos);
-                        }
-                        success++;
-                    }
-                    else
-                        skipped++;
-                }
                 else
                     skipped++;
             }
@@ -786,41 +754,6 @@ namespace Actions
             multi_selected_remote_files.clear();
             Windows::SetModalMode(false);
         }
-    }
-
-    void *ExtractArchivePkg(void *argp)
-    {
-        ssize_t len;
-        char *buffer = (char*) malloc(ARCHIVE_TRANSFER_SIZE);
-
-        ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) argp;
-        SplitFile *sp = install_data->split_file;
-
-        /* loop over file contents and write to fd */
-        sp->Open();
-        while (!install_data->stop_write_thread)
-        {
-            len = archive_read_data(install_data->archive_entry->archive, buffer, ARCHIVE_TRANSFER_SIZE);
-
-            if (len == 0)
-                break;
-
-            if (len < 0)
-            {
-                sprintf(status_message, "error archive_read_data('%s')", install_data->archive_entry->filename.c_str());
-                break;
-            }
-
-            if (sp->Write(buffer, len) != len)
-            {
-                sprintf(status_message, "error write('%s')", install_data->archive_entry->filename.c_str());
-                break;;
-            }
-        }
-
-        sp->Close();
-        free(buffer);
-        return NULL;
     }
 
     void *DownloadSplitPkg(void *argp)
@@ -888,37 +821,6 @@ namespace Actions
                         else
                             skipped++;
                     }
-                }
-                else if (Util::EndsWith(path,".zip") || Util::EndsWith(path,".rar") || Util::EndsWith(path,".7z") ||
-                         Util::EndsWith(path,".tar.xz") || Util::EndsWith(path,".tar.gz") || Util::EndsWith(path,".tar.bz2") )
-                {
-                    ArchiveEntry *entry = ZipUtil::GetPackageEntry(it->path);
-                    if (entry != nullptr)
-                    {
-                        while (entry != nullptr)
-                        {
-                            ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) malloc(sizeof(ArchivePkgInstallData));
-                            memset(install_data, 0, sizeof(ArchivePkgInstallData));
-
-                            std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
-                            
-                            install_data->archive_entry = entry;
-                            install_data->split_file = sp;
-                            install_data->stop_write_thread = false;
-
-                            int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
-
-                            INSTALLER::InstallArchivePkg(entry->filename, install_data);
-
-                            ArchiveEntry *previous = entry;
-                            entry = ZipUtil::GetNextPackageEntry(entry);
-                            free(previous);
-                        }
-                        success++;
-                    }
-                    else
-                        skipped++;
                 }
                 else
                     skipped++;

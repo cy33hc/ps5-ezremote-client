@@ -1,4 +1,5 @@
 #include <string>
+#include <shared_mutex>
 #include <json-c/json.h>
 #include <server/range_parser.h>
 #include "http/httplib.h"
@@ -28,6 +29,8 @@
 #define FAILURE_MSG "{ \"result\": { \"success\": false, \"error\": \"%s\" } }"
 #define SUCCESS_MSG_LEN 48
 #define PKG_INITIAL_REQUEST_SIZE 8388608ul
+
+std::shared_mutex mutex_;
 
 using namespace httplib;
 
@@ -988,28 +991,6 @@ namespace HttpServer
                 });
         });
 
-        svr->Get("/archive_inst/(.*)", [&](const Request &req, Response &res)
-        {
-            std::string hash = req.matches[1];
-            ArchivePkgInstallData *pkg_data = INSTALLER::GetArchivePkgInstallData(hash);
-
-            res.status = 206;
-            size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
-            std::pair<ssize_t, ssize_t> range = req.ranges[0];
-            res.set_content_provider(
-                range_len, "application/octet-stream",
-                [pkg_data, range, range_len](size_t offset, size_t length, DataSink &sink) {
-                    char *buf = (char*) malloc(range_len);
-                    size_t bytes_read = pkg_data->split_file->Read(buf, range_len, range.first);
-                    sink.write(buf, bytes_read);
-                    free(buf);
-                    return true;
-                },
-                [](bool success) {
-                    return true;
-                });
-        });
-
         svr->Get("/split_inst/(.*)", [&](const Request &req, Response &res)
         {
             std::string hash = req.matches[1];
@@ -1193,48 +1174,13 @@ namespace HttpServer
                     Actions::InstallUrlPkg();
                 }
             }
-            else
-            {
-                ArchiveEntry *entry = ZipUtil::GetPackageEntry(path, baseclient);
-                if (entry != nullptr)
-                {
-                    ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) malloc(sizeof(ArchivePkgInstallData));
-                    memset(install_data, 0, sizeof(ArchivePkgInstallData));
-
-                    std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
-                    
-                    install_data->archive_entry = entry;
-                    install_data->split_file = sp;
-                    install_data->stop_write_thread = false;
-
-                    int ret = pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);
-
-                    ret = INSTALLER::InstallArchivePkg(entry->filename, install_data, true);
-
-                    if (ret == 0)
-                    {
-                        failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
-                        activity_inprogess = false;
-                        file_transfering = false;
-                        free(install_data);
-                        Windows::SetModalMode(false);
-                        return;
-                    }
-                }
-                else
-                {
-                    failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
-                    activity_inprogess = false;
-                    file_transfering = false;
-                    Windows::SetModalMode(false);
-                    return;
-                }
-            }
-            success(res); });
+            success(res);
+        });
 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
-                 { svr->stop(); });
+        {
+            svr->stop();
+        });
 
         svr->set_error_handler([](const Request & /*req*/, Response &res)
         {

@@ -120,7 +120,6 @@ namespace Actions
     int DownloadAndInstallPkg(const std::string &filename, pkg_header *header);
     void CreateLocalFile(char *filename);
     void CreateRemoteFile(char *filename);
-    void *ExtractArchivePkg(void *argp);
     void *DownloadSplitPkg(void *argp);
     void RestartServer();
     void StopServer();

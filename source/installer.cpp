@@ -186,16 +186,11 @@ namespace INSTALLER
 		json_object_object_add(history_item_obj, "path", json_object_new_string(path.c_str()));
 		json_object_object_add(history_item_obj, "username", json_object_new_string(settings->username));
 		json_object_object_add(history_item_obj, "password", json_object_new_string(settings->password));
+		json_object_object_add(history_item_obj, "type", json_object_new_int(settings->type));
 
-		std::string url = settings->server;
-		size_t pos = url.find("://");
-        if (pos != std::string::npos)
+		if (settings->type == CLIENT_TYPE_HTTP_SERVER)
 		{
-			std::string type = url.substr(0, pos);
-			if (type.compare("http") == 0 || type.compare("https") == 0)
-			{
-				json_object_object_add(history_item_obj, "http_server_type", json_object_new_string(settings->http_server_type));
-			}
+			json_object_object_add(history_item_obj, "http_server_type", json_object_new_string(settings->http_server_type));
 		}
 
 		const char *params_str = json_object_to_json_string(history_item_obj);
@@ -347,7 +342,7 @@ namespace INSTALLER
 		return true;
 	}
 
-	int InstallRemotePkg(const std::string &url, pkg_header *header, std::string title, bool prompt)
+	int InstallRemotePkg(const std::string &url, pkg_header *header, std::string title)
 	{
 		if (url.empty())
 			return 0;
@@ -357,49 +352,33 @@ namespace INSTALLER
 		std::string display_title = title.length() > 0 ? title : cid;
 
 		int ret;	
-		if (prompt)
+
+		PlayGoInfo playgo_info;
+		SceAppInstallPkgInfo pkg_info;
+		memset(&playgo_info, 0, sizeof(playgo_info));
+		
+		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+		}	
+
+		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+		}	
+
+		MetaInfo metainfo = (MetaInfo){
+			.uri = url.c_str(),
+			.ex_uri = "",
+			.playgo_scenario_id = "",
+			.content_id = "",
+			.content_name = display_title.c_str(),
+			.icon_url = ""
+		};
+
+		ret = InstallWithDirectPackageInstaller(url);
+		if (ret != 0)
 		{
-			PlayGoInfo playgo_info;
-			SceAppInstallPkgInfo pkg_info;
-			memset(&playgo_info, 0, sizeof(playgo_info));
-			
-			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
-				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
-			}	
-
-			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
-				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
-				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
-			}	
-
-			MetaInfo metainfo = (MetaInfo){
-				.uri = url.c_str(),
-				.ex_uri = "",
-				.playgo_scenario_id = "",
-				.content_id = "",
-				.content_name = display_title.c_str(),
-				.icon_url = ""
-			};
-
-			ret = InstallWithDirectPackageInstaller(url);
-			if (ret != 0)
-			{
-				return 0;
-			}
-
-		}
-		else
-		{
-			BgProgressCheck *bg_check_data = (BgProgressCheck *)malloc(sizeof(BgProgressCheck));
-			memset(bg_check_data, 0, sizeof(BgProgressCheck));
-			bg_check_data->archive_pkg_data = nullptr;
-			bg_check_data->split_pkg_data = nullptr;
-			bg_check_data->url = url;
-			bg_check_data->title = display_title;
-			snprintf(bg_check_data->content_id, sizeof(bg_check_data->content_id), "%s", header->pkg_content_id);
-			bg_check_data->hash = "";
-			ret = pthread_create(&bk_install_thid, NULL, CheckBgInstallTaskThread, bg_check_data);
-			return 1;
+			return 0;
 		}
 
 		return 1;
@@ -1041,7 +1020,7 @@ namespace INSTALLER
 		return ret;
 	}
 
-	bool IsEzRemoteServerEnabled()
+	std::string EzRemoteServerVersion()
 	{
 		CHTTPClient::HttpResponse res;
         CHTTPClient::HeadersMap headers;
@@ -1055,10 +1034,12 @@ namespace INSTALLER
         {
 			if (HTTP_SUCCESS(res.iCode))
             {
-				return true;
+				std::string version = std::string(res.strBody.data(), res.strBody.size());
+				return version;
 			}
 		}
-		return false;
+
+		return "";
 	}
 
 	int StartEzRemoteServer()
@@ -1074,7 +1055,7 @@ namespace INSTALLER
 		struct sockaddr_in sockaddr_in;
 		unsigned short server_port = 9021;
 	
-		if (IsEzRemoteServerEnabled())
+		if (!EzRemoteServerVersion().empty())
 			return 0;
 
 		filefd = open(SERVER_ELF_PATH, O_RDONLY);

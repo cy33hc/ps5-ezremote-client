@@ -42,10 +42,12 @@ static ime_callback_t ime_cancelled = nullptr;
 static std::vector<std::string> *ime_multi_field;
 static char *ime_single_field;
 static int ime_field_size;
+static bool show_ezremote_server_warning;
 
 static char txt_http_server_port[6];
 
 bool is_server_started = false;
+bool ezremote_server_version_match = true;
 bool handle_updates = false;
 uint64_t bytes_transfered;
 uint64_t bytes_to_download;
@@ -132,6 +134,8 @@ namespace Windows
         overwrite_type = OVERWRITE_PROMPT;
         local_paste_files.clear();
         remote_paste_files.clear();
+        ezremote_server_version_match = (INSTALLER::EzRemoteServerVersion().compare(EZREMOTE_SERVER_REQUIRED_VERSION) == 0);
+        show_ezremote_server_warning = !ezremote_server_version_match;
 
         Actions::RefreshLocalFiles(false);
     }
@@ -444,13 +448,13 @@ namespace Windows
 
         if (ImGui::Checkbox("###enable_rpi", &remote_settings->enable_rpi))
         {
-            if (remote_settings->type == CLIENT_TYPE_SFTP)
+            /*if (remote_settings->type == CLIENT_TYPE_SFTP)
             {
                 if (remote_settings->enable_rpi)
                     remote_settings->enable_disk_cache = true;
                 else
                 remote_settings->enable_disk_cache = false;
-            }
+            }*/
 
             CONFIG::SaveConfig();
         }
@@ -471,8 +475,8 @@ namespace Windows
 
         if (ImGui::Checkbox("###enable_disk_cache", &remote_settings->enable_disk_cache))
         {
-            if (remote_settings->type == CLIENT_TYPE_SFTP)
-                remote_settings->enable_disk_cache = true;
+            /*if (remote_settings->type == CLIENT_TYPE_SFTP)
+                remote_settings->enable_disk_cache = true;*/
 
             CONFIG::SaveConfig();
         }
@@ -493,7 +497,7 @@ namespace Windows
         if (ImGui::Button(ICON_FA_GEAR, ImVec2(35, 0)))
         {
             show_settings = true;
-            is_server_started = INSTALLER::IsEzRemoteServerEnabled();
+            is_server_started = !INSTALLER::EzRemoteServerVersion().empty();
         }
         if (ImGui::IsItemHovered())
         {
@@ -1418,7 +1422,10 @@ namespace Windows
 
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 300);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
-            if (ImGui::Button(lang_strings[STR_CLOSE], ImVec2(100, 0)))
+
+            char id[128];
+            sprintf(id, "%s##prodialog", lang_strings[STR_CLOSE]);
+            if (ImGui::Button(id, ImVec2(100, 0)))
             {
                 SetModalMode(false);
                 selected_action = ACTION_NONE;
@@ -1719,6 +1726,56 @@ namespace Windows
         }
     }
 
+    void ShowWarningDialog()
+    {
+        if (show_ezremote_server_warning)
+        {
+            ImGuiIO &io = ImGui::GetIO();
+            (void)io;
+            ImGuiStyle *style = &ImGui::GetStyle();
+            ImVec4 *colors = style->Colors;
+
+            SetModalMode(true);
+            ImGui::OpenPopup(lang_strings[STR_WARNING]);
+
+            ImGui::SetNextWindowPos(ImVec2(600, 350));
+            ImGui::SetNextWindowSizeConstraints(ImVec2(720, 80), ImVec2(720, 500), NULL, NULL);
+            if (ImGui::BeginPopupModal(lang_strings[STR_WARNING], NULL, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                ImVec2 cur_pos = ImGui::GetCursorPos();
+                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 700);
+                ImGui::Text("%s %s %s", lang_strings[STR_WARNING_MSG_1], lang_strings[STR_WARNING_MSG_2], lang_strings[STR_WARNING_MSG_3]);
+                ImGui::PopTextWrapPos();
+
+                ImGui::Separator();
+
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 285);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+
+                char id[128];
+                sprintf(id, "%s##warning", lang_strings[STR_CLOSE]);
+                if (ImGui::Button(id, ImVec2(150, 0)))
+                {
+                    show_ezremote_server_warning = false;
+                    SetModalMode(false);
+                }
+
+                if (ImGui::IsWindowAppearing())
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+                if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
+                {
+                    show_ezremote_server_warning = false;
+                    SetModalMode(false);
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::EndPopup();
+            }
+        }
+    }
+
     void ShowSettingsDialog()
     {
         if (show_settings)
@@ -1860,7 +1917,7 @@ namespace Windows
                 if (ImGui::Button(id, ImVec2(410, 0)))
                 {
                     Actions::RestartServer();
-                    is_server_started = INSTALLER::IsEzRemoteServerEnabled();
+                    is_server_started = !INSTALLER::EzRemoteServerVersion().empty();
                 }
                 ImGui::SameLine();
 
@@ -1868,7 +1925,7 @@ namespace Windows
                 if (ImGui::Button(id, ImVec2(410, 0)))
                 {
                     Actions::StopServer();
-                    is_server_started = INSTALLER::IsEzRemoteServerEnabled();
+                    is_server_started = !INSTALLER::EzRemoteServerVersion().empty();
                 }
                 ImGui::PopStyleColor(2);
                 ImGui::Separator();
@@ -2090,6 +2147,7 @@ namespace Windows
             ShowSettingsDialog();
             ShowImageDialog();
             ShowPackageInfoDialog();
+            ShowWarningDialog();
         }
         ImGui::End();
     }
@@ -2272,7 +2330,7 @@ namespace Windows
             done = true;
             break;
         case ACTION_INSTALL_REMOTE_PKG:
-            if (!INSTALLER::IsEzRemoteServerEnabled())
+            if (INSTALLER::EzRemoteServerVersion().empty())
             {
                 sprintf(status_message, "%s", lang_strings[STR_DPI_NOT_STARTED_ERROR_MSG]);
             }

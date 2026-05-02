@@ -1139,61 +1139,73 @@ namespace HttpServer
             }
             baseclient->Head(path, &header, sizeof(pkg_header));
 
-            if (BE32(header.pkg_magic) == 0x7F434E54)
+            FileHost::AddCacheDownloadUrl(hash, download_url);
+            std::string title = INSTALLER::GetRemotePkgTitle(baseclient, path, &header);
+
+            if (enable_rpi && !use_disk_cache)
             {
-                bytes_to_download = header.pkg_content_size;
-                FileHost::AddCacheDownloadUrl(hash, download_url);
-                std::string title = INSTALLER::GetRemotePkgTitle(baseclient, path, &header);
+                json_object *history_item_obj = json_object_new_object();
+                json_object_object_add(history_item_obj, "hash", json_object_new_string(hash.c_str()));
+                json_object_object_add(history_item_obj, "url", json_object_new_string(host.c_str()));
+                json_object_object_add(history_item_obj, "path", json_object_new_string(path.c_str()));
+                json_object_object_add(history_item_obj, "username", json_object_new_string(""));
+                json_object_object_add(history_item_obj, "password", json_object_new_string(""));
+                json_object_object_add(history_item_obj, "type", json_object_new_int(CLIENT_TYPE_FILEHOST));
 
-                if (enable_rpi && !use_disk_cache)
+                const char *params_str = json_object_to_json_string(history_item_obj);
+
+                CHTTPClient::HttpResponse resp;
+                CHTTPClient::HeadersMap headers;
+                CHTTPClient tmp_client([](const std::string& log){});
+                tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+                tmp_client.SetCertificateFile(CACERT_FILE);
+                headers["Content-Type"] = "application/json";
+
+                std::string store_bg_install_data_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/store_bg_install_data";
+                if (tmp_client.Post(store_bg_install_data_url, headers, params_str, resp))
                 {
-                    std::string remote_install_url = std::string("http://localhost:") + std::to_string(http_server_port) + "/rmt_inst/Site%2099/" + hash;
-                    int rc = INSTALLER::InstallRemotePkg(remote_install_url, &header, title, false);
-                    if (rc == 0)
+                    if (HTTP_SUCCESS(resp.iCode))
                     {
-                        failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
-                        activity_inprogess = false;
-                        file_transfering = false;
-                        Windows::SetModalMode(false);
-                        return;
-                    }
-                }
-                else if (enable_rpi && use_disk_cache)
-                {
-                    SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
-                    memset(install_data, 0, sizeof(SplitPkgInstallData));
-
-                    std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
-                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
-
-                    install_data->split_file = sp;
-                    install_data->remote_client = baseclient;
-                    install_data->path = path;
-                    baseclient->Size(path, &install_data->size);
-                    install_data->stop_write_thread = false;
-                    install_data->delete_client = true;
-
-                    int ret = pthread_create(&install_data->thread, NULL, Actions::DownloadSplitPkg, install_data);
-
-                    ret = INSTALLER::InstallSplitPkg(download_url, install_data, true);
-
-                    if (ret == 0)
-                    {
-                        failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
-                        activity_inprogess = false;
-                        file_transfering = false;
-                        Windows::SetModalMode(false);
-                        return;
                     }
                 }
                 else
                 {
-                    install_pkg_url.enable_rpi = enable_rpi;
-                    install_pkg_url.enable_alldebrid = use_alldebrid;
-                    install_pkg_url.enable_realdebrid = use_realdebrid;
-                    install_pkg_url.enable_disk_cache = use_disk_cache;
-                    snprintf(install_pkg_url.url, 511, "%s", url.c_str());
-                    Actions::InstallUrlPkg();
+                    failed(res, 200, "Could not save host data for background install");
+                }
+                sleep(2);
+
+                std::string remote_install_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
+                int rc = INSTALLER::InstallRemotePkg(remote_install_url, &header, title);
+                activity_inprogess = false;
+                file_transfering = false;
+                Windows::SetModalMode(false);
+            }
+            else if (enable_rpi && use_disk_cache)
+            {
+                SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
+                memset(install_data, 0, sizeof(SplitPkgInstallData));
+
+                std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
+                SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
+
+                install_data->split_file = sp;
+                install_data->remote_client = baseclient;
+                install_data->path = path;
+                baseclient->Size(path, &install_data->size);
+                install_data->stop_write_thread = false;
+                install_data->delete_client = true;
+
+                int ret = pthread_create(&install_data->thread, NULL, Actions::DownloadSplitPkg, install_data);
+
+                ret = INSTALLER::InstallSplitPkg(download_url, install_data, true);
+
+                if (ret == 0)
+                {
+                    failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
+                    activity_inprogess = false;
+                    file_transfering = false;
+                    Windows::SetModalMode(false);
+                    return;
                 }
             }
             else
@@ -1234,7 +1246,9 @@ namespace HttpServer
                     return;
                 }
             }
-            success(res); });
+            success(res);
+    
+        });
 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
         {

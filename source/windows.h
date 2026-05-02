@@ -44,6 +44,7 @@ extern char extract_zip_folder[];
 extern char zip_file_path[];
 extern std::vector<std::string> edit_buffer;
 extern bool is_server_started;
+extern bool ezremote_server_version_match;
 
 static ImVector<ImRect> s_GroupPanelLabelStack;
 

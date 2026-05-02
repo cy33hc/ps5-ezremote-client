@@ -710,14 +710,14 @@ namespace Actions
                                 {
                                     std::string url = INSTALLER::getRemoteUrl(it->path, true);
                                     std::string title = INSTALLER::GetRemotePkgTitle(remoteclient, it->path, &header);
-                                    if (INSTALLER::InstallRemotePkg(url, &header, title, true) == 0)
+                                    if (INSTALLER::InstallRemotePkg(url, &header, title) == 0)
                                         failed++;
                                     else
                                         success++;
 
                                     if (it != files.end())
                                     {
-                                        sleep(3);
+                                        sleep(2);
                                     }
                                 }
                             }

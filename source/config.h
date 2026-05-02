@@ -91,6 +91,8 @@
 #define HTTP_SERVER_MYRIENT "Myrient"
 #define HTTP_SERVER_GITHUB "Github"
 
+#define EZREMOTE_SERVER_REQUIRED_VERSION "1.00"
+
 #define MAX_EDIT_FILE_SIZE 32768
 
 struct GoogleAccountInfo
@@ -159,6 +161,7 @@ extern bool show_hidden_files;
 extern char alldebrid_api_key[64];
 extern char realdebrid_api_key[64];
 extern char temp_folder[256];
+extern std::string ezremote_server_version;
 
 namespace CONFIG
 {

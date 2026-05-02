@@ -6,6 +6,7 @@
 #include <mutex>
 #include <semaphore.h>
 #include <pthread.h>
+#include <shared_mutex>
 
 enum FileBlockStatus
 {
@@ -36,13 +37,15 @@ public:
 
 private:
     std::vector<FileBlock*> file_blocks;
-    size_t write_offset;
+    size_t write_offset = 0;
     size_t block_size;
+    size_t read_offset;
     std::string path;
     int write_error;
     bool complete;
     FileBlock *block_in_progress;
     sem_t block_ready;
+    std::shared_mutex mutex_;
 
     FileBlock *NewBlock();
 };

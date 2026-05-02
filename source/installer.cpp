@@ -252,9 +252,8 @@ namespace INSTALLER
 	void *CleanSplitPkgDataThread(void *argp)
 	{
 		SplitPkgInstallData *split_pkg_data = (SplitPkgInstallData*)argp;
-		split_pkg_data->stop_write_thread = true;
-		split_pkg_data->split_file->Close();
-		sleep(3);
+		if (!split_pkg_data->split_file->IsClosed())
+			split_pkg_data->split_file->Close();
 		pthread_join(split_pkg_data->thread, NULL);
 		delete (split_pkg_data->split_file);
 		if (split_pkg_data->delete_client)
@@ -268,6 +267,28 @@ namespace INSTALLER
 		bool completed = false;
 		BgProgressCheck *bg_check_data = (BgProgressCheck *)argp;
 		int ret;
+
+		PlayGoInfo playgo_info;
+		SceAppInstallPkgInfo pkg_info;
+		memset(&playgo_info, 0, sizeof(playgo_info));
+		
+		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+		}	
+
+		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+		}	
+
+		MetaInfo metainfo = (MetaInfo){
+			.uri = bg_check_data->url.c_str(),
+			.ex_uri = "",
+			.playgo_scenario_id = "",
+			.content_id = "",
+			.content_name = bg_check_data->title.c_str(),
+			.icon_url = ""
+		};
 
 		ret = InstallWithDirectPackageInstaller(bg_check_data->url);
 		if (ret != 0)
@@ -318,6 +339,28 @@ namespace INSTALLER
 		int ret;	
 		if (prompt)
 		{
+			PlayGoInfo playgo_info;
+			SceAppInstallPkgInfo pkg_info;
+			memset(&playgo_info, 0, sizeof(playgo_info));
+			
+			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+			}	
+
+			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+			}	
+
+			MetaInfo metainfo = (MetaInfo){
+				.uri = url.c_str(),
+				.ex_uri = "",
+				.playgo_scenario_id = "",
+				.content_id = "",
+				.content_name = display_title.c_str(),
+				.icon_url = ""
+			};
+
 			ret = InstallWithDirectPackageInstaller(url);
 			if (ret != 0)
 			{
@@ -389,6 +432,19 @@ namespace INSTALLER
 		if (strncmp(path.c_str(), "/data/", 6) == 0)
 			snprintf(filepath, 1023, "/user%s", path.c_str());
 
+		PlayGoInfo playgo_info;
+		SceAppInstallPkgInfo pkg_info;
+		memset(&playgo_info, 0, sizeof(playgo_info));
+		
+		for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+			strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+		}
+
+		for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+			strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+			strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+		}
+
 		std::string title;
 		if (BE32(header->pkg_magic) == PS4_PKG_MAGIC)
 		{
@@ -398,6 +454,14 @@ namespace INSTALLER
 		{
 			title = filename;
 		}
+		MetaInfo metainfo = (MetaInfo){
+			.uri = filepath,
+			.ex_uri = "",
+			.playgo_scenario_id = "",
+			.content_id = "",
+			.content_name = title.c_str(),
+			.icon_url = ""
+		};
 
 		ret = InstallWithDirectPackageInstaller(filepath);
 		if (ret != 0)
@@ -623,6 +687,28 @@ namespace INSTALLER
 
 		if (!bg)
 		{
+			PlayGoInfo playgo_info;
+			SceAppInstallPkgInfo pkg_info;
+			memset(&playgo_info, 0, sizeof(playgo_info));
+			
+			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+			}
+
+			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+			}
+
+			MetaInfo metainfo = (MetaInfo){
+				.uri = full_url.c_str(),
+				.ex_uri = "",
+				.playgo_scenario_id = "",
+				.content_id = "",
+				.content_name = display_title.c_str(),
+				.icon_url = ""
+			};
+
 			ret = InstallWithDirectPackageInstaller(full_url);
 			if (ret)
 			{
@@ -640,7 +726,10 @@ namespace INSTALLER
 			{
 				ret = sceAppInstUtilGetInstallStatus((const char *)header.pkg_content_id, &progress_info);
 				if (ret || (progress_info.error_info.error_code != 0))
+				{
+					dbglogger_log("error_code=%d", progress_info.error_info.error_code);
 					return 0;
+				}
 	
 				bytes_to_download = progress_info.total_size;
 				bytes_transfered = progress_info.downloaded_size;
@@ -661,7 +750,7 @@ namespace INSTALLER
 		}
 		ret = 1;
 	finish:
-		ret = pthread_create(&bk_clean_thid, NULL, CleanSplitPkgDataThread, pkg_data);
+		pthread_create(&bk_clean_thid, NULL, CleanSplitPkgDataThread, pkg_data);
 		RemoveSplitPkgInstallData(hash);
 		activity_inprogess = false;
 		file_transfering = false;

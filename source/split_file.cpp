@@ -152,6 +152,7 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
         }
     }
 
+    this->read_offset = offset + total_bytes_read;
     return total_bytes_read;
 }
 
@@ -160,8 +161,6 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
     size_t bytes_written = 0;
     size_t block_space_remaining;
     size_t bytes_to_write;
-
-    dbglogger_log("bytes_to_be_written=%lu", buf_size);
 
     char *p = buf;
     ssize_t total_bytes_written = 0;
@@ -174,8 +173,6 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
     {
         block_space_remaining = this->block_size - block_in_progress->size;
         bytes_to_write = MIN(remaining_to_write, block_space_remaining);
-        dbglogger_log("before block=%s, block_size=%lu, bytes_to_write=%lu, bytes_written=%lu, total_bytes_written=%lu, remaining_to_write=%lu, block_space_remaining=%lu",
-            block_in_progress->block_file.c_str(), block_in_progress->size, bytes_to_write, bytes_written, total_bytes_written, remaining_to_write, block_space_remaining);
 
         bytes_written = fwrite(p, 1, bytes_to_write, block_in_progress->fd);
         block_in_progress->size += bytes_written;
@@ -183,19 +180,15 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
         remaining_to_write -= bytes_written;
         block_space_remaining -= bytes_written;
         p += bytes_written;
-        dbglogger_log("after block=%s, block_size=%lu, bytes_to_write=%lu, bytes_written=%lu, total_bytes_written=%lu, remaining_to_write=%lu, block_space_remaining=%lu",
-            block_in_progress->block_file.c_str(), block_in_progress->size, bytes_to_write, bytes_written, total_bytes_written, remaining_to_write, block_space_remaining);
 
         // error if bytes_to_write != bytes_written
         if (bytes_written != bytes_to_write)
         {
-            dbglogger_log("bytes_written != bytes_to_write");
             break;
         }
 
         if (block_space_remaining == 0)
         {
-            dbglogger_log("Create new Block-0");
             fflush(block_in_progress->fd);
             fclose(block_in_progress->fd);
             block_in_progress->fd = nullptr;
@@ -204,23 +197,22 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
 
             sem_post(&this->block_ready);
 
-            dbglogger_log("Create new Block-1");
             block_in_progress = NewBlock();
-            dbglogger_log("Create new Block-2");
         }
     }
+    this->write_offset += total_bytes_written;
 
     return total_bytes_written;
 }
 
 int SplitFile::Close()
 {
+    std::unique_lock<std::shared_mutex> lock(mutex_);
     dbglogger_log("*******Close************");
     if (this->complete)
         return 0;
 
     this->complete = true;
-    sleep(1);
 
     if (block_in_progress->fd != nullptr)
     {
@@ -233,6 +225,23 @@ int SplitFile::Close()
     this->file_blocks.push_back(block_in_progress);
     sem_post(&this->block_ready);
 
+    // Wait until file is fully read, if file isn't full read
+    // in 5 mins then go ahead and delete all file chunks
+    int retries = 180;
+    while (this->read_offset != this->write_offset && retries > 0)
+    {
+        dbglogger_log("wait for read to complete on split file read_offset=%lu, write_offset=%lu", this->read_offset, this->write_offset);
+        sleep(1);
+        retries--;
+    }
+
+    for (size_t j = 0; j < this->file_blocks.size(); j++)
+    {
+        if (this->file_blocks[j] != nullptr && this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
+        {
+            remove(this->file_blocks[j]->block_file.c_str());
+        }
+    }
     return 0;
 }
 

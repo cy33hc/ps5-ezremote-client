@@ -192,7 +192,6 @@ namespace INSTALLER
 		ArchivePkgInstallData *archive_pkg_data = (ArchivePkgInstallData*)argp;
 		archive_pkg_data->stop_write_thread = true;
 		archive_pkg_data->split_file->Close();
-		sleep(3);
 		pthread_join(archive_pkg_data->thread, NULL);
 		delete (archive_pkg_data->split_file);
 		free(archive_pkg_data);

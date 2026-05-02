@@ -149,6 +149,7 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
         }
     }
 
+    this->read_offset = offset + total_bytes_read;
     return total_bytes_read;
 }
 
@@ -196,6 +197,7 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
             block_in_progress = NewBlock();
         }
     }
+    this->write_offset += total_bytes_written;
 
     return total_bytes_written;
 }
@@ -219,6 +221,29 @@ int SplitFile::Close()
     this->file_blocks.push_back(block_in_progress);
     sem_post(&this->block_ready);
 
+    // Wait until file is fully read, if file isn't full read
+    // in 5 mins then go ahead and delete all file chunks
+    int retries = 180;
+    while (this->read_offset != this->write_offset && retries > 0)
+    {
+        sleep(1);
+        retries--;
+    }
+
+    for (size_t j = 0; j < this->file_blocks.size(); j++)
+    {
+        if (this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
+        {
+            if (this->file_blocks[j]->fd != nullptr)
+            {
+                fclose(this->file_blocks[j]->fd);
+                this->file_blocks[j]->fd = nullptr;
+            }
+            this->file_blocks[j]->status = BLOCK_STATUS_DELETED;
+            remove(this->file_blocks[j]->block_file.c_str());
+        }
+        delete (this->file_blocks[j]);
+    }
     return 0;
 }
 

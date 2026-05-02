@@ -91,6 +91,7 @@ target_link_libraries(ezremote_client.elf
   smb2
   nfs
   minizip
+  xml2
   archive
   json-c
   ssh2

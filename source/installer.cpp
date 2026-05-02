@@ -38,6 +38,7 @@
 
 struct BgProgressCheck
 {
+	ArchivePkgInstallData *archive_pkg_data;
 	SplitPkgInstallData *split_pkg_data;
 	content_id_t content_id;
 	std::string hash;
@@ -47,6 +48,7 @@ struct BgProgressCheck
 
 static bool sceAppInst_done = false;
 
+static std::map<std::string, ArchivePkgInstallData *> archive_pkg_install_data_list;
 static std::map<std::string, SplitPkgInstallData *> split_pkg_install_data_list;
 
 namespace INSTALLER
@@ -249,6 +251,18 @@ namespace INSTALLER
 		return "";
 	}
 
+	void *CleanArchivePkgDataThread(void *argp)
+	{
+		ArchivePkgInstallData *archive_pkg_data = (ArchivePkgInstallData*)argp;
+		archive_pkg_data->stop_write_thread = true;
+		if (!archive_pkg_data->split_file->IsClosed())
+			archive_pkg_data->split_file->Close();
+		pthread_join(archive_pkg_data->thread, NULL);
+		delete (archive_pkg_data->split_file);
+		free(archive_pkg_data);
+		return nullptr;
+	}
+
 	void *CleanSplitPkgDataThread(void *argp)
 	{
 		SplitPkgInstallData *split_pkg_data = (SplitPkgInstallData*)argp;
@@ -310,7 +324,13 @@ namespace INSTALLER
 		}
 
 	finish:
-		if (bg_check_data->split_pkg_data != nullptr)
+		if (bg_check_data->archive_pkg_data != nullptr)
+		{
+			ret = pthread_create(&bk_clean_thid, NULL, CleanArchivePkgDataThread, bg_check_data->archive_pkg_data);
+			RemoveArchivePkgInstallData(bg_check_data->hash);
+			free(bg_check_data);
+		}
+		else if (bg_check_data->split_pkg_data != nullptr)
 		{
 			ret = pthread_create(&bk_clean_thid, NULL, CleanSplitPkgDataThread, bg_check_data->split_pkg_data);
 			RemoveSplitPkgInstallData(bg_check_data->hash);
@@ -367,28 +387,12 @@ namespace INSTALLER
 				return 0;
 			}
 
-			/*
-			file_transfering = true;
-			sprintf(activity_message, "%s", lang_strings[STR_WAIT_FOR_INSTALL_MSG]);
-			bytes_to_download = header->pkg_content_size;
-			bytes_transfered = 0;
-			prev_tick = Util::GetTick();
-	
-			SceAppInstallStatusInstalled progress_info;
-			while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
-			{
-				ret = sceAppInstUtilGetInstallStatus((const char *)header->pkg_content_id, &progress_info);
-				if (ret || (progress_info.error_info.error_code != 0))
-					return 0;
-				bytes_to_download = progress_info.total_size;
-				bytes_transfered = progress_info.downloaded_size;
-				sceSystemServicePowerTick();
-			} */
 		}
 		else
 		{
 			BgProgressCheck *bg_check_data = (BgProgressCheck *)malloc(sizeof(BgProgressCheck));
 			memset(bg_check_data, 0, sizeof(BgProgressCheck));
+			bg_check_data->archive_pkg_data = nullptr;
 			bg_check_data->split_pkg_data = nullptr;
 			bg_check_data->url = url;
 			bg_check_data->title = display_title;
@@ -654,6 +658,105 @@ namespace INSTALLER
 		return true;
 	}
 
+	ArchivePkgInstallData *GetArchivePkgInstallData(const std::string &hash)
+	{
+		return archive_pkg_install_data_list[hash];
+	}
+
+	void AddArchivePkgInstallData(const std::string &hash, ArchivePkgInstallData *pkg_data)
+	{
+		std::pair<std::string, ArchivePkgInstallData *> pair = std::make_pair(hash, pkg_data);
+		archive_pkg_install_data_list.erase(hash);
+		archive_pkg_install_data_list.insert(pair);
+	}
+
+	void RemoveArchivePkgInstallData(const std::string &hash)
+	{
+		archive_pkg_install_data_list.erase(hash);
+	}
+
+	bool InstallArchivePkg(const std::string &path, ArchivePkgInstallData *pkg_data, bool bg)
+	{
+		int ret = 0;
+		pkg_header header;
+		pkg_data->split_file->Read((char *)&header, sizeof(pkg_header), 0);
+
+		std::string cid = std::string((char *)header.pkg_content_id);
+		cid = cid.substr(cid.find_first_of("-") + 1, 9);
+		std::string display_title = cid;
+
+		std::string hash = Util::UrlHash(path);
+		std::string full_url = std::string("http://localhost:") + std::to_string(http_server_port) + "/archive_inst/" + hash;
+		AddArchivePkgInstallData(hash, pkg_data);
+
+		if (!bg)
+		{
+			PlayGoInfo playgo_info;
+			SceAppInstallPkgInfo pkg_info;
+			memset(&playgo_info, 0, sizeof(playgo_info));
+			
+			for (size_t i = 0; i < SCE_NUM_LANGUAGES; i++) {
+				strncpy(playgo_info.languages[i], "", sizeof(language_t) - 1);
+			}
+
+			for (size_t i = 0; i < SCE_NUM_IDS; i++) {
+				strncpy(playgo_info.playgo_scenario_ids[i], "", sizeof(playgo_scenario_id_t) - 1);
+				strncpy(*playgo_info.content_ids, "", sizeof(content_id_t) - 1);
+			}
+
+			MetaInfo metainfo = (MetaInfo){
+				.uri = full_url.c_str(),
+				.ex_uri = "",
+				.playgo_scenario_id = "",
+				.content_id = "",
+				.content_name = display_title.c_str(),
+				.icon_url = ""
+			};
+
+			ret = InstallWithDirectPackageInstaller(full_url);
+			if (ret)
+			{
+				ret = 0;
+				goto finish;
+			}
+
+			file_transfering = true;
+			bytes_to_download = header.pkg_content_size;
+			bytes_transfered = 0;
+			prev_tick = Util::GetTick();
+
+			SceAppInstallStatusInstalled progress_info;
+			while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
+			{
+				ret = sceAppInstUtilGetInstallStatus((const char *)header.pkg_content_id, &progress_info);
+				if (ret || (progress_info.error_info.error_code != 0))
+					return 0;
+	
+				bytes_to_download = progress_info.total_size;
+				bytes_transfered = progress_info.downloaded_size;
+				sceSystemServicePowerTick();
+			}
+		}
+		else
+		{
+			BgProgressCheck *bg_check_data = (BgProgressCheck *)malloc(sizeof(BgProgressCheck));
+			memset(bg_check_data, 0, sizeof(BgProgressCheck));
+			bg_check_data->archive_pkg_data = pkg_data;
+			bg_check_data->split_pkg_data = nullptr;
+			bg_check_data->url = full_url;
+			bg_check_data->title = display_title;
+			snprintf(bg_check_data->content_id, sizeof(bg_check_data->content_id), "%s", (char *)header.pkg_content_id);
+			bg_check_data->hash = hash;
+			ret = pthread_create(&bk_install_thid, NULL, CheckBgInstallTaskThread, bg_check_data);
+			return 1;
+		}
+		ret = 1;
+	finish:
+		ret = pthread_create(&bk_clean_thid, NULL, CleanArchivePkgDataThread, pkg_data);
+		RemoveArchivePkgInstallData(hash);
+		return ret;
+	}
+
 	SplitPkgInstallData *GetSplitPkgInstallData(const std::string &hash)
 	{
 		return split_pkg_install_data_list[hash];
@@ -726,10 +829,7 @@ namespace INSTALLER
 			{
 				ret = sceAppInstUtilGetInstallStatus((const char *)header.pkg_content_id, &progress_info);
 				if (ret || (progress_info.error_info.error_code != 0))
-				{
-					dbglogger_log("error_code=%d", progress_info.error_info.error_code);
 					return 0;
-				}
 	
 				bytes_to_download = progress_info.total_size;
 				bytes_transfered = progress_info.downloaded_size;
@@ -741,6 +841,7 @@ namespace INSTALLER
 			BgProgressCheck *bg_check_data = (BgProgressCheck *)malloc(sizeof(BgProgressCheck));
 			memset(bg_check_data, 0, sizeof(BgProgressCheck));
 			bg_check_data->split_pkg_data = pkg_data;
+			bg_check_data->archive_pkg_data = nullptr;
 			bg_check_data->url = full_url;
 			bg_check_data->title = display_title;
 			snprintf(bg_check_data->content_id, sizeof(bg_check_data->content_id), "%s", (char *)header.pkg_content_id);

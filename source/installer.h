@@ -123,6 +123,14 @@ enum pkg_content_type
     PKG_CONTENT_TYPE_DP = 0x1E, /* pkg_ps4_delta_patch */
 };
 
+struct ArchivePkgInstallData
+{
+    SplitFile *split_file;
+    ArchiveEntry *archive_entry;
+    pthread_t thread;
+    bool stop_write_thread;
+};
+
 struct SplitPkgInstallData
 {
     SplitFile *split_file;
@@ -151,6 +159,10 @@ namespace INSTALLER
     bool ExtractRemotePkg(const std::string &path, const std::string sfo_path, const std::string icon_path);
     std::string GetRemotePkgTitle(RemoteClient *client, const std::string &path, pkg_header *header);
     std::string GetLocalPkgTitle(const std::string &path, pkg_header *header);
+    ArchivePkgInstallData *GetArchivePkgInstallData(const std::string &hash);
+    void AddArchivePkgInstallData(const std::string &hash, ArchivePkgInstallData *pkg_data);
+    void RemoveArchivePkgInstallData(const std::string &hash);
+    bool InstallArchivePkg(const std::string &path, ArchivePkgInstallData* pkg_data, bool bg = false);
     SplitPkgInstallData *GetSplitPkgInstallData(const std::string &hash);
     void AddSplitPkgInstallData(const std::string &hash, SplitPkgInstallData *pkg_data);
     void RemoveSplitPkgInstallData(const std::string &hash);

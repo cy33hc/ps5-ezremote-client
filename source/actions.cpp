@@ -890,6 +890,37 @@ namespace Actions
                             skipped++;
                     }
                 }
+                else if (Util::EndsWith(path,".zip") || Util::EndsWith(path,".rar") || Util::EndsWith(path,".7z") ||
+                         Util::EndsWith(path,".tar.xz") || Util::EndsWith(path,".tar.gz") || Util::EndsWith(path,".tar.bz2") )
+                {
+                    ArchiveEntry *entry = ZipUtil::GetPackageEntry(it->path);
+                    if (entry != nullptr)
+                    {
+                        while (entry != nullptr)
+                        {
+                            ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) malloc(sizeof(ArchivePkgInstallData));
+                            memset(install_data, 0, sizeof(ArchivePkgInstallData));
+
+                            std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
+                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
+                            
+                            install_data->archive_entry = entry;
+                            install_data->split_file = sp;
+                            install_data->stop_write_thread = false;
+
+                            int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
+
+                            INSTALLER::InstallArchivePkg(entry->filename, install_data);
+
+                            ArchiveEntry *previous = entry;
+                            entry = ZipUtil::GetNextPackageEntry(entry);
+                            free(previous);
+                        }
+                        success++;
+                    }
+                    else
+                        skipped++;
+                }
                 else
                     skipped++;
             }

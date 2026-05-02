@@ -5,7 +5,6 @@
 
 #include "common.h"
 #include "split_file.h"
-#include "dbglogger.h"
 
 SplitFile::SplitFile(const std::string &path, size_t block_size)
 {
@@ -208,7 +207,6 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
 int SplitFile::Close()
 {
     std::unique_lock<std::shared_mutex> lock(mutex_);
-    dbglogger_log("*******Close************");
     if (this->complete)
         return 0;
 
@@ -227,13 +225,16 @@ int SplitFile::Close()
 
     // Wait until file is fully read, if file isn't full read
     // in 5 mins then go ahead and delete all file chunks
-    int retries = 180;
+    int retries = 10;
+    size_t prev_read_offset = 0;
     while (this->read_offset != this->write_offset && retries > 0)
     {
-        dbglogger_log("wait for read to complete on split file read_offset=%lu, write_offset=%lu", this->read_offset, this->write_offset);
+        if (prev_read_offset == this->read_offset)
+            retries--;
+        prev_read_offset = this->read_offset;
         sleep(1);
-        retries--;
     }
+    sleep(5);
 
     for (size_t j = 0; j < this->file_blocks.size(); j++)
     {

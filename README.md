@@ -10,6 +10,7 @@ ezRemote Client is an application that allows you to connect the PS5 to remote F
    - After restarting PS5, you can resume installs by first reloading ezRemote Server
    - From testing, background install continues even in rest mode (This isn't granteed). You may need to restart ezRemote Server payload before you can resume install
    - ezRemote Server payload can be stop/restarted from ezRemote Client settngs dialog.
+   - Do not submit to many background installs, it can crash ezRemote Server.
 
 ![Preview](/screenshot.jpg)
 

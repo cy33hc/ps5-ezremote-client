@@ -717,7 +717,7 @@ namespace Actions
 
                                     if (it != files.end())
                                     {
-                                        sleep(2);
+                                        sleep(5);
                                     }
                                 }
                             }

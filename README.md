@@ -2,6 +2,15 @@
 
 ezRemote Client is an application that allows you to connect the PS5 to remote FTP/SFTP, SMB(Windows Share), NFS, WebDAV, HTTP servers to transfer files. The interface is inspired by Filezilla client which provides a commander like GUI.
 
+**NOTE: As of version 2.00, PS4 pkgs can be installed in the background. Use ezRemote client to connect to remote server and select pkg to install. You can then close ezRemote Client app and the package will continue installing in background. This is archieved with a new payload called ezRemote Server that is packaged together with exRemote Client. ezRemote Server runs in the background and acts as a proxy to the remote server. ezRemote Server must be started to enable backgroud installs.** 
+   - support background install from all remote servers that ezremote client supports
+   - support background install from file host like mediafire, google shared link, pixeldrain, real-debrid and all-debrid
+   - does not support install background install using the options "Disk Cache" or PKGs inside zip files
+   - You can pause and resume installs
+   - After restarting PS5, you can resume installs by first reloading ezRemote Server
+   - From testing, background install continues even in rest mode (This isn't granteed). You may need to restart ezRemote Server payload before you can resume install
+   - ezRemote Server payload can be stop/restarted from ezRemote Client settngs dialog.
+
 ![Preview](/screenshot.jpg)
 
 ![Preview](/ezremote_client_web.png)

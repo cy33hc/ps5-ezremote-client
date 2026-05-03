@@ -360,3 +360,18 @@ bool GithubClient::ParseReleases()
 
     return 1;
 }
+
+std::string GithubClient::GetDownloadUrl(const std::string &path)
+{
+    if (!ParseReleases())
+        return "";
+
+    std::vector<std::string> path_parts = Util::Split(path, "/");
+    
+    if (path_parts.size() != 2)
+    {
+        return "";
+    }
+
+    return this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
+}

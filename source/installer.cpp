@@ -179,7 +179,7 @@ namespace INSTALLER
 
 	std::string StoreBgInstallHostData(RemoteSettings *settings, const std::string &path)
 	{
-		std::string hash = Util::UrlHash(settings->server + path);
+		std::string hash = Util::UrlHash(settings->server + path + settings->username + settings->password + std::to_string(settings->type));
 		json_object *history_item_obj = json_object_new_object();
 		json_object_object_add(history_item_obj, "hash", json_object_new_string(hash.c_str()));
 		json_object_object_add(history_item_obj, "url", json_object_new_string(settings->server));

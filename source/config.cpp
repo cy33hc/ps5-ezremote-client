@@ -36,11 +36,11 @@ PackageUrlInfo install_pkg_url;
 char favorite_urls[MAX_FAVORITE_URLS][512];
 bool auto_delete_tmp_pkg;
 int max_edit_file_size;
-GoogleAppInfo gg_app;
 bool show_hidden_files;
 char alldebrid_api_key[64];
 char realdebrid_api_key[64];
 char temp_folder[256];
+std::string ezremote_server_version;
 
 unsigned char cipher_key[32] = {'s', '5', 'v', '8', 'y', '/', 'B', '?', 'E', '(', 'H', '+', 'M', 'b', 'Q', 'e', 'T', 'h', 'W', 'm', 'Z', 'q', '4', 't', '7', 'w', '9', 'z', '$', 'C', '&', 'F'};
 unsigned char cipher_iv[16] = {'Y', 'p', '3', 's', '6', 'v', '9', 'y', '$', 'B', '&', 'E', ')', 'H', '@', 'M'};
@@ -93,10 +93,6 @@ namespace CONFIG
         else if (strncmp(setting->server, "sftp://", 7) == 0)
         {
             setting->type = CLIENT_TYPE_SFTP;
-            if (setting->enable_rpi)
-                setting->enable_disk_cache = true;
-            else
-                setting->enable_disk_cache = false;
         }
         else if (strncmp(setting->server, "webdav://", 9) == 0 || strncmp(setting->server, "webdavs://", 10) == 0)
         {
@@ -115,33 +111,6 @@ namespace CONFIG
             setting->type = CLINET_TYPE_UNKNOWN;
         }
     }
-
-    /* void LoadCipherKeys()
-    {
-        // Get the key and iv for encryption. Inject the account_id/MAC address as part of the key and iv.
-        int user_id;
-        uint64_t account_id = 0;
-        sceUserServiceGetForegroundUser(&user_id);
-        sceUserServiceGetNpAccountId(user_id, &account_id);
-        unsigned char data[sizeof(account_id)];
-        memcpy(data, &account_id, sizeof(account_id));
-        OrbisNetEtherAddr addr;
-        memset(&addr, 0x0, sizeof(OrbisNetEtherAddr));
-        sceNetGetMacAddress(&addr, 0);
-        for (int i = 0; i < sizeof(data); i++)
-        {
-            cipher_key[i] = data[i];
-            cipher_key[i + 16] = data[i];
-            cipher_iv[i] = data[i];
-        }
-        int offset = sizeof(data);
-        for (int i = 0; i < sizeof(addr.data); i++)
-        {
-            cipher_key[offset + i] = addr.data[i];
-            cipher_key[offset + i + 16] = data[i];
-            cipher_iv[offset + i] = addr.data[i];
-        }
-    } */
 
     void LoadConfig()
     {
@@ -231,29 +200,6 @@ namespace CONFIG
         }
         WriteString(CONFIG_GLOBAL, CONFIG_REALDEBRID_API_KEY, encrypted_api_key.c_str());
 
-        // Load Google Account Info
-        sprintf(gg_app.client_id, "%s", ReadString(CONFIG_GOOGLE, CONFIG_GOOGLE_CLIENT_ID, ""));
-        WriteString(CONFIG_GOOGLE, CONFIG_GOOGLE_CLIENT_ID, gg_app.client_id);
-
-        // Client Secret
-        char tmp_gg_secret[512];
-        sprintf(tmp_gg_secret, "%s", ReadString(CONFIG_GOOGLE, CONFIG_GOOGLE_CLIENT_SECRET, ""));
-        std::string encrypted_secret;
-        if (strlen(tmp_gg_secret) > 0)
-        {
-            std::string decrypted_secret;
-            int ret = Decrypt(tmp_gg_secret, decrypted_secret);
-            if (ret == 0)
-                sprintf(gg_app.client_secret, "%s", tmp_gg_secret);
-            else
-                sprintf(gg_app.client_secret, "%s", decrypted_secret.c_str());
-            Encrypt(gg_app.client_secret, encrypted_secret);
-        }
-        WriteString(CONFIG_GOOGLE, CONFIG_GOOGLE_CLIENT_SECRET, encrypted_secret.c_str());
-
-        sprintf(gg_app.permissions, "%s", ReadString(CONFIG_GOOGLE, CONFIG_GOOGLE_PERMISSIONS, GOOGLE_DEFAULT_PERMISSIONS));
-        WriteString(CONFIG_GOOGLE, CONFIG_GOOGLE_PERMISSIONS, gg_app.permissions);
-
         // Http Server Info
         http_server_port = ReadInt(CONFIG_HTTP_SERVER, CONFIG_HTTP_SERVER_PORT, 9090);
         WriteInt(CONFIG_HTTP_SERVER, CONFIG_HTTP_SERVER_PORT, http_server_port);
@@ -310,40 +256,6 @@ namespace CONFIG
             sprintf(setting.default_directory, "%s", ReadString(sites[i].c_str(), CONFIG_REMOTE_DEFAULT_DIRECTORY, "/"));
             WriteString(sites[i].c_str(), CONFIG_REMOTE_DEFAULT_DIRECTORY, setting.default_directory);
 
-            // Token Expiry
-            setting.gg_account.token_expiry = ReadLong(sites[i].c_str(), CONFIG_GOOGLE_TOKEN_EXPIRY, 0);
-            WriteLong(sites[i].c_str(), CONFIG_GOOGLE_TOKEN_EXPIRY, setting.gg_account.token_expiry);
-
-            // Access Token
-            sprintf(tmp_gg_secret, "%s", ReadString(sites[i].c_str(), CONFIG_GOOGLE_ACCESS_TOKEN, ""));
-            std::string encrypted_token;
-            if (strlen(tmp_gg_secret) > 0)
-            {
-                std::string decrypted_secret;
-                int ret = Decrypt(tmp_gg_secret, decrypted_secret);
-                if (ret == 0)
-                    sprintf(setting.gg_account.access_token, "%s", tmp_gg_secret);
-                else
-                    sprintf(setting.gg_account.access_token, "%s", decrypted_secret.c_str());
-                Encrypt(setting.gg_account.access_token, encrypted_token);
-            }
-            WriteString(sites[i].c_str(), CONFIG_GOOGLE_ACCESS_TOKEN, encrypted_token.c_str());
-
-            // Refresh Token
-            sprintf(tmp_gg_secret, "%s", ReadString(sites[i].c_str(), CONFIG_GOOGLE_REFRESH_TOKEN, ""));
-            std::string encrypted_refresh_token;
-            if (strlen(tmp_gg_secret) > 0)
-            {
-                std::string decrypted_secret;
-                int ret = Decrypt(tmp_gg_secret, decrypted_secret);
-                if (ret == 0)
-                    sprintf(setting.gg_account.refresh_token, "%s", tmp_gg_secret);
-                else
-                    sprintf(setting.gg_account.refresh_token, "%s", decrypted_secret.c_str());
-                Encrypt(setting.gg_account.refresh_token, encrypted_refresh_token);
-            }
-            WriteString(sites[i].c_str(), CONFIG_GOOGLE_REFRESH_TOKEN, encrypted_refresh_token.c_str());
-
             SetClientType(&setting);
             site_settings.insert(std::make_pair(sites[i], setting));
         }
@@ -382,20 +294,6 @@ namespace CONFIG
         WriteString(last_site, CONFIG_REMOTE_DEFAULT_DIRECTORY, remote_settings->default_directory);
         WriteString(CONFIG_GLOBAL, CONFIG_LAST_SITE, last_site);
         
-        std::string encrypted_token;
-        if (strlen(remote_settings->gg_account.access_token) > 0)
-            Encrypt(remote_settings->gg_account.access_token, encrypted_token);
-        else
-            encrypted_token = std::string(remote_settings->gg_account.access_token);
-        WriteString(last_site, CONFIG_GOOGLE_ACCESS_TOKEN, encrypted_token.c_str());
-
-        std::string encrypted_refresh_token;
-        if (strlen(remote_settings->gg_account.refresh_token) > 0)
-            Encrypt(remote_settings->gg_account.refresh_token, encrypted_refresh_token);
-        else
-            encrypted_refresh_token = std::string(remote_settings->gg_account.refresh_token);
-        WriteString(last_site, CONFIG_GOOGLE_REFRESH_TOKEN, encrypted_refresh_token.c_str());
-        WriteLong(last_site, CONFIG_GOOGLE_TOKEN_EXPIRY, remote_settings->gg_account.token_expiry);
         WriteIniFile(CONFIG_INI_FILE);
         CloseIniFile();
     }
@@ -403,12 +301,6 @@ namespace CONFIG
     void SaveGlobalConfig()
     {
         OpenIniFile(CONFIG_INI_FILE);
-
-        std::string encrypted_secret;
-        if (strlen(gg_app.client_secret) > 0)
-            Encrypt(gg_app.client_secret, encrypted_secret);
-        else
-            encrypted_secret = std::string(gg_app.client_secret);
 
         std::string encrypted_api_key;
         if (strlen(alldebrid_api_key) > 0)
@@ -423,9 +315,6 @@ namespace CONFIG
             encrypted_api_key = std::string(realdebrid_api_key);
         WriteString(CONFIG_GLOBAL, CONFIG_REALDEBRID_API_KEY, encrypted_api_key.c_str());
 
-        WriteString(CONFIG_GOOGLE, CONFIG_GOOGLE_CLIENT_SECRET, encrypted_secret.c_str());
-        WriteString(CONFIG_GOOGLE, CONFIG_GOOGLE_CLIENT_ID, gg_app.client_id);
-        WriteString(CONFIG_GOOGLE, CONFIG_GOOGLE_PERMISSIONS, gg_app.permissions);
         WriteString(CONFIG_GLOBAL, CONFIG_TMP_FOLDER_PATH, temp_folder);
         WriteBool(CONFIG_GLOBAL, CONFIG_AUTO_DELETE_TMP_PKG, auto_delete_tmp_pkg);
         WriteBool(CONFIG_GLOBAL, CONFIG_SHOW_HIDDEN_FILES, show_hidden_files);

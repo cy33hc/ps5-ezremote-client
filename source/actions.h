@@ -122,6 +122,8 @@ namespace Actions
     void CreateRemoteFile(char *filename);
     void *ExtractArchivePkg(void *argp);
     void *DownloadSplitPkg(void *argp);
+    void RestartServer();
+    void StopServer();
 }
 
 #endif

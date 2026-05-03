@@ -4,6 +4,7 @@
 #include "zip_util.h"
 #include "split_file.h"
 #include "pthread.h"
+#include "config.h"
 
 #define SWAP16(x)                                         \
     ((uint16_t)((((uint16_t)(x)&UINT16_C(0x00FF)) << 8) | \
@@ -151,7 +152,7 @@ namespace INSTALLER
 
     bool canInstallRemotePkg(const std::string &url);
     std::string getRemoteUrl(const std::string path, bool encodeUrl = false);
-    int InstallRemotePkg(const std::string &path, pkg_header *header, std::string title, bool prompt = false);
+    int InstallRemotePkg(const std::string &path, pkg_header *header, std::string title);
     int InstallLocalPkg(const std::string &path, pkg_header *header, bool remove_after_install = false);
     int InstallLocalPkg(const std::string &path);
     bool ExtractLocalPkg(const std::string &path, const std::string sfo_path, const std::string icon_path);
@@ -169,4 +170,9 @@ namespace INSTALLER
     bool IsDirectPackageInstallerEnabled();
     int StartDirectPackageInstaller();
     int InstallWithDirectPackageInstaller(const std::string &url);
+    std::string EzRemoteServerVersion();
+    int StartEzRemoteServer();
+    std::string StoreBgInstallHostData(RemoteSettings *remote_settings, const std::string &path);
+    RemoteClient *GetRemoteClient(int site_idx);
+    RemoteClient *GetRemoteClient(RemoteSettings *settings);
 }

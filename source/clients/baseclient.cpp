@@ -212,7 +212,8 @@ int BaseClient::GetRange(const std::string &path, DataSink &sink, uint64_t size,
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());
-        sink.write(res.strBody.data(), len);
+        if (!sink.write(res.strBody.data(), len))
+            return 0;
         return 1;
     }
     else

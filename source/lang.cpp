@@ -179,6 +179,12 @@ char lang_strings[LANG_STRINGS_NUM][LANG_STR_SIZE] = {
 	"Enable Disk Cache",                                                                              // STR_ENABLE_DISKCACHE_DESC
 	"Cannot perform operation while activity is in progress",                                         // STR_ACTIVITY_IN_PROGRESS_MSG
 	"ezRemote Direct Package Installer payload is not loaded",                                        // STR_ETAHEN_DPI_ERROR_MSG
+	"Start/Restart Server",                                                                           // STR_RESTART_SERVER
+	"Stop Server",                                                                                    // STR_STOP_SERVER
+	"Warning",                                                                                        // STR_WARNING
+	"The version of ezRemote Server payload running does not match the required version needed by ezRemote Client.", // STR_WARNING_MSG_1
+	"If you are using an auto payload loader, then please update the payload in that location with the version that comes with ezRemoteClient package.", // STR_WARNING_MSG_2
+	"You may goto the Global Settings and restart ezRemote Server with the version that came packaged.", // STR_WARNING_MSG_3
 };
 
 bool needs_extended_font = false;

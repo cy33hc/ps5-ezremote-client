@@ -6,6 +6,7 @@
 #include <mutex>
 #include <semaphore.h>
 #include <pthread.h>
+#include <shared_mutex>
 
 enum FileBlockStatus
 {
@@ -44,6 +45,7 @@ private:
     bool complete;
     FileBlock *block_in_progress;
     sem_t block_ready;
+    std::shared_mutex mutex_;
 
     FileBlock *NewBlock();
 };

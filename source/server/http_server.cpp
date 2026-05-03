@@ -1,4 +1,5 @@
 #include <string>
+#include <shared_mutex>
 #include <json-c/json.h>
 #include <server/range_parser.h>
 #include "http/httplib.h"
@@ -29,20 +30,18 @@
 #define SUCCESS_MSG_LEN 48
 #define PKG_INITIAL_REQUEST_SIZE 8388608ul
 
+std::shared_mutex mutex_;
+
 using namespace httplib;
 
 Server *svr;
 int http_server_port = 9090;
+int http_int_server_port = 6701;
 char compressed_file_path[1024];
 bool web_server_enabled = false;
 
 namespace HttpServer
 {
-    static int FtpCallback(int64_t xfered, void *arg)
-    {
-        return 1;
-    }
-
     std::string dump_headers(const Headers &headers)
     {
         std::string s;
@@ -189,58 +188,6 @@ namespace HttpServer
             free(new_path);
         }
         return 1;
-    }
-
-    static RemoteClient *GetRemoteClient(int site_idx)
-    {
-        RemoteClient *tmp_client = nullptr;
-        RemoteSettings *tmp_settings = &site_settings[sites[site_idx]];
-
-        if (tmp_settings->type == CLIENT_TYPE_HTTP_SERVER)
-        {
-            if (strcmp(remote_settings->http_server_type, HTTP_SERVER_APACHE) == 0)
-                tmp_client = new ApacheClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MS_IIS) == 0)
-                tmp_client = new IISClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_NGINX) == 0)
-                tmp_client = new NginxClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_NPX_SERVE) == 0)
-                tmp_client = new NpxServeClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_RCLONE) == 0)
-                tmp_client = new RCloneClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_ARCHIVEORG) == 0)
-                tmp_client = new ArchiveOrgClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
-                tmp_client = new GithubClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MYRIENT) == 0)
-                tmp_client = new MyrientClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_WEBDAV)
-        {
-            tmp_client = new WebDAVClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_SMB)
-        {
-            tmp_client = new SmbClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_SFTP)
-        {
-            tmp_client = new SFTPClient();
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_FTP)
-        {
-            tmp_client = new FtpClient();
-            FtpClient *ftp_client = (FtpClient*) tmp_client;
-            ftp_client->SetCallbackXferFunction(FtpCallback);
-        }
-        else if (tmp_settings->type == CLIENT_TYPE_NFS)
-        {
-            tmp_client = new NfsClient();
-        }
-
-        tmp_client->Connect(tmp_settings->server, tmp_settings->username, tmp_settings->password, false);
-
-        return tmp_client;
     }
 
     static void DeleteRemoteClient(RemoteClient *tmp_client)
@@ -1013,7 +960,7 @@ namespace HttpServer
             if (site_idx != 98)
             {
                 path = std::string("/") + std::string(req.matches[3]);
-                tmp_client = GetRemoteClient(site_idx);
+                tmp_client = INSTALLER::GetRemoteClient(site_idx);
             }
             else
             {
@@ -1192,61 +1139,73 @@ namespace HttpServer
             }
             baseclient->Head(path, &header, sizeof(pkg_header));
 
-            if (BE32(header.pkg_magic) == 0x7F434E54)
+            FileHost::AddCacheDownloadUrl(hash, download_url);
+            std::string title = INSTALLER::GetRemotePkgTitle(baseclient, path, &header);
+
+            if (enable_rpi && !use_disk_cache)
             {
-                bytes_to_download = header.pkg_content_size;
-                FileHost::AddCacheDownloadUrl(hash, download_url);
-                std::string title = INSTALLER::GetRemotePkgTitle(baseclient, path, &header);
+                json_object *history_item_obj = json_object_new_object();
+                json_object_object_add(history_item_obj, "hash", json_object_new_string(hash.c_str()));
+                json_object_object_add(history_item_obj, "url", json_object_new_string(host.c_str()));
+                json_object_object_add(history_item_obj, "path", json_object_new_string(path.c_str()));
+                json_object_object_add(history_item_obj, "username", json_object_new_string(""));
+                json_object_object_add(history_item_obj, "password", json_object_new_string(""));
+                json_object_object_add(history_item_obj, "type", json_object_new_int(CLIENT_TYPE_FILEHOST));
 
-                if (enable_rpi && !use_disk_cache)
+                const char *params_str = json_object_to_json_string(history_item_obj);
+
+                CHTTPClient::HttpResponse resp;
+                CHTTPClient::HeadersMap headers;
+                CHTTPClient tmp_client([](const std::string& log){});
+                tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+                tmp_client.SetCertificateFile(CACERT_FILE);
+                headers["Content-Type"] = "application/json";
+
+                std::string store_bg_install_data_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/store_bg_install_data";
+                if (tmp_client.Post(store_bg_install_data_url, headers, params_str, resp))
                 {
-                    std::string remote_install_url = std::string("http://localhost:") + std::to_string(http_server_port) + "/rmt_inst/Site%2099/" + hash;
-                    int rc = INSTALLER::InstallRemotePkg(remote_install_url, &header, title, false);
-                    if (rc == 0)
+                    if (HTTP_SUCCESS(resp.iCode))
                     {
-                        failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
-                        activity_inprogess = false;
-                        file_transfering = false;
-                        Windows::SetModalMode(false);
-                        return;
-                    }
-                }
-                else if (enable_rpi && use_disk_cache)
-                {
-                    SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
-                    memset(install_data, 0, sizeof(SplitPkgInstallData));
-
-                    std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
-                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
-
-                    install_data->split_file = sp;
-                    install_data->remote_client = baseclient;
-                    install_data->path = path;
-                    baseclient->Size(path, &install_data->size);
-                    install_data->stop_write_thread = false;
-                    install_data->delete_client = true;
-
-                    int ret = pthread_create(&install_data->thread, NULL, Actions::DownloadSplitPkg, install_data);
-
-                    ret = INSTALLER::InstallSplitPkg(download_url, install_data, true);
-
-                    if (ret == 0)
-                    {
-                        failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
-                        activity_inprogess = false;
-                        file_transfering = false;
-                        Windows::SetModalMode(false);
-                        return;
                     }
                 }
                 else
                 {
-                    install_pkg_url.enable_rpi = enable_rpi;
-                    install_pkg_url.enable_alldebrid = use_alldebrid;
-                    install_pkg_url.enable_realdebrid = use_realdebrid;
-                    install_pkg_url.enable_disk_cache = use_disk_cache;
-                    snprintf(install_pkg_url.url, 511, "%s", url.c_str());
-                    Actions::InstallUrlPkg();
+                    failed(res, 200, "Could not save host data for background install");
+                }
+                sleep(2);
+
+                std::string remote_install_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
+                int rc = INSTALLER::InstallRemotePkg(remote_install_url, &header, title);
+                activity_inprogess = false;
+                file_transfering = false;
+                Windows::SetModalMode(false);
+            }
+            else if (enable_rpi && use_disk_cache)
+            {
+                SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
+                memset(install_data, 0, sizeof(SplitPkgInstallData));
+
+                std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
+                SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
+
+                install_data->split_file = sp;
+                install_data->remote_client = baseclient;
+                install_data->path = path;
+                baseclient->Size(path, &install_data->size);
+                install_data->stop_write_thread = false;
+                install_data->delete_client = true;
+
+                int ret = pthread_create(&install_data->thread, NULL, Actions::DownloadSplitPkg, install_data);
+
+                ret = INSTALLER::InstallSplitPkg(download_url, install_data, true);
+
+                if (ret == 0)
+                {
+                    failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
+                    activity_inprogess = false;
+                    file_transfering = false;
+                    Windows::SetModalMode(false);
+                    return;
                 }
             }
             else
@@ -1287,10 +1246,14 @@ namespace HttpServer
                     return;
                 }
             }
-            success(res); });
+            success(res);
+    
+        });
 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
-                 { svr->stop(); });
+        {
+            svr->stop();
+        });
 
         svr->set_error_handler([](const Request & /*req*/, Response &res)
         {

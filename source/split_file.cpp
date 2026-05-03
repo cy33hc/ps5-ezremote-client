@@ -137,7 +137,7 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
     // forward and won't read previously already read blocks. For safety, keeping only current block and 2 previous blocks
     for (int j=0; j < first_block_num - 13; j++)
     {
-        if (this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
+        if (this->file_blocks[j] != nullptr && this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
         {
             if (this->file_blocks[j]->fd != nullptr)
             {
@@ -146,6 +146,8 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
             }
             this->file_blocks[j]->status = BLOCK_STATUS_DELETED;
             remove(this->file_blocks[j]->block_file.c_str());
+            delete (this->file_blocks[j]);
+            this->file_blocks[j] = nullptr;
         }
     }
 
@@ -155,12 +157,12 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
 
 size_t SplitFile::Write(char *buf, size_t buf_size)
 {
-    size_t bytes_written;
+    size_t bytes_written = 0;
     size_t block_space_remaining;
     size_t bytes_to_write;
 
     char *p = buf;
-    size_t total_bytes_written = 0;
+    ssize_t total_bytes_written = 0;
     size_t remaining_to_write = buf_size;
 
     if (this->IsClosed())
@@ -204,11 +206,11 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
 
 int SplitFile::Close()
 {
+    std::unique_lock<std::shared_mutex> lock(mutex_);
     if (this->complete)
         return 0;
 
     this->complete = true;
-    sleep(1);
 
     if (block_in_progress->fd != nullptr)
     {
@@ -223,26 +225,23 @@ int SplitFile::Close()
 
     // Wait until file is fully read, if file isn't full read
     // in 5 mins then go ahead and delete all file chunks
-    int retries = 180;
+    int retries = 10;
+    size_t prev_read_offset = 0;
     while (this->read_offset != this->write_offset && retries > 0)
     {
+        if (prev_read_offset == this->read_offset)
+            retries--;
+        prev_read_offset = this->read_offset;
         sleep(1);
-        retries--;
     }
+    sleep(5);
 
     for (size_t j = 0; j < this->file_blocks.size(); j++)
     {
-        if (this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
+        if (this->file_blocks[j] != nullptr && this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
         {
-            if (this->file_blocks[j]->fd != nullptr)
-            {
-                fclose(this->file_blocks[j]->fd);
-                this->file_blocks[j]->fd = nullptr;
-            }
-            this->file_blocks[j]->status = BLOCK_STATUS_DELETED;
             remove(this->file_blocks[j]->block_file.c_str());
         }
-        delete (this->file_blocks[j]);
     }
     return 0;
 }

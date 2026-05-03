@@ -26,26 +26,6 @@
 
 #define CONFIG_SHOW_HIDDEN_FILES "show_hidden_files"
 
-#define CONFIG_GOOGLE "Google"
-#define CONFIG_GOOGLE_CLIENT_ID "google_client_id"
-#define CONFIG_GOOGLE_CLIENT_SECRET "google_client_secret"
-#define CONFIG_GOOGLE_PERMISSIONS "google_client_permissions"
-#define CONFIG_GOOGLE_ACCESS_TOKEN "google_access_token"
-#define CONFIG_GOOGLE_REFRESH_TOKEN "google_refresh_token"
-#define CONFIG_GOOGLE_TOKEN_EXPIRY "google_token_expiry"
-
-#define GOOGLE_OAUTH_HOST "https://oauth2.googleapis.com"
-#define GOOGLE_AUTH_URL "https://accounts.google.com/o/oauth2/v2/auth"
-#define GOOGLE_API_URL "https://www.googleapis.com"
-#define GOOGLE_DRIVE_API_PATH "/drive/v2/files"
-#define GOOGLE_DRIVE_BASE_URL "https://drive.google.com"
-#define GOOGLE_PERM_DRIVE "drive"
-#define GOOGLE_PERM_DRIVE_APPDATA "drive.appdata"
-#define GOOGLE_PERM_DRIVE_FILE "drive.file"
-#define GOOGLE_PERM_DRIVE_METADATA "drive.metadata"
-#define GOOGLE_PERM_DRIVE_METADATA_RO "drive.metadata.readonly"
-#define GOOGLE_DEFAULT_PERMISSIONS GOOGLE_PERM_DRIVE
-
 #define CONFIG_HTTP_SERVER "HttpServer"
 #define CONFIG_HTTP_SERVER_PORT "http_server_port"
 #define CONFIG_HTTP_SERVER_ENABLED "http_server_enabled"
@@ -95,20 +75,6 @@
 
 #define MAX_EDIT_FILE_SIZE 32768
 
-struct GoogleAccountInfo
-{
-    char access_token[256];
-    char refresh_token[256];
-    uint64_t token_expiry;
-};
-
-struct GoogleAppInfo
-{
-    char client_id[140];
-    char client_secret[64];
-    char permissions[92];
-};
-
 struct RemoteSettings
 {
     char site_name[32];
@@ -119,7 +85,6 @@ struct RemoteSettings
     bool enable_rpi;
     uint32_t supported_actions;
     char http_server_type[24];
-    GoogleAccountInfo gg_account;
     char default_directory[256];
     bool enable_disk_cache;
     RemoteClient *client;
@@ -156,7 +121,6 @@ extern bool auto_delete_tmp_pkg;
 extern int max_edit_file_size;
 extern unsigned char cipher_key[32];
 extern unsigned char cipher_iv[16];
-extern GoogleAppInfo gg_app;
 extern bool show_hidden_files;
 extern char alldebrid_api_key[64];
 extern char realdebrid_api_key[64];

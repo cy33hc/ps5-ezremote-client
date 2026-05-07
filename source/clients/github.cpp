@@ -350,7 +350,8 @@ bool GithubClient::ParseReleases()
 
                     m_releases.push_back(release_entry);
                 }
-
+                json_object_put(jobj);
+                
                 releases_parsed = true;
                 return 1;
             }

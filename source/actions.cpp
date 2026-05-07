@@ -532,6 +532,22 @@ namespace Actions
         return 1;
     }
 
+    void BackgroundDownload(const DirEntry &src, const char *dest)
+    {
+        uint64_t file_size;
+
+        if (!remoteclient->Size(src.path, &file_size))
+            return;
+
+        json_object *params = json_object_new_object();
+        json_object_object_add(params, "src", json_object_new_string(src.path));
+        json_object_object_add(params, "dest", json_object_new_string(dest));
+        json_object_object_add(params, "size", json_object_new_uint64(file_size));
+
+        const char *params_str = json_object_to_json_string(params);
+        json_object_put(params);
+    }
+
     int Download(const DirEntry &src, const char *dest)
     {
         if (stop_activity)
@@ -1196,6 +1212,7 @@ namespace Actions
         json_object_object_add(params, "use_disk_cache", json_object_new_boolean(install_pkg_url.enable_disk_cache));
 
         const char *params_str = json_object_to_json_string(params);
+        json_object_put(params);
 
         char host[128];
         sprintf(host, "http://127.0.0.1:%d", http_server_port);

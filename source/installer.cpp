@@ -194,7 +194,8 @@ namespace INSTALLER
 		}
 
 		const char *params_str = json_object_to_json_string(history_item_obj);
-
+		json_object_put(history_item_obj);
+		
 		CHTTPClient::HttpResponse res;
 		CHTTPClient::HeadersMap headers;
 		CHTTPClient tmp_client([](const std::string& log){});

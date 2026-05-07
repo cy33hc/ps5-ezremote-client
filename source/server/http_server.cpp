@@ -285,6 +285,8 @@ namespace HttpServer
             json_object *results = json_object_new_object();
             json_object_object_add(results, "result", json_files);
             const char *results_str = json_object_to_json_string(results);
+            json_object_put(results);
+
             res.status = 200;
             res.set_content(results_str, strlen(results_str), "application/json"); });
 
@@ -597,8 +599,11 @@ namespace HttpServer
             json_object *result = json_object_new_object();
             json_object_object_add(result, "result", json_object_new_string(content.data()));
             const char *result_str = json_object_to_json_string(result);
+            json_object_put(result);
+
             res.status = 200;
-            res.set_content(result_str, strlen(result_str), "application/json"); });
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
 
         svr->Post("/__local__/createFolder", [&](const Request &req, Response &res)
         {
@@ -1155,6 +1160,7 @@ namespace HttpServer
                     json_object_object_add(history_item_obj, "type", json_object_new_int(CLIENT_TYPE_FILEHOST));
 
                     const char *params_str = json_object_to_json_string(history_item_obj);
+                    json_object_put(history_item_obj);
 
                     CHTTPClient::HttpResponse resp;
                     CHTTPClient::HeadersMap headers;

@@ -179,6 +179,8 @@
 	FUNC(STR_WARNING_MSG_1)                 \
 	FUNC(STR_WARNING_MSG_2)                 \
 	FUNC(STR_WARNING_MSG_3)                 \
+	FUNC(STR_ENABLE_BG_DOWNLOAD)            \
+	FUNC(STR_BG_DOWNLOAD_MIN_SIZE)          \
 
 #define GET_VALUE(x) x,
 #define GET_STRING(x) #x,
@@ -188,7 +190,7 @@ enum
 	FOREACH_STR(GET_VALUE)
 };
 
-#define LANG_STRINGS_NUM 175
+#define LANG_STRINGS_NUM 177
 #define LANG_ID_SIZE 64
 #define LANG_STR_SIZE 384
 extern char lang_identifiers[LANG_STRINGS_NUM][LANG_ID_SIZE];

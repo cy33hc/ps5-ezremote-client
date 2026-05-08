@@ -213,6 +213,7 @@ namespace Windows
     void AfterZipFileCallback(int ime_result);
     void AferServerChangeCallback(int ime_result);
     void AfterHttpPortChangeCallback(int ime_result);
+    void AfterMinBgDlSizeChangeCallback(int ime_result);
     void AfterEditorCallback(int ime_result);
 }
 

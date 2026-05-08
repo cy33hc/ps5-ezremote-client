@@ -18,6 +18,7 @@
 #include "clients/nfsclient.h"
 #include "clients/iis.h"
 #include "clients/rclone.h"
+#include "clients/remote_client.h"
 #include "filehost/filehost.h"
 #include "server/http_server.h"
 #include "common.h"
@@ -489,6 +490,46 @@ namespace Actions
         }
     }
 
+    int BackgroundDownload(const char* src, const char *dest, uint64_t file_size)
+    {
+        json_object *params = json_object_new_object();
+		json_object_object_add(params, "type", json_object_new_int(remote_settings->type));
+		json_object_object_add(params, "url", json_object_new_string(remote_settings->server));
+		json_object_object_add(params, "username", json_object_new_string(remote_settings->username));
+		json_object_object_add(params, "password", json_object_new_string(remote_settings->password));
+        json_object_object_add(params, "src_path", json_object_new_string(src));
+        json_object_object_add(params, "dest_path", json_object_new_string(dest));
+        json_object_object_add(params, "size", json_object_new_uint64(file_size));
+		if (remote_settings->type == CLIENT_TYPE_HTTP_SERVER)
+		{
+			json_object_object_add(params, "http_server_type", json_object_new_string(remote_settings->http_server_type));
+		}
+
+        const char *params_str = json_object_to_json_string(params);
+
+		CHTTPClient::HttpResponse res;
+		CHTTPClient::HeadersMap headers;
+		CHTTPClient tmp_client([](const std::string& log){});
+		tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+		tmp_client.SetCertificateFile(CACERT_FILE);
+		headers["Content-Type"] = "application/json";
+
+		std::string download_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/download_url";
+		if (tmp_client.Post(download_url, headers, params_str, res))
+		{
+			if (HTTP_SUCCESS(res.iCode))
+			{
+                return 1;
+	  		}
+			else
+			{
+				return 0;
+			}
+		}
+
+        return 0;
+    }
+
     int DownloadFile(const char *src, const char *dest)
     {
         bytes_transfered = 0;
@@ -525,27 +566,16 @@ namespace Actions
         if (confirm_state == CONFIRM_YES)
         {
             prev_tick = Util::GetTick();
+
+            if (enable_background_download && bytes_to_download > minimum_backgrond_file_size)
+            {
+                return BackgroundDownload(src, dest, bytes_to_download);
+            }
             return remoteclient->Get(dest, src);
         }
 
         sceSystemServicePowerTick();
         return 1;
-    }
-
-    void BackgroundDownload(const DirEntry &src, const char *dest)
-    {
-        uint64_t file_size;
-
-        if (!remoteclient->Size(src.path, &file_size))
-            return;
-
-        json_object *params = json_object_new_object();
-        json_object_object_add(params, "src", json_object_new_string(src.path));
-        json_object_object_add(params, "dest", json_object_new_string(dest));
-        json_object_object_add(params, "size", json_object_new_uint64(file_size));
-
-        const char *params_str = json_object_to_json_string(params);
-        json_object_put(params);
     }
 
     int Download(const DirEntry &src, const char *dest)
@@ -635,6 +665,7 @@ namespace Actions
                 Download(*it, local_directory);
             }
         }
+
         file_transfering = false;
         activity_inprogess = false;
         multi_selected_remote_files.clear();
@@ -1212,7 +1243,6 @@ namespace Actions
         json_object_object_add(params, "use_disk_cache", json_object_new_boolean(install_pkg_url.enable_disk_cache));
 
         const char *params_str = json_object_to_json_string(params);
-        json_object_put(params);
 
         char host[128];
         sprintf(host, "http://127.0.0.1:%d", http_server_port);

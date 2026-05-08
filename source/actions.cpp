@@ -492,6 +492,7 @@ namespace Actions
 
     int BackgroundDownload(const char* src, const char *dest, uint64_t file_size)
     {
+        uint64_t id = Util::GetTick();
         json_object *params = json_object_new_object();
 		json_object_object_add(params, "type", json_object_new_int(remote_settings->type));
 		json_object_object_add(params, "url", json_object_new_string(remote_settings->server));
@@ -500,6 +501,7 @@ namespace Actions
         json_object_object_add(params, "src_path", json_object_new_string(src));
         json_object_object_add(params, "dest_path", json_object_new_string(dest));
         json_object_object_add(params, "size", json_object_new_uint64(file_size));
+        json_object_object_add(params, "id", json_object_new_uint64(id));
 		if (remote_settings->type == CLIENT_TYPE_HTTP_SERVER)
 		{
 			json_object_object_add(params, "http_server_type", json_object_new_string(remote_settings->http_server_type));
@@ -519,10 +521,12 @@ namespace Actions
 		{
 			if (HTTP_SUCCESS(res.iCode))
 			{
+                Util::RichNotify(id, "%s queued for download", src);
                 return 1;
 	  		}
 			else
 			{
+                Util::RichNotify(id, "Failed to queue %s for download in background", src);
 				return 0;
 			}
 		}

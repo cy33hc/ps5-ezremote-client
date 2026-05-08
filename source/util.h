@@ -12,6 +12,8 @@
 #include "common.h"
 #include "lang.h"
 
+#define SCE_NOTIFICATION_LOCAL_USER_ID_SYSTEM 0xFE
+
 typedef struct notify_request
 {
     char useless1[45];
@@ -21,12 +23,13 @@ typedef struct notify_request
 extern "C"
 {
     int sceKernelSendNotificationRequest(int, notify_request_t *, size_t, int);
+    int sceNotificationSend(int userId, bool isLogged, const char* payload);
 }
 
 namespace Util
 {
 
-    static inline void utf16_to_utf8(const uint16_t *src, uint8_t *dst)
+    static void utf16_to_utf8(const uint16_t *src, uint8_t *dst)
     {
         int i;
         for (i = 0; src[i]; i++)
@@ -59,7 +62,7 @@ namespace Util
         *dst = '\0';
     }
 
-    static inline void utf8_to_utf16(const uint8_t *src, uint16_t *dst)
+    static void utf8_to_utf16(const uint8_t *src, uint16_t *dst)
     {
         int i;
         for (i = 0; src[i];)
@@ -84,25 +87,25 @@ namespace Util
         *dst = '\0';
     }
 
-    static inline std::string &Ltrim(std::string &str, std::string chars)
+    static std::string &Ltrim(std::string &str, std::string chars)
     {
         str.erase(0, str.find_first_not_of(chars));
         return str;
     }
 
-    static inline std::string &Rtrim(std::string &str, std::string chars)
+    static std::string &Rtrim(std::string &str, std::string chars)
     {
         str.erase(str.find_last_not_of(chars) + 1);
         return str;
     }
 
     // trim from both ends (in place)
-    static inline std::string &Trim(std::string &str, std::string chars)
+    static std::string &Trim(std::string &str, std::string chars)
     {
         return Ltrim(Rtrim(str, chars), chars);
     }
 
-    static inline void ReplaceAll(std::string &data, std::string toSearch, std::string replaceStr)
+    static void ReplaceAll(std::string &data, std::string toSearch, std::string replaceStr)
     {
         size_t pos = data.find(toSearch);
         while (pos != std::string::npos)
@@ -112,7 +115,7 @@ namespace Util
         }
     }
 
-    static inline std::string ToLower(std::string s)
+    static std::string ToLower(std::string s)
     {
         std::transform(s.begin(), s.end(), s.begin(),
                        [](unsigned char c)
@@ -120,14 +123,14 @@ namespace Util
         return s;
     }
 
-    static inline bool EndsWith(std::string const &value, std::string const &ending)
+    static bool EndsWith(std::string const &value, std::string const &ending)
     {
         if (ending.size() > value.size())
             return false;
         return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
     }
 
-    static inline std::vector<std::string> Split(const std::string &str, const std::string &delimiter)
+    static std::vector<std::string> Split(const std::string &str, const std::string &delimiter)
     {
         std::string text = std::string(str);
         std::vector<std::string> tokens;
@@ -146,14 +149,14 @@ namespace Util
         return tokens;
     }
 
-    static inline std::string ToString(int value)
+    static std::string ToString(int value)
     {
         std::ostringstream myObjectStream;
         myObjectStream << value;
         return myObjectStream.str();
     }
     
-    static inline std::string UrlHash(const std::string &text)
+    static std::string UrlHash(const std::string &text)
     {
         std::vector<unsigned char> res(16);
         MD5((const unsigned char *)text.c_str(), text.length(), res.data());
@@ -167,7 +170,14 @@ namespace Util
         return out;
     }
 
-    static inline void Notify(const char *fmt, ...)
+    static uint64_t GetTick()
+    {
+        static struct timeval tick;
+        gettimeofday(&tick, NULL);
+        return tick.tv_sec * 1000000 + tick.tv_usec;
+    }
+
+    static void Notify(const char *fmt, ...)
     {
         notify_request_t req;
         va_list args;
@@ -180,7 +190,138 @@ namespace Util
         sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
     }
 
-    static inline void SetupPreviousFolder(const std::string &path, DirEntry *entry)
+    static void append_json_escaped(char *dst, size_t dst_size, const char *src)
+    {
+        size_t used = strlen(dst);
+        if (used >= dst_size)
+            return;
+
+        for (; *src != '\0' && used + 1 < dst_size; ++src)
+        {
+            const char *escape = NULL;
+            char single[2] = {0};
+
+            switch (*src)
+            {
+            case '\\':
+                escape = "\\\\";
+                break;
+            case '"':
+                escape = "\\\"";
+                break;
+            case '\n':
+                escape = "\\n";
+                break;
+            case '\r':
+                escape = "\\r";
+                break;
+            case '\t':
+                escape = "\\t";
+                break;
+            default:
+                single[0] = *src;
+                escape = single;
+                break;
+            }
+
+            size_t escape_len = strlen(escape);
+            if (used + escape_len >= dst_size)
+                break;
+            memcpy(dst + used, escape, escape_len);
+            used += escape_len;
+            dst[used] = '\0';
+        }
+    }
+
+    static bool RichNotify(uint64_t id, const char *fmt, ...)
+    {
+        va_list args;
+        char message[3072];
+        char escaped_message[4096];
+        char payload[8192];
+        char created_at[32];
+        char notification_id[32];
+
+        va_start(args, fmt);
+        vsnprintf(message, sizeof message, fmt, args);
+        va_end(args);
+
+        escaped_message[0] = '\0';
+        append_json_escaped(escaped_message, sizeof(escaped_message), message);
+
+        struct tm tm_utc;
+        time_t now = time(NULL);
+        gmtime_r(&now, &tm_utc);
+        strftime(created_at, 32, "%Y-%m-%dT%H:%M:%S.000Z", &tm_utc);
+        sprintf(notification_id, "%lu", id);
+
+        int len = snprintf(
+            payload, sizeof(payload),
+            "{\n"
+            "  \"rawData\": {\n"
+            "    \"viewTemplateType\": \"InteractiveToastTemplateB\",\n"
+            "    \"channelType\": \"ServiceFeedback\",\n"
+            "    \"bundleName\": \"ezRemoteClientWelcome\",\n"
+            "    \"useCaseId\": \"IDC\",\n"
+            "    \"soundEffect\": \"none\",\n"
+            "    \"toastOverwriteType\": \"InQueue\",\n"
+            "    \"isImmediate\": true,\n"
+            "    \"priority\": 100,\n"
+            "    \"viewData\": {\n"
+            "      \"icon\": {\n"
+            "        \"type\": \"Url\",\n"
+            "        \"parameters\": {\n"
+            "          \"url\": \"" NOTIFY_ICON_FILE "\"\n"
+            "        }\n"
+            "      },\n"
+            "      \"message\": {\n"
+            "        \"body\": \"%s\"\n"
+            "      },\n"
+            "      \"subMessage\": {\n"
+            "        \"body\": \"ezRemote Client\"\n"
+            "      },\n"
+            "      \"actions\": [\n"
+            "        {\n"
+            "          \"actionName\": \"Go to ezRemote Client\",\n"
+            "          \"actionType\": \"DeepLink\",\n"
+            "          \"defaultFocus\": true,\n"
+            "          \"parameters\": {\n"
+            "            \"actionUrl\": \"http://localhost:8080/hbldr?path=%s\"\n"
+            "          }\n"
+            "        }\n"
+            "      ]\n"
+            "    },\n"
+            "    \"platformViews\": {\n"
+            "      \"previewDisabled\": {\n"
+            "        \"viewData\": {\n"
+            "          \"icon\": {\n"
+            "            \"type\": \"Predefined\",\n"
+            "            \"parameters\": {\n"
+            "              \"icon\": \"community\"\n"
+            "            }\n"
+            "          },\n"
+            "          \"message\": {\n"
+            "            \"body\": \"%s\"\n"
+            "          }\n"
+            "        }\n"
+            "      }\n"
+            "    }\n"
+            "  },\n"
+            "  \"createdDateTime\": \"%s\",\n"
+            "  \"localNotificationId\": \"%s\"\n"
+            "}",
+            escaped_message, CLIENT_ELF_PATH, escaped_message, created_at,
+            notification_id);
+
+        if (len < 0 || (size_t)len >= sizeof(payload))
+            return false;
+
+        int rc = sceNotificationSend(SCE_NOTIFICATION_LOCAL_USER_ID_SYSTEM, true,
+                                     payload);
+        return rc == 0;
+    }
+
+    static void SetupPreviousFolder(const std::string &path, DirEntry *entry)
     {
         memset(entry, 0, sizeof(DirEntry));
         if (path[path.length() - 1] == '/' && path.length() > 1)
@@ -199,14 +340,7 @@ namespace Util
         entry->selectable = false;
     }
 
-    static uint64_t GetTick()
-    {
-        static struct timeval tick;
-        gettimeofday(&tick, NULL);
-        return tick.tv_sec * 1000000 + tick.tv_usec;
-    }
-
-    static inline size_t NthOccurrence(const std::string &str, const std::string &findMe, int nth, size_t start_pos = 0, size_t end_pos = INT_MAX)
+    static size_t NthOccurrence(const std::string &str, const std::string &findMe, int nth, size_t start_pos = 0, size_t end_pos = INT_MAX)
     {
         size_t prev_pos = std::string::npos;
         size_t pos = start_pos;
@@ -232,7 +366,7 @@ namespace Util
         return pos;
     }
 
-    static inline size_t CountOccurrence(const std::string &str, const std::string &findMe, size_t start_pos = 0, size_t end_pos = INT_MAX)
+    static size_t CountOccurrence(const std::string &str, const std::string &findMe, size_t start_pos = 0, size_t end_pos = INT_MAX)
     {
         size_t pos = start_pos;
         int cnt = 0;

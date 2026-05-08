@@ -21,7 +21,9 @@
 #define CACERT_FILE DATA_PATH "/assets/certs/cacert.pem"
 #define DPI_ELF_PATH DATA_PATH "/ezremote-dpi.elf"
 #define SERVER_ELF_PATH DATA_PATH "/ezremote-server.elf"
+#define CLIENT_ELF_PATH DATA_PATH "/ezremote_client.elf"
 #define EZREMOTE_CLIENT_LOG DATA_PATH "/ezremote-client.log"
+#define NOTIFY_ICON_FILE "/user" DATA_PATH "/sce_sys/icon0.png"
 #define DBG_LOG_SETTINGS "file:" EZREMOTE_CLIENT_LOG ":0"
 
 #define CONFIG_GLOBAL "Global"

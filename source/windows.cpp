@@ -60,6 +60,7 @@ std::set<DirEntry> multi_selected_local_files;
 std::set<DirEntry> multi_selected_remote_files;
 std::vector<DirEntry> local_paste_files;
 std::vector<DirEntry> remote_paste_files;
+std::vector<DownloadProgress> bg_download_progress;
 DirEntry selected_local_file;
 DirEntry selected_remote_file;
 ACTIONS selected_action;
@@ -83,6 +84,8 @@ int favorite_url_idx = 0;
 char extract_zip_folder[256];
 char zip_file_path[384];
 bool show_settings = false;
+bool show_bg_download_progress = false;
+uint64_t refresh_bg_download_time;
 
 // Editor variables
 std::vector<std::string> edit_buffer;
@@ -1768,6 +1771,78 @@ namespace Windows
         }
     }
 
+    void ShowDownloadProgressDialog()
+    {
+        if (show_bg_download_progress)
+        {
+            ImGuiIO &io = ImGui::GetIO();
+            (void)io;
+            ImGuiStyle *style = &ImGui::GetStyle();
+            ImVec4 *colors = style->Colors;
+
+            SetModalMode(true);
+            ImGui::OpenPopup(lang_strings[STR_BG_DOWNLOAD_PROGRESS]);
+
+            ImGui::SetNextWindowPos(ImVec2(420, 320));
+            ImGui::SetNextWindowSizeConstraints(ImVec2(1080, 80), ImVec2(1080, 500), NULL, NULL);
+            if (ImGui::BeginPopupModal(lang_strings[STR_BG_DOWNLOAD_PROGRESS], NULL, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                ImGui::Columns(3, "bg_download_progress##Columns", true);
+                
+                for (int j = 0; j < bg_download_progress.size(); j++)
+                {
+                    DownloadProgress item = bg_download_progress[j];
+
+                    ImGui::SetColumnWidth(-1, 740);
+                    ImGui::Text("%s", item.path.c_str());
+
+                    ImGui::NextColumn();
+                    ImGui::SetColumnWidth(-1, 150);
+                    ImGui::Text("%s", item.state.c_str());
+
+                    ImGui::NextColumn();
+                    ImGui::SetColumnWidth(-1, 150);
+                    ImGui::Text("%.2f%%", (item.bytes_transfered * 1.0f/item.file_size * 1.0f)*100);
+
+                    ImGui::NextColumn();
+                    ImGui::Separator();
+                }
+                ImGui::Columns(1);
+
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 455);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+
+                char id[128];
+                sprintf(id, "%s##bg_dl_progress", lang_strings[STR_CLOSE]);
+                if (ImGui::Button(id, ImVec2(150, 0)))
+                {
+                    show_bg_download_progress = false;
+                    SetModalMode(false);
+                }
+
+                if (ImGui::IsWindowAppearing())
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+                if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
+                {
+                    show_bg_download_progress = false;
+                    SetModalMode(false);
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::EndPopup();
+
+                uint64_t cur_time = Util::GetTick();
+                if (cur_time - refresh_bg_download_time > 2000000)
+                {
+                    refresh_bg_download_time = cur_time;
+                    Actions::GetBackgroundDownloadProgress();
+                }
+            }
+        }
+    }
+
     void ShowSettingsDialog()
     {
         if (show_settings)
@@ -2007,6 +2082,18 @@ namespace Windows
                 ImGui::PopStyleVar();
                 ImGui::Separator();
 
+                sprintf(id, "%s##settings", lang_strings[STR_SHOW_BG_DOWNLOAD_PROGRESS]);
+                if (ImGui::Button(id, ImVec2(835, 0)))
+                {
+                    Actions::GetBackgroundDownloadProgress();
+                    show_bg_download_progress = true;
+                    show_settings = false;
+                    refresh_bg_download_time = Util::GetTick();
+                    SetModalMode(false);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::Separator();
+
                 sprintf(id, "%s##settings", lang_strings[STR_CLOSE]);
                 if (ImGui::Button(id, ImVec2(835, 0)))
                 {
@@ -2171,6 +2258,7 @@ namespace Windows
             ShowImageDialog();
             ShowPackageInfoDialog();
             ShowWarningDialog();
+            ShowDownloadProgressDialog();
         }
         ImGui::End();
     }

@@ -1943,4 +1943,46 @@ namespace Actions
 
         tmp_client.Get("http://localhost:" + std::to_string(http_int_server_port) + "/stop", headers, res);
     }
+
+    void GetBackgroundDownloadProgress()
+    {
+        CHTTPClient::HttpResponse res;
+        CHTTPClient::HeadersMap headers;
+        CHTTPClient tmp_client([](const std::string& log){});
+        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+        tmp_client.SetCertificateFile(CACERT_FILE);
+        tmp_client.SetTimeout(1);
+
+        if (tmp_client.Get("http://localhost:" + std::to_string(http_int_server_port) + "/get_download_state", headers, res))
+        {
+			if (HTTP_SUCCESS(res.iCode))
+			{
+                bg_download_progress.clear();
+                
+                json_object *jobj = json_tokener_parse(res.strBody.data());
+                if (jobj != nullptr)
+                {
+                    struct array_list *progress_list = json_object_get_array(jobj);
+
+                    for (size_t idx = 0; idx < progress_list->length; ++idx)
+                    {
+                        DownloadProgress progress;
+
+                        json_object *progress_obj = (json_object *)array_list_get_idx(progress_list, idx);
+                        progress.path = json_object_get_string(json_object_object_get(progress_obj, "path"));
+                        progress.bytes_transfered = json_object_get_uint64(json_object_object_get(progress_obj, "bytes_transfered"));
+                        progress.file_size = json_object_get_uint64(json_object_object_get(progress_obj, "file_size"));
+                        progress.state = state_strings[json_object_get_int(json_object_object_get(progress_obj, "state"))];
+
+                        bg_download_progress.push_back(progress);
+                    }
+                    json_object_put(jobj);
+                }
+            }
+			else
+			{
+                snprintf(status_message, 1024, "Failed to get the download progress from ezRemote Server");
+			}
+        }
+    }
 }

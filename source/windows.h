@@ -23,6 +23,7 @@ extern std::set<DirEntry> multi_selected_local_files;
 extern std::set<DirEntry> multi_selected_remote_files;
 extern std::vector<DirEntry> local_paste_files;
 extern std::vector<DirEntry> remote_paste_files;
+extern std::vector<DownloadProgress> bg_download_progress;
 extern ACTIONS paste_action;
 extern DirEntry selected_local_file;
 extern DirEntry selected_remote_file;

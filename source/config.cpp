@@ -166,7 +166,7 @@ namespace CONFIG
         sprintf(temp_folder, "%s", ReadString(CONFIG_GLOBAL, CONFIG_TMP_FOLDER_PATH, TMP_FOLDER_PATH));
         WriteString(CONFIG_GLOBAL, CONFIG_TMP_FOLDER_PATH, temp_folder);
 
-        enable_background_download = ReadBool(CONFIG_GLOBAL, CONFIG_ENABLE_BG_DOWNLOAD, false);
+        enable_background_download = ReadBool(CONFIG_GLOBAL, CONFIG_ENABLE_BG_DOWNLOAD, true);
         WriteBool(CONFIG_GLOBAL, CONFIG_ENABLE_BG_DOWNLOAD, enable_background_download);
 
         minimum_backgrond_file_size = ReadLong(CONFIG_GLOBAL, CONFIG_BG_DOWNLOAD_SIZE, 1024*1024*1024);

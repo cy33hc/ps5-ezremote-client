@@ -124,6 +124,7 @@ namespace Actions
     void *DownloadSplitPkg(void *argp);
     void RestartServer();
     void StopServer();
+    void GetBackgroundDownloadProgress();
 }
 
 #endif

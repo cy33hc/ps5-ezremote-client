@@ -186,7 +186,9 @@ char lang_strings[LANG_STRINGS_NUM][LANG_STR_SIZE] = {
 	"If you are using an auto payload loader, then update the elf that comes with ezRemoteClient package.", // STR_WARNING_MSG_2
 	"You may goto the Global Settings and restart ezRemote Server with the version that came packaged.", // STR_WARNING_MSG_3
 	"Enable background download",                                                                     // STR_ENABLE_BG_DOWNLOAD
-	"Minimum background file size (bytes)",                                                                   // STR_BG_DOWNLOAD_MIN_SIZE
+	"Minimum background file size (bytes)",                                                           // STR_BG_DOWNLOAD_MIN_SIZE
+	"Background Download Progress",                                                                   // STR_BG_DOWNLOAD_PROGRESS
+	"Show Background Download Progress",                                                              // STR_SHOW_BG_DOWNLOAD_PROGRESS
 };
 
 bool needs_extended_font = false;

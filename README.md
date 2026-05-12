@@ -6,8 +6,8 @@ ezRemote Client is an application that allows you to connect the PS5 to remote F
   - You can enable/disable background download in the Global settings
   - You can set the minimum file size where background download will use. Default is 1GB
   - In Global Settings, you can show the background download progress of all requested downloads
-  - Does not support rest mode. Download will stop in rest mode, but will be resumed when ezRemote Server is restarted.
-  - If PS5 is restarted, download will resume when ezRemote Server is restarted.
+  - Does not support rest mode. Background downloads will stop in rest mode, but will be resumed when ezRemote Server is restarted.
+  - If PS5 is restarted, background downloads will resume when ezRemote Server is restarted.
   - Updated the Web UI, so you can download files of File shares like mediafire, google shared link, pixeldrain, real-debrid and all-debrid or any direct links
 
 **NEW: As of version 2.00, PS4 pkgs can be installed in the background. Use ezRemote client to connect to remote server and select pkg to install. You can then close ezRemote Client app and the package will continue installing in background. This is archieved with a new payload called [ezRemote Server](https://github.com/cy33hc/ps5-ezremote-server) that is packaged together with exRemote Client. ezRemote Server runs in the background and acts as a proxy to the remote server. ezRemote Server must be started to enable backgroud installs.** 

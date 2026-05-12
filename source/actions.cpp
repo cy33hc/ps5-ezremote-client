@@ -1973,6 +1973,7 @@ namespace Actions
                         progress.bytes_transfered = json_object_get_uint64(json_object_object_get(progress_obj, "bytes_transfered"));
                         progress.file_size = json_object_get_uint64(json_object_object_get(progress_obj, "file_size"));
                         progress.state = state_strings[json_object_get_int(json_object_object_get(progress_obj, "state"))];
+                        progress.timestamp = json_object_get_uint64(json_object_object_get(progress_obj, "timestamp"));
 
                         bg_download_progress.push_back(progress);
                     }

@@ -11,9 +11,9 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-enum DownloadState { STATE_PENDING, STATE_DOWNLOADING, STATE_FAILED, STATE_SUCCESS };
+enum DownloadState { STATE_PENDING, STATE_DOWNLOADING, STATE_RESUMED, STATE_FAILED, STATE_SUCCESS };
 
-static const char* state_strings[] = {"Pending", "Downloading", "Failed", "Success"};
+static const char* state_strings[] = {"Pending", "Downloading", "Resumed", "Failed", "Success"};
 
 typedef struct
 {
@@ -98,6 +98,7 @@ struct DownloadProgress
     std::string state;
     uint64_t bytes_transfered;
     uint64_t file_size;
+    time_t timestamp;
 };
 
 static lxb_dom_node_t *NextChildElement(lxb_dom_element_t *element)

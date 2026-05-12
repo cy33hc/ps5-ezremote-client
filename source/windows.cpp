@@ -1779,20 +1779,29 @@ namespace Windows
             (void)io;
             ImGuiStyle *style = &ImGui::GetStyle();
             ImVec4 *colors = style->Colors;
+            char datetime_str[32];
 
             SetModalMode(true);
             ImGui::OpenPopup(lang_strings[STR_BG_DOWNLOAD_PROGRESS]);
 
-            ImGui::SetNextWindowPos(ImVec2(420, 320));
-            ImGui::SetNextWindowSizeConstraints(ImVec2(1080, 80), ImVec2(1080, 500), NULL, NULL);
+            ImGui::SetNextWindowPos(ImVec2(345, 320));
+            ImGui::SetNextWindowSizeConstraints(ImVec2(1260, 80), ImVec2(1260, 500), NULL, NULL);
             if (ImGui::BeginPopupModal(lang_strings[STR_BG_DOWNLOAD_PROGRESS], NULL, ImGuiWindowFlags_AlwaysAutoResize))
             {
-                ImGui::Columns(3, "bg_download_progress##Columns", true);
+                ImGui::Columns(4, "bg_download_progress##Columns", true);
                 
                 for (int j = 0; j < bg_download_progress.size(); j++)
                 {
                     DownloadProgress item = bg_download_progress[j];
 
+                    std::tm* ptm = std::localtime(&item.timestamp);
+                    // Format: YYYY-MM-DD HH:MM:SS
+                    std::strftime(datetime_str, sizeof(datetime_str), "%Y-%m-%d %H:%M", ptm);
+
+                    ImGui::SetColumnWidth(-1, 220);
+                    ImGui::Text("%s", datetime_str);
+
+                    ImGui::NextColumn();
                     ImGui::SetColumnWidth(-1, 740);
                     ImGui::Text("%s", item.path.c_str());
 
@@ -1801,7 +1810,7 @@ namespace Windows
                     ImGui::Text("%s", item.state.c_str());
 
                     ImGui::NextColumn();
-                    ImGui::SetColumnWidth(-1, 150);
+                    ImGui::SetColumnWidth(-1, 100);
                     ImGui::Text("%.2f%%", (item.bytes_transfered * 1.0f/item.file_size * 1.0f)*100);
 
                     ImGui::NextColumn();
@@ -1809,7 +1818,7 @@ namespace Windows
                 }
                 ImGui::Columns(1);
 
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 455);
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 485);
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
 
                 char id[128];

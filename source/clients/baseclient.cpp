@@ -87,6 +87,7 @@ int BaseClient::Connect(const std::string &url, const std::string &username, con
     client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
     client->SetCertificateFile(CACERT_FILE);
     client->SetSocketOptFnCallback(SocketOptCallback);
+    client->SetBufferSize(524288L);
 
     if (!send_ping)
         this->connected = true;

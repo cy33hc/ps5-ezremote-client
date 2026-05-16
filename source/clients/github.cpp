@@ -27,6 +27,7 @@ int GithubClient::Connect(const std::string &url, const std::string &username, c
     client->SetBasicAuth(username, password);
     client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
     client->SetCertificateFile(CACERT_FILE);
+    client->SetBufferSize(524288L);
 
     if (!send_ping)
         this->connected = true;

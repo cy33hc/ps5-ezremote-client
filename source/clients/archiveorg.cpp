@@ -39,6 +39,7 @@ int ArchiveOrgClient::Connect(const std::string &url, const std::string &usernam
     client = new CHTTPClient([](const std::string& log){});
     client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
     client->SetCertificateFile(CACERT_FILE);
+    client->SetBufferSize(524288L);
 
     client->SetCookie("donation-identifier", GenerateRandomId(32));
     client->SetCookie("test-cookie", "1");

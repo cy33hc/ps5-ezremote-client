@@ -296,7 +296,7 @@ int main()
 	if (window == NULL)
 		return 0;
 
-	renderer = SDL_CreateRenderer(window, 0, SDL_RENDERER_SOFTWARE);
+	renderer = SDL_CreateRenderer(window, 0, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	if (renderer == NULL)
 		return 0;
 

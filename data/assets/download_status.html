@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Download Status Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f4f6f9;
+        }
+        h2 {
+            color: #333;
+        }
+        .refresh-indicator {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #fff;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+        tr:hover {
+            background-color: #f1f5f9;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            display: inline-block;
+        }
+        .queued { background-color: #e2e3e5; color: #383d41; }
+        .in-progress { background-color: #fff3cd; color: #856404; }
+        .resumed { background-color: #d1ecf1; color: #0c5460; }
+        .failed { background-color: #f8d7da; color: #721c24; }
+        .completed { background-color: #d4edda; color: #155724; }
+        .unknown { background-color: #eee; color: #333; }
+        
+        .error-message {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Live File Download Dashboard</h2>
+    <div class="refresh-indicator" id="refresh-text">Connecting to server...</div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>File Path</th>
+                <th>File Size</th>
+                <th>Transferred</th>
+                <th>Download Status</th>
+                <th>Progress</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+            <tr>
+                <td colspan="6" style="text-align: center; color: #888;">Waiting for data array...</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <script>
+        const API_URL = "http://localhost:6701/get_download_state";
+
+        const STATE_MAP = {
+            0: { text: "Queued", cssClass: "queued" },
+            1: { text: "In Progress", cssClass: "in-progress" },
+            2: { text: "Resumed", cssClass: "resumed" },
+            3: { text: "Failed", cssClass: "failed" },
+            4: { text: "Completed", cssClass: "completed" }
+        };
+
+        function formatEpoch(epochSeconds) {
+            const date = new Date(epochSeconds * 1000);
+            const day = String(date.getDate()).padStart(2, '0');
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const month = months[date.getMonth()];
+            const year = date.getFullYear();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${day} ${month} ${year} ${hours}:${minutes}`;
+        }
+
+        // Converts raw byte integers to clean readable units like KB, MB, GB
+        function formatBytes(bytes) {
+            if (bytes === 0 || !bytes) return "0 Bytes";
+            const k = 1024;
+            const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+        }
+
+        function calculatePercentage(transferred, total) {
+            if (!total || total === 0) return "0%";
+            const percentage = (transferred / total) * 100;
+            return percentage.toFixed(1) + "%";
+        }
+
+        async function fetchTableData() {
+            const tbody = document.getElementById("table-body");
+            const refreshText = document.getElementById("refresh-text");
+
+            try {
+                const response = await fetch(API_URL);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const dataArray = await response.json();
+                
+                if (!Array.isArray(dataArray)) {
+                    throw new TypeError("Expected an array of items from API");
+                }
+
+                tbody.innerHTML = ""; 
+
+                if (dataArray.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #888;">No active downloads found.</td></tr>`;
+                } else {
+                    dataArray.forEach(data => {
+                        const row = document.createElement("tr");
+                        const formattedDate = formatEpoch(data.timestamp);
+                        const progressPercent = calculatePercentage(data.bytes_transfered, data.file_size);
+                        
+                        // Parse values into clean file size formats
+                        const readableFileSize = formatBytes(data.file_size);
+                        const readableTransferred = formatBytes(data.bytes_transfered);
+                        
+                        const rawState = data.state;
+                        const numericState = parseInt(rawState, 10);
+                        const lookupKey = !isNaN(numericState) ? numericState : String(rawState).toLowerCase().trim();
+                        
+                        const mappedState = STATE_MAP[lookupKey] || { text: `Unknown (${rawState})`, cssClass: "unknown" };
+
+                        row.innerHTML = `
+                            <td>${formattedDate}</td>
+                            <td><code>${data.path}</code></td>
+                            <td>${readableFileSize}</td>
+                            <td>${readableTransferred}</td>
+                            <td><span class="status-badge ${mappedState.cssClass}">${mappedState.text}</span></td>
+                            <td><strong>${progressPercent}</strong></td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+
+                const now = new Date();
+                refreshText.innerHTML = `Last updated: ${now.toLocaleTimeString()}`;
+
+            } catch (error) {
+                console.error("Fetch failure:", error);
+                refreshText.innerHTML = `<span class="error-message">Connection failed (${error.message}). Retrying...</span>`;
+            }
+        }
+
+        fetchTableData();
+        setInterval(fetchTableData, 2000);
+    </script>
+</body>
+</html>

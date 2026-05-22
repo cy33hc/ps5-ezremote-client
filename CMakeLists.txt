@@ -112,7 +112,7 @@ target_link_libraries(ezremote_client.elf
 )
 
 set(APPDIR "ezremote-client")
-set(APP_VERSION "2.02-beta")
+set(APP_VERSION "2.03")
 
 add_custom_target(package
    DEPENDS ezremote-dpi.elf

@@ -282,11 +282,11 @@ namespace Util
             "      },\n"
             "      \"actions\": [\n"
             "        {\n"
-            "          \"actionName\": \"Go to ezRemote Client\",\n"
+            "          \"actionName\": \"View Download Status\",\n"
             "          \"actionType\": \"DeepLink\",\n"
             "          \"defaultFocus\": true,\n"
             "          \"parameters\": {\n"
-            "            \"actionUrl\": \"http://localhost:8080/hbldr?path=%s\"\n"
+            "            \"actionUrl\": \"http://localhost:6701/download_status.html\"\n"
             "          }\n"
             "        }\n"
             "      ]\n"
@@ -310,7 +310,7 @@ namespace Util
             "  \"createdDateTime\": \"%s\",\n"
             "  \"localNotificationId\": \"%s\"\n"
             "}",
-            escaped_message, CLIENT_ELF_PATH, escaped_message, created_at,
+            escaped_message, escaped_message, created_at,
             notification_id);
 
         if (len < 0 || (size_t)len >= sizeof(payload))

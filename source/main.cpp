@@ -17,7 +17,7 @@
 #include "installer.h"
 #include "util.h"
 #include "textures.h"
-#include "dbglogger.h"
+//#include "dbglogger.h"
 
 extern "C"
 {

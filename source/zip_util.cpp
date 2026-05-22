@@ -364,8 +364,9 @@ namespace ZipUtil
     {
         char *pathname, *realpathname;
         mode_t filetype;
+        const char *original_name = archive_entry_pathname(e);
 
-        if ((pathname = pathdup(archive_entry_pathname(e))) == NULL)
+        if ((pathname = pathdup(original_name)) == NULL)
         {
             archive_read_data_skip(a);
             return;
@@ -392,7 +393,7 @@ namespace ZipUtil
 
         realpathname = pathcat(base_dir.c_str(), pathname);
 
-        if (S_ISDIR(filetype))
+        if (S_ISDIR(filetype) || original_name[strlen(original_name)-1] == '/')
             extract_dir(a, e, realpathname);
         else
         {

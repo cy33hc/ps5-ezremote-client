@@ -12,6 +12,10 @@
 
 using httplib::DataSink;
 
+struct BufferPtr {
+    char *buffer;
+};
+
 BaseClient::BaseClient(){};
 
 BaseClient::~BaseClient()
@@ -68,7 +72,7 @@ size_t BaseClient::WriteToSplitFileCallback(void *buff, size_t size, size_t nmem
     return size * nmemb;
 }
 
-size_t BaseClient::WriteCallback(void *pCurlData, size_t usBlockCount, size_t usBlockSize, void *pUserData)
+size_t BaseClient::WriteDataSinkCallback(void *pCurlData, size_t usBlockCount, size_t usBlockSize, void *pUserData)
 {
     const char* buff = reinterpret_cast<char *>(pCurlData);
     DataSink *out = reinterpret_cast<DataSink*>(pUserData);
@@ -76,6 +80,17 @@ size_t BaseClient::WriteCallback(void *pCurlData, size_t usBlockCount, size_t us
     if (out->write(buff, usBlockCount*usBlockSize))
         return (usBlockCount * usBlockSize);
     return 0;
+}
+
+size_t BaseClient::WriteBufferCallback(void *pCurlData, size_t usBlockCount, size_t usBlockSize, void *pUserData)
+{
+    const char* input = reinterpret_cast<char *>(pCurlData);
+    BufferPtr *out = reinterpret_cast<BufferPtr*>(pUserData);
+
+    memcpy(out->buffer, input, usBlockCount*usBlockSize);
+    out->buffer += (usBlockCount*usBlockSize);
+
+    return usBlockCount*usBlockSize;
 }
 
 int BaseClient::Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping)
@@ -219,7 +234,7 @@ int BaseClient::GetRange(const std::string &path, DataSink &sink, uint64_t size,
     headers["Range"] = range_header;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
-    if (client->Get(encoded_url, headers, res, (void*) &WriteCallback, (void*)&sink))
+    if (client->Get(encoded_url, headers, res, (void*) &WriteDataSinkCallback, (void*)&sink))
     {
         if (HTTP_SUCCESS(res.iCode))
             return 1;
@@ -242,9 +257,11 @@ int BaseClient::GetRange(const std::string &path, void *buffer, uint64_t size, u
     sprintf(range_header, "bytes=%lu-%lu", offset, offset + size - 1);
     headers["Range"] = range_header;
 
+    BufferPtr buff = {(char*)buffer};
+
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
     client->SetProgressFnCallback(nullptr, NothingCallback);
-    if (client->Get(encoded_url, headers, res))
+    if (client->Get(encoded_url, headers, res, (void*) &WriteBufferCallback, (void*) &buff))
     {
         uint64_t len = MIN(size, res.strBody.size());
         memcpy(buffer, res.strBody.data(), len);

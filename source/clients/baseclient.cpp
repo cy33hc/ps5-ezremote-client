@@ -72,9 +72,10 @@ size_t BaseClient::WriteCallback(void *pCurlData, size_t usBlockCount, size_t us
 {
     const char* buff = reinterpret_cast<char *>(pCurlData);
     DataSink *out = reinterpret_cast<DataSink*>(pUserData);
-    out->write(buff, usBlockCount*usBlockSize);
 
-    return (usBlockCount * usBlockSize);
+    if (out->write(buff, usBlockCount*usBlockSize))
+        return (usBlockCount * usBlockSize);
+    return 0;
 }
 
 int BaseClient::Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping)

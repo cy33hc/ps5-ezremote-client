@@ -48,6 +48,7 @@ public:
     static size_t WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data);
     static int NothingCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
     static int SocketOptCallback(void* ptr, int fd, uint32_t socktype);
+    static size_t WriteCallback(void *pCurlData, size_t usBlockCount, size_t usBlockSize, void *pUserData);
 
 protected:
     CHTTPClient *client;

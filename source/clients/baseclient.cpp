@@ -68,6 +68,15 @@ size_t BaseClient::WriteToSplitFileCallback(void *buff, size_t size, size_t nmem
     return size * nmemb;
 }
 
+size_t BaseClient::WriteCallback(void *pCurlData, size_t usBlockCount, size_t usBlockSize, void *pUserData)
+{
+    const char* buff = reinterpret_cast<char *>(pCurlData);
+    DataSink *out = reinterpret_cast<DataSink*>(pUserData);
+    out->write(buff, usBlockCount*usBlockSize);
+
+    return (usBlockCount * usBlockSize);
+}
+
 int BaseClient::Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping)
 {
     this->host_url = url;
@@ -87,7 +96,7 @@ int BaseClient::Connect(const std::string &url, const std::string &username, con
     client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
     client->SetCertificateFile(CACERT_FILE);
     client->SetSocketOptFnCallback(SocketOptCallback);
-    client->SetBufferSize(524288L);
+    client->SetBufferSize(1048576L);
 
     if (!send_ping)
         this->connected = true;
@@ -209,13 +218,12 @@ int BaseClient::GetRange(const std::string &path, DataSink &sink, uint64_t size,
     headers["Range"] = range_header;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
-    client->SetProgressFnCallback(nullptr, NothingCallback);
-    if (client->Get(encoded_url, headers, res))
+    if (client->Get(encoded_url, headers, res, (void*) &WriteCallback, (void*)&sink))
     {
-        uint64_t len = MIN(size, res.strBody.size());
-        if (!sink.write(res.strBody.data(), len))
+        if (HTTP_SUCCESS(res.iCode))
+            return 1;
+        else
             return 0;
-        return 1;
     }
     else
     {
@@ -223,7 +231,6 @@ int BaseClient::GetRange(const std::string &path, DataSink &sink, uint64_t size,
     }
     return 0;
 }
-
 
 int BaseClient::GetRange(const std::string &path, void *buffer, uint64_t size, uint64_t offset)
 {

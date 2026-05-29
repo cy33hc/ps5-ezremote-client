@@ -263,8 +263,6 @@ int BaseClient::GetRange(const std::string &path, void *buffer, uint64_t size, u
     client->SetProgressFnCallback(nullptr, NothingCallback);
     if (client->Get(encoded_url, headers, res, (void*) &WriteBufferCallback, (void*) &buff))
     {
-        uint64_t len = MIN(size, res.strBody.size());
-        memcpy(buffer, res.strBody.data(), len);
         return 1;
     }
     else
@@ -423,6 +421,7 @@ std::string BaseClient::Escape(const std::string &url)
         {
             std::string encoded_url = std::string(output);
             curl_free(output);
+            curl_easy_cleanup(curl);
             return encoded_url;
         }
         curl_easy_cleanup(curl);
@@ -441,6 +440,7 @@ std::string BaseClient::UnEscape(const std::string &url)
         {
             std::string decoded_url = std::string(output, decode_len);
             curl_free(output);
+            curl_easy_cleanup(curl);
             return decoded_url;
         }
         curl_easy_cleanup(curl);

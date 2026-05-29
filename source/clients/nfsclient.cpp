@@ -246,7 +246,7 @@ int NfsClient::Get(SplitFile *split_file, const std::string &ppath, uint64_t off
 
 	void *buff = malloc(BUF_SIZE);
 	int count = 0;
-	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) > 0)
+	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) != 0)
 	{
 		if (count < 0)
 		{
@@ -434,14 +434,14 @@ int NfsClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 	}
 
 	void* buff = malloc(BUF_SIZE);
-	uint64_t count = 0;
+	int count = 0;
 	bytes_transfered = 0;
 	prev_tick = Util::GetTick();
-	while ((count = FS::Read(in, buff, BUF_SIZE)) > 0)
+	while ((count = FS::Read(in, buff, BUF_SIZE)) != 0)
 	{
 		if (count < 0)
 		{
-			sprintf(response, "%s", lang_strings[STR_FAILED]);
+			snprintf(response, sizeof(response), "%s", lang_strings[STR_FAILED]);
 			FS::Close(in);
 			nfs_close(nfs, nfsfh);
 			free(buff);
@@ -632,5 +632,5 @@ void *NfsClient::Open(const std::string &path, int flags)
 
 void NfsClient::Close(void *fp)
 {
-	sprintf(this->response, "%s", lang_strings[STR_UNSUPPORTED_OPERATION_MSG]);
+	nfs_close(nfs, (struct nfsfh *)fp);
 }

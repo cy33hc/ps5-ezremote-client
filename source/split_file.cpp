@@ -25,7 +25,7 @@ SplitFile::~SplitFile()
                 fclose(this->file_blocks[i]->fd);
             }
             remove(this->file_blocks[i]->block_file.c_str());
-            free(this->file_blocks[i]);
+            delete this->file_blocks[i];
         }
     }
     sem_destroy(&this->block_ready);
@@ -34,8 +34,6 @@ SplitFile::~SplitFile()
 int SplitFile::Open()
 {
     this->block_in_progress = NewBlock();
-    this->block_in_progress->fd = fopen(block_in_progress->block_file.c_str(), "w");
-
     return (block_in_progress->fd == nullptr);
 }
 
@@ -62,6 +60,10 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
         ts.tv_sec += 2;
         sem_timedwait(&this->block_ready, &ts);
     }
+
+    // If complete and block_num is past the end, the requested offset is beyond EOF
+    if (block_num >= this->file_blocks.size())
+        return 0;
 
     block = this->file_blocks[block_num];
     if (block->status == BLOCK_STATUS_DELETED)
@@ -122,13 +124,17 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
         block_offset = 0;
 
         while ((block_num > this->file_blocks.size() - 1 && !this->complete) ||
-               this->file_blocks[block_num]->status == BLOCK_STATUS_NOT_EXISTS)
+               (block_num < this->file_blocks.size() && this->file_blocks[block_num]->status == BLOCK_STATUS_NOT_EXISTS))
         {
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
             ts.tv_sec += 2;
             sem_timedwait(&this->block_ready, &ts);
         }
+
+        // If complete and block_num is past the end, no more data
+        if (block_num >= this->file_blocks.size())
+            break;
 
         block = this->file_blocks[block_num];
     }
@@ -155,7 +161,7 @@ size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
     return total_bytes_read;
 }
 
-size_t SplitFile::Write(char *buf, size_t buf_size)
+ssize_t SplitFile::Write(char *buf, size_t buf_size)
 {
     size_t bytes_written = 0;
     size_t block_space_remaining;
@@ -206,22 +212,24 @@ size_t SplitFile::Write(char *buf, size_t buf_size)
 
 int SplitFile::Close()
 {
-    std::unique_lock<std::shared_mutex> lock(mutex_);
-    if (this->complete)
-        return 0;
-
-    this->complete = true;
-
-    if (block_in_progress->fd != nullptr)
     {
-        fflush(block_in_progress->fd);
-        fclose(block_in_progress->fd);
-        block_in_progress->fd = nullptr;
-    }
-    block_in_progress->status = BLOCK_STATUS_CREATED;
-    block_in_progress->is_last = true;
-    this->file_blocks.push_back(block_in_progress);
-    sem_post(&this->block_ready);
+        std::unique_lock<std::shared_mutex> lock(mutex_);
+        if (this->complete)
+            return 0;
+
+        this->complete = true;
+
+        if (block_in_progress->fd != nullptr)
+        {
+            fflush(block_in_progress->fd);
+            fclose(block_in_progress->fd);
+            block_in_progress->fd = nullptr;
+        }
+        block_in_progress->status = BLOCK_STATUS_CREATED;
+        block_in_progress->is_last = true;
+        this->file_blocks.push_back(block_in_progress);
+        sem_post(&this->block_ready);
+    } // lock released here — readers can proceed while we wait
 
     // Wait until file is fully read, if file isn't full read
     // in 5 mins then go ahead and delete all file chunks
@@ -253,8 +261,7 @@ bool SplitFile::IsClosed()
 
 FileBlock *SplitFile::NewBlock()
 {
-    FileBlock *block = (FileBlock *)malloc(sizeof(FileBlock));
-    memset(block, 0, sizeof(FileBlock));
+    FileBlock *block = new FileBlock{};
 
     block->is_last = false;
     block->size = 0;

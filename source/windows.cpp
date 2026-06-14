@@ -1,5 +1,4 @@
 #include <SDL2/SDL.h>
-// #include <orbis/SystemService.h>
 #include <stdio.h>
 #include <algorithm>
 #include <set>
@@ -2242,6 +2241,7 @@ namespace Windows
                         else
                             selected_action = ACTION_INSTALL_LOCAL_PKG;
                         show_pkg_info = false;
+                        Textures::Free(&texture);
                         SetModalMode(false);
                         ImGui::CloseCurrentPopup();
                     }

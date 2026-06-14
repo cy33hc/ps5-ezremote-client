@@ -1,0 +1,42 @@
+{
+  "addcont": {
+    "serviceIdForSharing": [
+      "                   ",
+      "                   ",
+      "                   ",
+      "                   ",
+      "                   ",
+      "                   ",
+      "                   "
+    ]
+  },
+  "ageLevel": {
+    "US": 0,
+    "default": 0
+  },
+  "applicationCategoryType": 0,
+  "applicationDrmType": "free",
+  "attribute": 0,
+  "attribute2": 0,
+  "attribute3": 0,
+  "conceptId": "0",
+  "contentBadgeType": 2,
+  "contentId": "IV9999-RMTC00001_00-XXXXXXXXXXXXXXXX",
+  "contentVersion": "02.000.000",
+  "deeplinkUri": "http://127.0.0.1:8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/ezremote-client/ezremote_client.elf&env=LD_LIBRARY_PATH=/data/homebrew/ezremote-client",
+  "localizedParameters": {
+    "defaultLanguage": "en-US",
+    "en-US": {
+      "titleName": "ezRemote Client"
+    }
+  },
+  "masterVersion": "01.00",
+  "pubtools": {
+    "creationDate": "2023-12-23 15:04:39",
+    "toolVersion": "1.21"
+  },
+  "requiredSystemSoftwareVersion": "0x0000000000000000",
+  "sdkVersion": "0x0000000000000000",
+  "titleId": "RMTC00001",
+  "versionFileUri": "                                                                                                                                                                                                                                                               "
+}

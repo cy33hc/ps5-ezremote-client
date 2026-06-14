@@ -3,16 +3,18 @@
 #include "windows.h"
 #include "gui.h"
 #include "SDL2/SDL.h"
+#include "SDL2/SDL_opengl.h"
 #include "imgui_impl_sdl.h"
-#include "imgui_impl_sdlrenderer.h"
+#include "imgui_impl_opengl2.h"
 
 bool done = false;
 int gui_mode = GUI_MODE_BROWSER;
 
 namespace GUI
 {
-	int RenderLoop(SDL_Renderer *renderer)
+	int RenderLoop(SDL_Window *window)
 	{
+		ImGuiIO& io = ImGui::GetIO(); (void)io;
 		Windows::Init();
 		while (!done)
 		{
@@ -24,8 +26,9 @@ namespace GUI
 					ImGui_ImplSDL2_ProcessEvent(&event);
 				}
 				GImGui->GcCompactAll = true;
-				ImGui_ImplSDLRenderer_NewFrame();
+				ImGui_ImplOpenGL2_NewFrame();
 				ImGui_ImplSDL2_NewFrame();
+
 				ImGui::NewFrame();
 
 				Windows::HandleWindowInput();
@@ -33,8 +36,10 @@ namespace GUI
 				Windows::ExecuteActions();
 
 				ImGui::Render();
-				ImGui_ImplSDLRenderer_RenderDrawData(ImGui::GetDrawData());
-				SDL_RenderPresent(renderer);
+				glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+				glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+				ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+				SDL_GL_SwapWindow(window);
 			}
 			else if (gui_mode == GUI_MODE_IME)
 			{

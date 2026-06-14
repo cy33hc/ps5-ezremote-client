@@ -1,7 +1,7 @@
 async function main() {
     const PAYLOAD = window.workingDir + '/ezremote_client.elf';
     const ARGS = []
-    const ENVVARS = {};
+    const ENVVARS = {HOME: window.workingDir, LD_LIBRARY_PATH: window.workingDir};
 
     return {
         mainText: "ezRemote Client",

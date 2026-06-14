@@ -4,16 +4,17 @@
 #include <string>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#include <GL/gl.h>
 
 typedef struct {
-    SDL_Texture *id;
+    GLuint id;
     int width;
     int height;
 } Tex;
 
 namespace Textures {
     bool LoadImageFile(const std::string filename, Tex *texture);
-    void Init(SDL_Renderer *renderer);
+    void Init(void);
     void Exit(void);
     void Free(Tex *texture);
 }

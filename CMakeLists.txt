@@ -17,7 +17,7 @@ include_directories(
 add_executable(ezremote_client.elf
   source/imgui/imgui_draw.cpp
   source/imgui/imgui_impl_sdl.cpp
-  source/imgui/imgui_impl_sdlrenderer.cpp
+  source/imgui/imgui_impl_opengl2.cpp
   source/imgui/imgui_tables.cpp
   source/imgui/imgui_widgets.cpp
   source/imgui/imgui.cpp
@@ -71,6 +71,7 @@ target_link_libraries(ezremote_client.elf
   webpdemux
   SDL2
   SDL2_image
+  GL
   c
   c++
   png
@@ -107,12 +108,13 @@ target_link_libraries(ezremote_client.elf
   SceUserService
   SceLibcInternal
   SceNotification
+  SceGLSlimVSH
   kernel_sys
   SceAppInstUtil
 )
 
 set(APPDIR "ezremote-client")
-set(APP_VERSION "2.05")
+set(APP_VERSION "2.06")
 
 add_custom_target(package
    DEPENDS ezremote-dpi.elf
@@ -127,6 +129,7 @@ add_custom_target(package
    COMMAND cp ezremote_client.elf ${APPDIR}
    COMMAND cp ps5-ezremote-dpi/ezremote-dpi.elf ${APPDIR}
    COMMAND cp ps5-ezremote-server/ezremote-server.elf ${APPDIR}
+   COMMAND cp ${PS5_PAYLOAD_SDK}/target/user/homebrew/lib/libOSMesa.so.8.0.0 ${APPDIR}/libOSMesa.so.8
    COMMAND cp -R ${PROJECT_SOURCE_DIR}/data/* ${APPDIR}
    COMMAND sed -i "s/ezRemote Client/ezRemote Client v${APP_VERSION}/g"  ${APPDIR}/homebrew.js
 

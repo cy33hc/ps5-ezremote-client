@@ -12,7 +12,7 @@ extern int gui_mode;
 
 namespace GUI
 {
-    int RenderLoop(SDL_Renderer *renderer);
+    int RenderLoop(SDL_Window *window);
 }
 
 #endif

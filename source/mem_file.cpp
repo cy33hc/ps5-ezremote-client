@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <algorithm>
+#include "dbglogger.h"
 
 MemFile::MemFile(size_t capacity, size_t peek_window)
     : m_buf(nullptr)
@@ -45,13 +46,17 @@ ssize_t MemFile::Write(char *buf, size_t buf_size)
     const uint8_t *src   = reinterpret_cast<const uint8_t *>(buf);
     size_t         total = 0;
 
+    dbglogger_log("MemFile::Write called with buf_size=%zu before mutex_lock", buf_size);
     pthread_mutex_lock(&m_mutex);
 
     while (total < buf_size)
     {
         // Wait while the buffer is full (based on peek position)
         while (m_peek_used == m_capacity && !m_aborted && !m_closed)
+        {
+            dbglogger_log("MemFile::Write waiting, total=%zu, peek_used=%zu", total, m_peek_used);
             pthread_cond_wait(&m_cond_not_full, &m_mutex);
+        }
 
         if (m_aborted || m_closed)
         {
@@ -70,15 +75,19 @@ ssize_t MemFile::Write(char *buf, size_t buf_size)
         m_peek_used += to_write;
         total       += to_write;
 
+        dbglogger_log("MemFile::Write wrote %zu bytes, total=%zu, used=%zu, peek_used=%zu", to_write, total, m_used, m_peek_used);
         pthread_cond_signal(&m_cond_not_empty);
+        dbglogger_log("MemFile::Write signaled not_empty after writing, total=%zu", total);
     }
 
     pthread_mutex_unlock(&m_mutex);
+    dbglogger_log("MemFile::Write finished writing, total=%zu", total);
     return (ssize_t)total;
 }
 
 size_t MemFile::Read(char *buf, size_t buf_size, size_t offset)
 {
+    dbglogger_log("MemFile::Read called with buf_size=%zu, offset=%zu", buf_size, offset);
     if (m_buf == nullptr || buf_size == 0)
         return 0;
 
@@ -92,6 +101,7 @@ size_t MemFile::Read(char *buf, size_t buf_size, size_t offset)
     size_t earliest_available = (m_total_read > m_peek_window) ? (m_total_read - m_peek_window) : 0;
     if (offset < earliest_available)
     {
+        dbglogger_log("MemFile::Read failed, offset %zu is before earliest available %zu", offset, earliest_available);
         pthread_mutex_unlock(&m_mutex);
         return 0;
     }
@@ -117,6 +127,7 @@ size_t MemFile::Read(char *buf, size_t buf_size, size_t offset)
             total += to_copy;
         }
 
+        dbglogger_log("MemFile::Read read %zu bytes from peek window, total=%zu", hist_read, total);
         // If we've satisfied the full request from the peek window, done
         if (total >= len)
         {
@@ -129,16 +140,21 @@ size_t MemFile::Read(char *buf, size_t buf_size, size_t offset)
     while (total < len)
     {
         while (m_used == 0 && !m_closed && !m_aborted)
+        {
+            dbglogger_log("MemFile::Read waiting, total=%zu, used=%zu", total, m_used);
             pthread_cond_wait(&m_cond_not_empty, &m_mutex);
+        }
 
         if (m_aborted)
         {
+            dbglogger_log("MemFile::Read aborted, total=%zu", total);
             pthread_mutex_unlock(&m_mutex);
             return total;
         }
 
         if (m_used == 0)
         {
+            dbglogger_log("MemFile::Read closed with no more data, total=%zu", total);
             pthread_mutex_unlock(&m_mutex);
             return total;
         }
@@ -161,12 +177,14 @@ size_t MemFile::Read(char *buf, size_t buf_size, size_t offset)
             m_peek_used -= advance;
         }
 
+        dbglogger_log("MemFile::Read signaling not_full, total=%zu", total);
         pthread_cond_signal(&m_cond_not_full);
 
         break;
     }
 
     pthread_mutex_unlock(&m_mutex);
+    dbglogger_log("MemFile::Read finished reading, total=%zu", total);
     return total;
 }
 

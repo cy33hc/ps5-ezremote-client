@@ -57,6 +57,7 @@ add_executable(ezremote_client.elf
   source/installer.cpp
   source/lang.cpp
   source/main.cpp
+  source/mem_file.cpp
   source/sfo.cpp
   source/textures.cpp
   source/windows.cpp

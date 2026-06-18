@@ -741,7 +741,7 @@ namespace Actions
 
                                     uint64_t tick = Util::GetTick();
                                     std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(tick) + ".pkg";
-                                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
+                                    StreamFile *sp = new MemFile(0xC00000000, 0x200000000);
 
                                     install_data->stream_file = sp;
                                     install_data->remote_client = INSTALLER::GetRemoteClient(remote_settings);
@@ -791,7 +791,7 @@ namespace Actions
                             memset(install_data, 0, sizeof(ArchivePkgInstallData));
 
                             std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
+                            StreamFile *sp = new MemFile(0xC00000000, 0x200000000);
                             
                             install_data->archive_entry = entry;
                             install_data->stream_file = sp;
@@ -953,8 +953,8 @@ namespace Actions
                             memset(install_data, 0, sizeof(ArchivePkgInstallData));
 
                             std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
-                            
+                            StreamFile *sp = new MemFile(0xC00000000, 0x200000000);
+
                             install_data->archive_entry = entry;
                             install_data->stream_file = sp;
                             install_data->stop_write_thread = false;

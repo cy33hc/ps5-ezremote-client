@@ -1,0 +1,43 @@
+#ifndef EZ_MEM_FILE_H
+#define EZ_MEM_FILE_H
+
+#include <stddef.h>
+#include <stdint.h>
+#include <pthread.h>
+
+class MemFile
+{
+public:
+    explicit MemFile(size_t capacity);
+    ~MemFile();
+    void Open() {}
+    int Write(const void *buf, size_t len);
+    int Read(void *buf, size_t len);
+    void Close();
+    void Abort();
+    size_t Available() const;
+    size_t FreeSpace() const;
+
+    bool IsAborted() const { return m_aborted; }
+    bool IsClosed()  const { return m_closed;  }
+
+private:
+    uint8_t        *m_buf;
+    size_t          m_capacity;
+
+    size_t          m_write_pos;
+    size_t          m_read_pos;
+    size_t          m_used;
+
+    bool            m_closed;
+    bool            m_aborted;
+
+    pthread_mutex_t m_mutex;
+    pthread_cond_t  m_cond_not_full;
+    pthread_cond_t  m_cond_not_empty;
+
+    MemFile(const MemFile &) = delete;
+    MemFile &operator=(const MemFile &) = delete;
+};
+
+#endif // EZ_MEM_FILE_H

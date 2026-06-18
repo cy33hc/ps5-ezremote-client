@@ -1006,7 +1006,7 @@ namespace HttpServer
                 range_len, "application/octet-stream",
                 [pkg_data, range, range_len](size_t offset, size_t length, DataSink &sink) {
                     char *buf = (char*) malloc(range_len);
-                    size_t bytes_read = pkg_data->split_file->Read(buf, range_len, range.first);
+                    size_t bytes_read = pkg_data->stream_file->Read(buf, range_len, range.first);
                     sink.write(buf, bytes_read);
                     free(buf);
                     return true;
@@ -1035,7 +1035,7 @@ namespace HttpServer
                 range_len, "application/octet-stream",
                 [pkg_data, range, range_len](size_t offset, size_t length, DataSink &sink) {
                     char *buf = (char*) malloc(range_len);
-                    size_t bytes_read = pkg_data->split_file->Read(buf, range_len, range.first);
+                    size_t bytes_read = pkg_data->stream_file->Read(buf, range_len, range.first);
                     sink.write(buf, bytes_read);
                     free(buf);
                     return true;
@@ -1193,7 +1193,7 @@ namespace HttpServer
                     std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
                     SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
 
-                    install_data->split_file = sp;
+                    install_data->stream_file = sp;
                     install_data->remote_client = baseclient;
                     install_data->path = path;
                     baseclient->Size(path, &install_data->size);
@@ -1226,7 +1226,7 @@ namespace HttpServer
                     SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
                     
                     install_data->archive_entry = entry;
-                    install_data->split_file = sp;
+                    install_data->stream_file = sp;
                     install_data->stop_write_thread = false;
 
                     int ret = pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);

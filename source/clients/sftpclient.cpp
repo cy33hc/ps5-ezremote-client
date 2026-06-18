@@ -306,7 +306,7 @@ int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint
     return 1;
 }
 
-int SFTPClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
+int SFTPClient::Get(StreamFile *stream_file, const std::string &path, uint64_t offset)
 {
     LIBSSH2_SFTP_HANDLE *sftp_handle = libssh2_sftp_open(sftp_session, path.c_str(), LIBSSH2_FXF_READ, 0);
     if (!sftp_handle)
@@ -323,7 +323,7 @@ int SFTPClient::Get(SplitFile *split_file, const std::string &path, uint64_t off
         rc = libssh2_sftp_read(sftp_handle, buff, FTP_CLIENT_BUFSIZ);
         if (rc > 0)
         {
-            if (split_file->Write(buff, rc) < 0)
+            if (stream_file->Write(buff, rc) < 0)
             {
                 free((char *)buff);
                 libssh2_sftp_close(sftp_handle);

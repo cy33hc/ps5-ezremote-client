@@ -886,7 +886,7 @@ int FtpClient::FtpXfer(const std::string &localfile, const std::string &path, ft
  *
  * return 1 if successful, 0 otherwise
  */
-int FtpClient::FtpXfer(SplitFile *split_file, const std::string &path, ftphandle *nControl, accesstype type, transfermode mode)
+int FtpClient::FtpXfer(StreamFile *stream_file, const std::string &path, ftphandle *nControl, accesstype type, transfermode mode)
 {
 	int l, c;
 	char *dbuf;
@@ -900,7 +900,7 @@ int FtpClient::FtpXfer(SplitFile *split_file, const std::string &path, ftphandle
 	dbuf = static_cast<char *>(malloc(FTP_CLIENT_BUFSIZ));
 	while ((l = FtpRead(dbuf, FTP_CLIENT_BUFSIZ, nData)) > 0)
 	{
-		if (split_file->Write(dbuf, l) < 0)
+		if (stream_file->Write(dbuf, l) < 0)
 			break;
 	}
 
@@ -1311,13 +1311,13 @@ int FtpClient::Get(const std::string &outputfile, const std::string &path, uint6
 		return FtpXfer(outputfile, path, mp_ftphandle, FtpClient::filereadappend, FtpClient::transfermode::image);
 }
 
-int FtpClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
+int FtpClient::Get(StreamFile *stream_file, const std::string &path, uint64_t offset)
 {
 	mp_ftphandle->offset = offset;
 	if (offset == 0)
-		return FtpXfer(split_file, path, mp_ftphandle, FtpClient::fileread, FtpClient::transfermode::image);
+		return FtpXfer(stream_file, path, mp_ftphandle, FtpClient::fileread, FtpClient::transfermode::image);
 	else
-		return FtpXfer(split_file, path, mp_ftphandle, FtpClient::filereadappend, FtpClient::transfermode::image);
+		return FtpXfer(stream_file, path, mp_ftphandle, FtpClient::filereadappend, FtpClient::transfermode::image);
 }
 
 int FtpClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)

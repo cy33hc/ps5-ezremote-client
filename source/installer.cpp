@@ -259,10 +259,10 @@ namespace INSTALLER
 	{
 		ArchivePkgInstallData *archive_pkg_data = (ArchivePkgInstallData*)argp;
 		archive_pkg_data->stop_write_thread = true;
-		if (!archive_pkg_data->split_file->IsClosed())
-			archive_pkg_data->split_file->Close();
+		if (!archive_pkg_data->stream_file->IsClosed())
+			archive_pkg_data->stream_file->Close();
 		pthread_join(archive_pkg_data->thread, NULL);
-		delete (archive_pkg_data->split_file);
+		delete (archive_pkg_data->stream_file);
 		free(archive_pkg_data);
 		return nullptr;
 	}
@@ -270,10 +270,10 @@ namespace INSTALLER
 	void *CleanSplitPkgDataThread(void *argp)
 	{
 		SplitPkgInstallData *split_pkg_data = (SplitPkgInstallData*)argp;
-		if (!split_pkg_data->split_file->IsClosed())
-			split_pkg_data->split_file->Close();
+		if (!split_pkg_data->stream_file->IsClosed())
+			split_pkg_data->stream_file->Close();
 		pthread_join(split_pkg_data->thread, NULL);
-		delete (split_pkg_data->split_file);
+		delete (split_pkg_data->stream_file);
 		if (split_pkg_data->delete_client)
 			delete (split_pkg_data->remote_client);
 		free(split_pkg_data);
@@ -667,7 +667,7 @@ namespace INSTALLER
 	{
 		int ret = 0;
 		pkg_header header;
-		pkg_data->split_file->Read((char *)&header, sizeof(pkg_header), 0);
+		pkg_data->stream_file->Read((char *)&header, sizeof(pkg_header), 0);
 
 		std::string cid = std::string((char *)header.pkg_content_id);
 		cid = cid.substr(cid.find_first_of("-") + 1, 9);
@@ -766,7 +766,7 @@ namespace INSTALLER
 	{
 		int ret = 0;
 		pkg_header header;
-		pkg_data->split_file->Read((char *)&header, sizeof(pkg_header), 0);
+		pkg_data->stream_file->Read((char *)&header, sizeof(pkg_header), 0);
 
 		std::string cid = std::string((char *)header.pkg_content_id);
 		cid = cid.substr(cid.find_first_of("-") + 1, 9);

@@ -18,7 +18,7 @@ public:
     int Rmdir(const std::string &path, bool recursive);
     int Size(const std::string &path, uint64_t *size);
     int Get(const std::string &outputfile, const std::string &path, uint64_t offset=0);
-    int Get(SplitFile *split_file, const std::string &path, uint64_t offset=0);
+    int Get(StreamFile *stream_file, const std::string &path, uint64_t offset=0);
     int GetRange(const std::string &path, void *buffer, uint64_t size, uint64_t offset);
     int GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset);
     int GetRange(void *fp, void *buffer, uint64_t size, uint64_t offset);
@@ -45,7 +45,7 @@ public:
     static std::string UnEscape(const std::string &url);
     static int DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
     static int UploadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
-    static size_t WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data);
+    static size_t WriteToStreamFileCallback(void *buff, size_t size, size_t nmemb, void *data);
     static int NothingCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
     static int SocketOptCallback(void* ptr, int fd, uint32_t socktype);
     static size_t WriteDataSinkCallback(void *pCurlData, size_t usBlockCount, size_t usBlockSize, void *pUserData);

@@ -3,6 +3,7 @@
 #include "clients/remote_client.h"
 #include "zip_util.h"
 #include "split_file.h"
+#include "mem_file.h"
 #include "pthread.h"
 #include "config.h"
 
@@ -125,7 +126,7 @@ enum pkg_content_type
 
 struct ArchivePkgInstallData
 {
-    SplitFile *split_file;
+    StreamFile *stream_file;
     ArchiveEntry *archive_entry;
     pthread_t thread;
     bool stop_write_thread;
@@ -133,7 +134,7 @@ struct ArchivePkgInstallData
 
 struct SplitPkgInstallData
 {
-    SplitFile *split_file;
+    StreamFile *stream_file;
     RemoteClient *remote_client;
     std::string path;
     uint64_t size;

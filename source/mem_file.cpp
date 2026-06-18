@@ -32,17 +32,22 @@ MemFile::~MemFile()
     free(m_buf);
 }
 
-int MemFile::Write(const void *buf, size_t len)
+int MemFile::Open()
 {
-    if (m_buf == nullptr || len == 0)
+    return 0;
+}
+
+ssize_t MemFile::Write(char *buf, size_t buf_size)
+{
+    if (m_buf == nullptr || buf_size == 0)
         return -1;
 
-    const uint8_t *src   = static_cast<const uint8_t *>(buf);
+    const uint8_t *src   = reinterpret_cast<const uint8_t *>(buf);
     size_t         total = 0;
 
     pthread_mutex_lock(&m_mutex);
 
-    while (total < len)
+    while (total < buf_size)
     {
         // Wait while the buffer is full (based on peek position)
         while (m_peek_used == m_capacity && !m_aborted && !m_closed)
@@ -57,7 +62,7 @@ int MemFile::Write(const void *buf, size_t len)
         // Free space is determined by distance from m_peek_pos to m_write_pos
         size_t free_linear = m_capacity - m_write_pos;
         size_t free_total  = m_capacity - m_peek_used;
-        size_t to_write    = std::min({ len - total, free_total, free_linear });
+        size_t to_write    = std::min({ buf_size - total, free_total, free_linear });
 
         memcpy(m_buf + m_write_pos, src + total, to_write);
         m_write_pos  = (m_write_pos + to_write) % m_capacity;
@@ -69,16 +74,17 @@ int MemFile::Write(const void *buf, size_t len)
     }
 
     pthread_mutex_unlock(&m_mutex);
-    return (int)total;
+    return (ssize_t)total;
 }
 
-int MemFile::Read(void *buf, size_t len, size_t offset)
+size_t MemFile::Read(char *buf, size_t buf_size, size_t offset)
 {
-    if (m_buf == nullptr || len == 0)
-        return -1;
+    if (m_buf == nullptr || buf_size == 0)
+        return 0;
 
-    uint8_t *dst   = static_cast<uint8_t *>(buf);
+    uint8_t *dst   = reinterpret_cast<uint8_t *>(buf);
     size_t   total = 0;
+    size_t   len   = buf_size;
 
     pthread_mutex_lock(&m_mutex);
 
@@ -87,7 +93,7 @@ int MemFile::Read(void *buf, size_t len, size_t offset)
     if (offset < earliest_available)
     {
         pthread_mutex_unlock(&m_mutex);
-        return -1;
+        return 0;
     }
 
     // Phase 1: If offset is within the peek window, read historical data first
@@ -115,7 +121,7 @@ int MemFile::Read(void *buf, size_t len, size_t offset)
         if (total >= len)
         {
             pthread_mutex_unlock(&m_mutex);
-            return (int)total;
+            return total;
         }
     }
 
@@ -128,13 +134,13 @@ int MemFile::Read(void *buf, size_t len, size_t offset)
         if (m_aborted)
         {
             pthread_mutex_unlock(&m_mutex);
-            return -1;
+            return total;
         }
 
         if (m_used == 0)
         {
             pthread_mutex_unlock(&m_mutex);
-            return (int)total;
+            return total;
         }
 
         size_t avail_linear = m_capacity - m_read_pos;
@@ -161,15 +167,21 @@ int MemFile::Read(void *buf, size_t len, size_t offset)
     }
 
     pthread_mutex_unlock(&m_mutex);
-    return (int)total;
+    return total;
 }
 
-void MemFile::Close()
+int MemFile::Close()
 {
     pthread_mutex_lock(&m_mutex);
     m_closed = true;
     pthread_cond_broadcast(&m_cond_not_empty); // wake any blocked reader
     pthread_mutex_unlock(&m_mutex);
+    return 0;
+}
+
+bool MemFile::IsClosed()
+{
+    return m_closed;
 }
 
 void MemFile::Abort()

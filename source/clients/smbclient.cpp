@@ -251,7 +251,7 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 	return 1;
 }
 
-int SmbClient::Get(SplitFile *split_file, const std::string &ppath, uint64_t offset)
+int SmbClient::Get(StreamFile *stream_file, const std::string &ppath, uint64_t offset)
 {
 	std::string path = std::string(ppath);
 	path = Util::Trim(path, "/");
@@ -280,7 +280,7 @@ int SmbClient::Get(SplitFile *split_file, const std::string &ppath, uint64_t off
 			free((void *)buff);
 			return 0;
 		}
-		if (split_file->Write((char*)buff, count) < 0)
+		if (stream_file->Write((char*)buff, count) < 0)
 		{
 			smb2_close(smb2, in);
 			free((void *)buff);

@@ -743,7 +743,7 @@ namespace Actions
                                     std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(tick) + ".pkg";
                                     SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
 
-                                    install_data->split_file = sp;
+                                    install_data->stream_file = sp;
                                     install_data->remote_client = INSTALLER::GetRemoteClient(remote_settings);
                                     install_data->path = it->path;
                                     remoteclient->Size(it->path, &install_data->size);
@@ -794,7 +794,7 @@ namespace Actions
                             SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
                             
                             install_data->archive_entry = entry;
-                            install_data->split_file = sp;
+                            install_data->stream_file = sp;
                             install_data->stop_write_thread = false;
 
                             int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
@@ -846,7 +846,7 @@ namespace Actions
         char *buffer = (char*) malloc(ARCHIVE_TRANSFER_SIZE);
 
         ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) argp;
-        SplitFile *sp = install_data->split_file;
+        SplitFile *sp = install_data->stream_file;
 
         /* loop over file contents and write to fd */
         sp->Open();
@@ -878,7 +878,7 @@ namespace Actions
     void *DownloadSplitPkg(void *argp)
     {
         SplitPkgInstallData *install_data = (SplitPkgInstallData*) argp;
-        SplitFile *sp = install_data->split_file;
+        SplitFile *sp = install_data->stream_file;
 
         /* loop over file contents and write to fd */
         sp->Open();
@@ -956,7 +956,7 @@ namespace Actions
                             SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
                             
                             install_data->archive_entry = entry;
-                            install_data->split_file = sp;
+                            install_data->stream_file = sp;
                             install_data->stop_write_thread = false;
 
                             int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);

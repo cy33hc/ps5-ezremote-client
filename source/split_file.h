@@ -7,6 +7,7 @@
 #include <semaphore.h>
 #include <pthread.h>
 #include <shared_mutex>
+#include "stream_file.h"
 
 enum FileBlockStatus
 {
@@ -24,16 +25,16 @@ typedef struct
     FileBlockStatus status;
 } FileBlock;
 
-class SplitFile
+class SplitFile : public StreamFile
 {
 public:
     SplitFile(const std::string& path, size_t block_size);
-    ~SplitFile();
-    size_t Read(char* buf, size_t buf_size, size_t offset);
-    ssize_t Write(char* buf, size_t buf_size);
-    int Open();
-    int Close();
-    bool IsClosed();
+    ~SplitFile() override;
+    size_t Read(char* buf, size_t buf_size, size_t offset) override;
+    ssize_t Write(char* buf, size_t buf_size) override;
+    int Open() override;
+    int Close() override;
+    bool IsClosed() override;
 
 private:
     std::vector<FileBlock*> file_blocks;

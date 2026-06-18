@@ -5,7 +5,7 @@
 #include "clients/baseclient.h"
 #include "config.h"
 #include "lang.h"
-#include "split_file.h"
+#include "stream_file.h"
 #include "util.h"
 #include "windows.h"
 #include "common.h"
@@ -53,15 +53,15 @@ int BaseClient::UploadProgressCallback(void* ptr, double dTotalToDownload, doubl
     return 0;
 }
 
-size_t BaseClient::WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data)
+size_t BaseClient::WriteToStreamFileCallback(void *buff, size_t size, size_t nmemb, void *data)
 {
     if ((size == 0) || (nmemb == 0) || ((size * nmemb) < 1) || (data == nullptr))
         return 0;
 
-    SplitFile *split_file = reinterpret_cast<SplitFile *>(data);
-    if (!split_file->IsClosed())
+    StreamFile *stream_file = reinterpret_cast<StreamFile *>(data);
+    if (!stream_file->IsClosed())
     {
-        if (split_file->Write(reinterpret_cast<char *>(buff), size * nmemb) < 0)
+        if (stream_file->Write(reinterpret_cast<char *>(buff), size * nmemb) < 0)
             return 0;
     }
     else
@@ -205,7 +205,7 @@ int BaseClient::Get(const std::string &outputfile, const std::string &path, uint
     return 0;
 }
 
-int BaseClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
+int BaseClient::Get(StreamFile *stream_file, const std::string &path, uint64_t offset)
 {
     long status;
     CHTTPClient::HeadersMap headers;
@@ -213,7 +213,7 @@ int BaseClient::Get(SplitFile *split_file, const std::string &path, uint64_t off
     prev_tick = Util::GetTick();
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
     client->SetProgressFnCallback(nullptr, NothingCallback);
-    if (client->DownloadFile((void*)split_file, encoded_url, (void*)WriteToSplitFileCallback, status))
+    if (client->DownloadFile((void*)stream_file, encoded_url, (void*)WriteToStreamFileCallback, status))
     {
         return 1;
     }

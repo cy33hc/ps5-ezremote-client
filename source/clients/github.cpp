@@ -182,7 +182,7 @@ int GithubClient::Get(const std::string &outputfile, const std::string &path, ui
     return 0;
 }
 
-int GithubClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
+int GithubClient::Get(StreamFile *stream_file, const std::string &path, uint64_t offset)
 {
     if (!ParseReleases())
         return 0;
@@ -200,7 +200,7 @@ int GithubClient::Get(SplitFile *split_file, const std::string &path, uint64_t o
     prev_tick = Util::GetTick();
     std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
     client->SetProgressFnCallback(nullptr, NothingCallback);
-    if (client->DownloadFile((void*)split_file, encoded_url, (void*)WriteToSplitFileCallback, status))
+    if (client->DownloadFile((void*)stream_file, encoded_url, (void*)WriteToStreamFileCallback, status))
     {
         return 1;
     }

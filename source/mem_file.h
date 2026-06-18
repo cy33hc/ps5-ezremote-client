@@ -4,20 +4,21 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <pthread.h>
+#include "stream_file.h"
 
-class MemFile
+class MemFile : public StreamFile
 {
 public:
     explicit MemFile(size_t capacity, size_t peek_window = 0);
-    ~MemFile();
-    void Open() {}
-    int Write(const void *buf, size_t len);
-    int Read(void *buf, size_t len, size_t offset);
-    void Close();
-    void Abort();
+    ~MemFile() override;
+    int Open() override;
+    size_t Read(char *buf, size_t buf_size, size_t offset) override;
+    ssize_t Write(char *buf, size_t buf_size) override;
+    int Close() override;
+    bool IsClosed() override;
 
+    void Abort();
     bool IsAborted() const { return m_aborted; }
-    bool IsClosed()  const { return m_closed;  }
 
 private:
     uint8_t        *m_buf;

@@ -54,7 +54,6 @@ ssize_t MemFile::Write(char *buf, size_t buf_size)
         // Wait while the buffer is full (based on peek position)
         while (m_peek_used == m_capacity && !m_aborted && !m_closed)
         {
-            dbglogger_log("MemFile::Write waiting, total=%zu, peek_used=%zu", total, m_peek_used);
             pthread_cond_wait(&m_cond_not_full, &m_mutex);
         }
 
@@ -75,19 +74,17 @@ ssize_t MemFile::Write(char *buf, size_t buf_size)
         m_peek_used += to_write;
         total       += to_write;
 
-        dbglogger_log("MemFile::Write wrote %zu bytes, total=%zu, used=%zu, peek_used=%zu", to_write, total, m_used, m_peek_used);
         pthread_cond_signal(&m_cond_not_empty);
-        dbglogger_log("MemFile::Write signaled not_empty after writing, total=%zu", total);
     }
 
     pthread_mutex_unlock(&m_mutex);
-    dbglogger_log("MemFile::Write finished writing, total=%zu", total);
+    dbglogger_log("MemFile::Write finished writing, total=%zu", m_total_read);
     return (ssize_t)total;
 }
 
 size_t MemFile::Read(char *buf, size_t buf_size, size_t offset)
 {
-    dbglogger_log("MemFile::Read called with buf_size=%zu, offset=%zu", buf_size, offset);
+    //dbglogger_log("MemFile::Read called with buf_size=%zu, offset=%zu", buf_size, offset);
     if (m_buf == nullptr || buf_size == 0)
         return 0;
 

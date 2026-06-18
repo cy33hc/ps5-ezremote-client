@@ -741,7 +741,7 @@ namespace Actions
 
                                     uint64_t tick = Util::GetTick();
                                     std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(tick) + ".pkg";
-                                    StreamFile *sp = new MemFile(0xC00000000, 0x200000000);
+                                    StreamFile *sp = new MemFile(0x8000000, 0x2000000);
 
                                     install_data->stream_file = sp;
                                     install_data->remote_client = INSTALLER::GetRemoteClient(remote_settings);
@@ -791,7 +791,7 @@ namespace Actions
                             memset(install_data, 0, sizeof(ArchivePkgInstallData));
 
                             std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                            StreamFile *sp = new MemFile(0xC00000000, 0x200000000);
+                            StreamFile *sp = new MemFile(0x8000000, 0x2000000);
                             
                             install_data->archive_entry = entry;
                             install_data->stream_file = sp;
@@ -877,11 +877,13 @@ namespace Actions
 
     void *DownloadSplitPkg(void *argp)
     {
+        dbglogger_log("DownloadSplitPkg thread started");
         SplitPkgInstallData *install_data = (SplitPkgInstallData*) argp;
         StreamFile *sp = install_data->stream_file;
         
         /* loop over file contents and write to fd */
         sp->Open();
+        dbglogger_log("Starting download of split pkg %s", install_data->path.c_str());
         install_data->remote_client->Get(sp, install_data->path);
         sp->Close();
         return NULL;
@@ -953,7 +955,7 @@ namespace Actions
                             memset(install_data, 0, sizeof(ArchivePkgInstallData));
 
                             std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                            StreamFile *sp = new MemFile(0xC00000000, 0x200000000);
+                            StreamFile *sp = new MemFile(0x8000000, 0x2000000);
 
                             install_data->archive_entry = entry;
                             install_data->stream_file = sp;

@@ -1191,7 +1191,7 @@ namespace HttpServer
                     memset(install_data, 0, sizeof(SplitPkgInstallData));
 
                     std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
-                    StreamFile *sp = new MemFile(0xC00000000, 0x200000000);
+                    StreamFile *sp = new MemFile(0x8000000, 0x2000000);
 
                     install_data->stream_file = sp;
                     install_data->remote_client = baseclient;
@@ -1223,7 +1223,7 @@ namespace HttpServer
                     memset(install_data, 0, sizeof(ArchivePkgInstallData));
 
                     std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                    StreamFile *sp = new MemFile(0xC00000000, 0x200000000);
+                    StreamFile *sp = new MemFile(0x8000000, 0x2000000);
                     
                     install_data->archive_entry = entry;
                     install_data->stream_file = sp;

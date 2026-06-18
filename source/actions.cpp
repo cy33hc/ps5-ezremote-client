@@ -846,7 +846,7 @@ namespace Actions
         char *buffer = (char*) malloc(ARCHIVE_TRANSFER_SIZE);
 
         ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) argp;
-        SplitFile *sp = install_data->stream_file;
+        StreamFile *sp = install_data->stream_file;
 
         /* loop over file contents and write to fd */
         sp->Open();
@@ -878,8 +878,8 @@ namespace Actions
     void *DownloadSplitPkg(void *argp)
     {
         SplitPkgInstallData *install_data = (SplitPkgInstallData*) argp;
-        SplitFile *sp = install_data->stream_file;
-
+        StreamFile *sp = install_data->stream_file;
+        
         /* loop over file contents and write to fd */
         sp->Open();
         install_data->remote_client->Get(sp, install_data->path);

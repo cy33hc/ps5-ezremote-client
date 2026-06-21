@@ -18,7 +18,6 @@
 #include "textures.h"
 #include "sfo.h"
 #include "sceSystemService.h"
-#include "dbglogger.h"
 
 #define MAX_IMAGE_HEIGHT 980
 #define MAX_IMAGE_WIDTH 1820

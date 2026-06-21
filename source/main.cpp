@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-// #include <dbglogger.h>
 
 #include "imgui.h"
 #include "SDL2/SDL.h"
@@ -17,7 +16,7 @@
 #include "installer.h"
 #include "util.h"
 #include "textures.h"
-#include "dbglogger.h"
+// #include "dbglogger.h"
 
 extern "C"
 {
@@ -304,7 +303,6 @@ int main()
     }
 
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-	dbglogger_log("Created OpenGL context");
 	if (gl_context == nullptr)	{
 		return 0;
 	}

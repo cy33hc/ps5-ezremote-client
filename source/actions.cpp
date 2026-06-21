@@ -32,7 +32,6 @@
 #include "sfo.h"
 #include "zip_util.h"
 #include "sceSystemService.h"
-#include "dbglogger.h"
 
 namespace Actions
 {

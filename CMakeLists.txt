@@ -14,10 +14,9 @@ include_directories(
   source/imgui
 )
 
-add_executable(ezremote_client.elf
+set(COMMON_SOURCES 
   source/imgui/imgui_draw.cpp
   source/imgui/imgui_impl_sdl.cpp
-  source/imgui/imgui_impl_opengl2.cpp
   source/imgui/imgui_tables.cpp
   source/imgui/imgui_widgets.cpp
   source/imgui/imgui.cpp
@@ -64,14 +63,11 @@ add_executable(ezremote_client.elf
   source/split_file.cpp
 )
 
-target_compile_definitions(ezremote_client.elf PRIVATE CPPHTTPLIB_THREAD_POOL_COUNT=64)
-
-target_link_libraries(ezremote_client.elf
+set(COMMON_LIBS
   webp
   webpdemux
   SDL2
   SDL2_image
-  GL
   c
   c++
   png
@@ -113,27 +109,52 @@ target_link_libraries(ezremote_client.elf
   SceAppInstUtil
 )
 
+add_executable(ezremote_client.elf
+  ${COMMON_SOURCES}
+  source/imgui/imgui_impl_opengl2.cpp
+)
+
+target_compile_definitions(ezremote_client.elf PRIVATE CPPHTTPLIB_THREAD_POOL_COUNT=64 EZREMOTE_ENABLE_OPENGL)
+
+target_link_libraries(ezremote_client.elf
+  GL
+  ${COMMON_LIBS}
+)
+
+add_executable(ezremote_client_nogl.elf
+  ${COMMON_SOURCES}
+  source/imgui/imgui_impl_sdlrenderer.cpp
+)
+
+target_compile_definitions(ezremote_client_nogl.elf PRIVATE CPPHTTPLIB_THREAD_POOL_COUNT=64)
+
+target_link_libraries(ezremote_client_nogl.elf
+  ${COMMON_LIBS}
+)
+
 set(APPDIR "ezremote-client")
-set(APP_VERSION "2.08")
+set(APP_VERSION "2.09")
 
 add_custom_target(package
    DEPENDS ezremote-dpi.elf
    DEPENDS ezremote_client.elf
    DEPENDS ezremote-server.elf
+   DEPENDS ezremote_client_nogl.elf
    COMMAND rm -rf ${APPDIR}
-   COMMAND rm -f ezremote-client.zip
+   COMMAND rm -f ezremote-client*.zip
    COMMAND mkdir -p ${APPDIR}
    COMMAND ${PS5_PAYLOAD_SDK}/bin/prospero-strip ezremote_client.elf
+   COMMAND ${PS5_PAYLOAD_SDK}/bin/prospero-strip ezremote_client_nogl.elf
    COMMAND ${PS5_PAYLOAD_SDK}/bin/prospero-strip ps5-ezremote-dpi/ezremote-dpi.elf
    COMMAND ${PS5_PAYLOAD_SDK}/bin/prospero-strip ps5-ezremote-server/ezremote-server.elf
-   COMMAND cp ezremote_client.elf ${APPDIR}
+   COMMAND cp ezremote_client_nogl.elf ${APPDIR}/ezremote_client.elf
    COMMAND cp ps5-ezremote-dpi/ezremote-dpi.elf ${APPDIR}
    COMMAND cp ps5-ezremote-server/ezremote-server.elf ${APPDIR}
-   COMMAND cp ${PS5_PAYLOAD_SDK}/target/user/homebrew/lib/libOSMesa.so.8.0.0 ${APPDIR}/libOSMesa.so.8
    COMMAND cp -R ${PROJECT_SOURCE_DIR}/data/* ${APPDIR}
    COMMAND sed -i "s/ezRemote Client/ezRemote Client v${APP_VERSION}/g"  ${APPDIR}/homebrew.js
+   COMMAND zip -r ezremote-client-no_opengl.zip ${APPDIR}/
 
-   COMMAND zip -r ezremote-client.zip ${APPDIR}/
-
-
+   COMMAND cp ezremote_client.elf ${APPDIR}/ezremote_client.elf
+   COMMAND cp ${PS5_PAYLOAD_SDK}/target/user/homebrew/lib/libOSMesa.so.8.0.0 ${APPDIR}/libOSMesa.so.8
+   COMMAND zip -r ezremote-client-opengl.zip ${APPDIR}/
 )

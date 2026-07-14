@@ -2181,7 +2181,11 @@ namespace Windows
             ImGui::SetNextWindowSizeConstraints(image_size, view_size, NULL, NULL);
             if (ImGui::BeginPopupModal(lang_strings[STR_VIEW_IMAGE], NULL, ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysAutoResize))
             {
+#ifdef EZREMOTE_ENABLE_OPENGL
                 ImGui::Image((ImTextureID)(intptr_t)texture.id, image_size);
+#else
+                ImGui::Image(texture.id, image_size);
+#endif
                 if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
                 {
                     view_image = false;
@@ -2212,7 +2216,11 @@ namespace Windows
             ImGui::SetNextWindowSizeConstraints(ImVec2(1200, 300), ImVec2(1200, 600), NULL, NULL);
             if (ImGui::BeginPopupModal(lang_strings[STR_VIEW_PKG_INFO], NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize))
             {
+#ifdef EZREMOTE_ENABLE_OPENGL
                 ImGui::Image((ImTextureID)(intptr_t)texture.id, ImVec2(400, 400));
+#else
+                ImGui::Image(texture.id, ImVec2(400, 400));
+#endif
                 ImGui::SameLine();
 
                 BeginGroupPanel("SFO Attributes", ImVec2(780, 600));

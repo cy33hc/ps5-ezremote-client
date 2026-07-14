@@ -1,5 +1,9 @@
 #include "textures.h"
 
+#ifndef EZREMOTE_ENABLE_OPENGL
+static SDL_Renderer *renderer;
+#endif
+
 namespace Textures {
 
 	bool LoadImageFile(const std::string filename, Tex *texture)
@@ -15,6 +19,7 @@ namespace Textures {
 		if (formatted == nullptr)
 			return false;
 
+#ifdef EZREMOTE_ENABLE_OPENGL
 		// Upload to OpenGL texture
 		GLuint tex_id = 0;
 		glGenTextures(1, &tex_id);
@@ -34,6 +39,16 @@ namespace Textures {
 		glBindTexture(GL_TEXTURE_2D, 0);
 
 		texture->id     = tex_id;
+#else
+		SDL_Texture *sdl_texture = SDL_CreateTextureFromSurface(renderer, formatted);
+		if (sdl_texture == nullptr)
+		{
+			SDL_FreeSurface(formatted);
+			return false;
+		}
+		texture->id = sdl_texture;
+
+#endif
 		texture->width  = formatted->w;
 		texture->height = formatted->h;
 
@@ -41,8 +56,15 @@ namespace Textures {
 		return true;
 	}
 
+#ifdef EZREMOTE_ENABLE_OPENGL
 	void Init(void)
+#else
+	void Init(SDL_Renderer *p_renderer)
+#endif
 	{
+#ifndef EZREMOTE_ENABLE_OPENGL
+		renderer = p_renderer;
+#endif
 		IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG | IMG_INIT_WEBP);
 	}
 
@@ -53,11 +75,19 @@ namespace Textures {
 
 	void Free(Tex *texture)
 	{
+#ifdef EZREMOTE_ENABLE_OPENGL
 		if (texture->id != 0)
 		{
 			glDeleteTextures(1, &texture->id);
 			texture->id = 0;
 		}
+#else
+		if (texture->id != nullptr)
+		{
+			SDL_DestroyTexture(texture->id);
+			texture->id = nullptr;
+		}
+#endif
 	}
 
 }

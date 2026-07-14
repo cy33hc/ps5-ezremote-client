@@ -12,7 +12,11 @@ extern int gui_mode;
 
 namespace GUI
 {
+#ifdef EZREMOTE_ENABLE_OPENGL
     int RenderLoop(SDL_Window *window);
+#else
+    int RenderLoop(SDL_Renderer *renderer);
+#endif
 }
 
 #endif

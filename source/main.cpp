@@ -8,7 +8,11 @@
 #include "imgui.h"
 #include "SDL2/SDL.h"
 #include "imgui_impl_sdl.h"
+#ifdef EZREMOTE_ENABLE_OPENGL
 #include "imgui_impl_opengl2.h"
+#else
+#include "imgui_impl_sdlrenderer.h"
+#endif
 #include "server/http_server.h"
 #include "config.h"
 #include "lang.h"
@@ -290,43 +294,70 @@ int main()
 	INSTALLER::StartDirectPackageInstaller();
 	INSTALLER::StartEzRemoteServer();
 
-    // Setup window
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-    window = SDL_CreateWindow("main", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, FRAME_WIDTH, FRAME_HEIGHT, SDL_WINDOW_OPENGL);
-    if (window == nullptr)
-    {
-        return 0;
-    }
+#ifdef EZREMOTE_ENABLE_OPENGL
+	// Setup window
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+	window = SDL_CreateWindow("main", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, FRAME_WIDTH, FRAME_HEIGHT, SDL_WINDOW_OPENGL);
 
-    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+	if (window == nullptr)
+	{
+		return 0;
+	}
+
+	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 	if (gl_context == nullptr)	{
 		return 0;
 	}
-    SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1); // Enable vsync
+	SDL_GL_MakeCurrent(window, gl_context);
+	SDL_GL_SetSwapInterval(1); // Enable vsync
 
-	InitImgui();
 	Textures::Init();
+#else
+	// Create a window context
+	window = SDL_CreateWindow("main", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, FRAME_WIDTH, FRAME_HEIGHT, 0);
+	if (window == NULL)
+		return 0;
+
+	renderer = SDL_CreateRenderer(window, 0, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+	if (renderer == NULL)
+		return 0;
+
+	Textures::Init(renderer);
+#endif
+	InitImgui();
 
 	// Setup Platform/Renderer backends
-    ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
-    ImGui_ImplOpenGL2_Init();
+#ifdef EZREMOTE_ENABLE_OPENGL
+	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+	ImGui_ImplOpenGL2_Init();
+#else
+	ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
+	ImGui_ImplSDLRenderer_Init(renderer);
+	ImGui_ImplSDLRenderer_CreateFontsTexture();
+#endif
 
 	atexit(terminate);
 
+#ifdef EZREMOTE_ENABLE_OPENGL
 	GUI::RenderLoop(window);
 
 	ImGui_ImplOpenGL2_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
+	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext();
 	Textures::Exit();
-    SDL_GL_DeleteContext(gl_context);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+	SDL_GL_DeleteContext(gl_context);
+	SDL_DestroyWindow(window);
+	SDL_Quit();
+#else
+	GUI::RenderLoop(renderer);
+	SDL_DestroyRenderer(renderer);
+	SDL_DestroyWindow(window);
+	Textures::Exit();
+#endif
 
 	return 0;
 }

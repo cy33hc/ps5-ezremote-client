@@ -108,13 +108,12 @@ target_link_libraries(ezremote_client.elf
   SceUserService
   SceLibcInternal
   SceNotification
-  SceGLSlimVSH
   kernel_sys
   SceAppInstUtil
 )
 
 set(APPDIR "ezremote-client")
-set(APP_VERSION "2.08")
+set(APP_VERSION "2.09")
 
 add_custom_target(package
    DEPENDS ezremote-dpi.elf

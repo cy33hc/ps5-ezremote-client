@@ -1,4 +1,5 @@
 #include <cstring>
+#include <json-c/json.h>
 #include "sfo.h"
 
 static constexpr uint32_t SFO_MAGIC = 0x46535000;
@@ -58,6 +59,53 @@ namespace SFO {
                 out.insert(std::make_pair(key, std::to_string(*value)));
             }
         }
+
+        return out;
+    }
+
+    std::map<std::string, std::string> GetParamsFromParamJson(const char* buffer, size_t size)
+    {
+        std::map<std::string, std::string> out;
+        const char* value;
+
+        json_object *parent_obj = json_tokener_parse(buffer);
+        
+        value = json_object_get_string(json_object_object_get(parent_obj, "contentId"));
+        if (value != nullptr)
+            out.insert(std::make_pair("contentId", value));
+
+        value = json_object_get_string(json_object_object_get(parent_obj, "contentVersion"));
+        if (value != nullptr)
+            out.insert(std::make_pair("contentVersion", value));
+
+        value = json_object_get_string(json_object_object_get(parent_obj, "requiredSystemSoftwareVersion"));
+        if (value != nullptr)
+            out.insert(std::make_pair("requiredSystemSoftwareVersion", value));
+
+        json_object *localizedParameters = json_object_object_get(parent_obj, "localizedParameters");
+        if (localizedParameters != nullptr)
+        {
+            const char* defaultLanguage = json_object_get_string(json_object_object_get(localizedParameters, "defaultLanguage"));
+
+            if (defaultLanguage != nullptr)
+            {
+                json_object *lang_region = json_object_object_get(localizedParameters, defaultLanguage);
+                if (lang_region != nullptr)
+                {
+                    const char* titleName = json_object_get_string(json_object_object_get(lang_region, "titleName"));
+                    if (titleName != nullptr)
+                        out.insert(std::make_pair("titleName", titleName));
+                }
+            }
+        }
+
+        value = json_object_get_string(json_object_object_get(parent_obj, "sdkVersion"));
+        if (value != nullptr)
+            out.insert(std::make_pair("sdkVersion", value));
+
+        value = json_object_get_string(json_object_object_get(parent_obj, "titleId"));
+        if (value != nullptr)
+            out.insert(std::make_pair("titleId", value));
 
         return out;
     }

@@ -62,7 +62,7 @@ namespace FS
 
     int hasEndSlash(const char *path);
 
-    int Head(const std::string &path, void* buffer, uint16_t len);
+    int Head(const std::string &path, void* buffer, uint16_t len, uint64_t offset = 0);
 }
 
 #endif

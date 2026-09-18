@@ -34,6 +34,7 @@
 #include "sceUserService.h"
 #include "sceSystemService.h"
 #include "installer.h"
+// #include "dbglogger.h"
 
 struct BgProgressCheck
 {
@@ -83,9 +84,9 @@ namespace INSTALLER
 
 	std::string GetRemotePkgTitle(RemoteClient *client, const std::string &path, pkg_header *header)
 	{
-		if (BE32(header->pkg_magic) != PS4_PKG_MAGIC)
+		if (BE32(header->pkg_magic) != PKG_CNT_MAGIC)
 		{
-			return std::string((char*)header->pkg_content_id);
+			return "";
 		}
 
 		size_t entry_count = BE32(header->pkg_entry_count);
@@ -176,7 +177,7 @@ namespace INSTALLER
 		return title;
 	}
 
-	std::string StoreBgInstallHostData(RemoteSettings *settings, const std::string &path)
+	std::string StoreBgInstallHostData(RemoteSettings *settings, const std::string &path, uint64_t size)
 	{
 		std::string hash = Util::UrlHash(settings->server + path + settings->username + settings->password + std::to_string(settings->type));
 		json_object *history_item_obj = json_object_new_object();
@@ -186,6 +187,7 @@ namespace INSTALLER
 		json_object_object_add(history_item_obj, "username", json_object_new_string(settings->username));
 		json_object_object_add(history_item_obj, "password", json_object_new_string(settings->password));
 		json_object_object_add(history_item_obj, "type", json_object_new_int(settings->type));
+		json_object_object_add(history_item_obj, "file_size", json_object_new_uint64(size));
 
 		if (settings->type == CLIENT_TYPE_HTTP_SERVER)
 		{
@@ -215,7 +217,7 @@ namespace INSTALLER
 		return hash;
 	}
 
-	std::string getRemoteUrl(const std::string path, bool encodeUrl)
+	std::string getRemoteUrl(const std::string path, uint64_t size, bool encodeUrl)
 	{
 		if (remote_settings->type == CLIENT_TYPE_HTTP_SERVER && strcmp(remote_settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
 		{
@@ -246,7 +248,7 @@ namespace INSTALLER
 		}
 		else
 		{
-			std::string hash = StoreBgInstallHostData(remote_settings, path);
+			std::string hash = StoreBgInstallHostData(remote_settings, path, size);
 			std::string full_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
 			return full_url;
 		}
@@ -402,7 +404,7 @@ namespace INSTALLER
 		if (FS::Head(path.c_str(), (void *)&header, sizeof(header)) == 0)
 			return 0;
 
-		if (BE32(header.pkg_magic) != PS4_PKG_MAGIC)
+		if (BE32(header.pkg_magic) != PKG_CNT_MAGIC && BE32(header.pkg_magic) != PKG_FIH_MAGIC)
 			return 0;
 
 		return InstallLocalPkg(path, &header, false);
@@ -437,7 +439,7 @@ namespace INSTALLER
 		}
 
 		std::string title;
-		if (BE32(header->pkg_magic) == PS4_PKG_MAGIC)
+		if (BE32(header->pkg_magic) == PKG_CNT_MAGIC)
 		{
 			title = GetLocalPkgTitle(filepath, header);
 		}
@@ -492,16 +494,26 @@ namespace INSTALLER
 		return 0;
 	}
 
-	bool ExtractLocalPkg(const std::string &path, const std::string sfo_path, const std::string icon_path)
+	bool ExtractLocalPkg(const std::string &path, const std::string sfo_path, const std::string param_json_path, const std::string icon_path)
 	{
-		pkg_header tmp_hdr;
-		FS::Head(path, &tmp_hdr, sizeof(pkg_header));
+		pkg_header cnt_hdr;
+		fih_header fih_hdr;
+		uint64_t pkg_entry_base = 0;
 
-		if (BE32(tmp_hdr.pkg_magic) != PS4_PKG_MAGIC)
-			return false;
+		FS::Head(path, &cnt_hdr, sizeof(pkg_header));
 
-		size_t entry_count = BE32(tmp_hdr.pkg_entry_count);
-		uint32_t entry_table_offset = BE32(tmp_hdr.pkg_table_offset);
+		if (BE32(cnt_hdr.pkg_magic) != PKG_CNT_MAGIC)
+		{
+			FS::Head(path, &fih_hdr, sizeof(fih_header));
+			if (BE32(fih_hdr.magic) != PKG_FIH_MAGIC)
+				return false;
+
+			FS::Head(path, &cnt_hdr, sizeof(pkg_header), fih_hdr.embedded_cnt_offset);
+			pkg_entry_base = fih_hdr.embedded_cnt_offset;
+		}
+
+		size_t entry_count = BE32(cnt_hdr.pkg_entry_count);
+		uint32_t entry_table_offset = pkg_entry_base +BE32(cnt_hdr.pkg_table_offset);
 		uint64_t entry_table_size = entry_count * sizeof(pkg_table_entry);
 		void *entry_table_data = malloc(entry_table_size);
 
@@ -516,19 +528,27 @@ namespace INSTALLER
 		void *icon0_png_data = NULL;
 		uint32_t icon0_png_offset = 0;
 		uint32_t icon0_png_size = 0;
+		uint32_t param_json_offset = 0;
+		uint32_t param_json_size = 0;
+		void *param_json_data = NULL;
 		short items = 0;
 		for (size_t i = 0; i < entry_count; ++i)
 		{
 			switch (BE32(entries[i].id))
 			{
 			case PKG_ENTRY_ID_PARAM_SFO:
-				param_sfo_offset = BE32(entries[i].offset);
+				param_sfo_offset = pkg_entry_base +BE32(entries[i].offset);
 				param_sfo_size = BE32(entries[i].size);
 				items++;
 				break;
 			case PKG_ENTRY_ID_ICON0_PNG:
-				icon0_png_offset = BE32(entries[i].offset);
+				icon0_png_offset = pkg_entry_base + BE32(entries[i].offset);
 				icon0_png_size = BE32(entries[i].size);
+				items++;
+				break;
+			case PKG_ENTRY_ID_PARAM_JSON:
+				param_json_offset = pkg_entry_base + BE32(entries[i].offset);
+				param_json_size = BE32(entries[i].size);
 				items++;
 				break;
 			default:
@@ -540,6 +560,8 @@ namespace INSTALLER
 		}
 		free(entry_table_data);
 
+		FS::Rm(sfo_path);
+		FS::Rm(param_json_path);
 		if (param_sfo_offset > 0 && param_sfo_size > 0)
 		{
 			param_sfo_data = malloc(param_sfo_size);
@@ -562,21 +584,42 @@ namespace INSTALLER
 			free(icon0_png_data);
 		}
 
+		if (param_json_offset > 0 && param_json_size > 0)
+		{
+			param_json_data = malloc(param_json_size);
+			FILE *out = FS::Create(param_json_path);
+			FS::Seek(fd, param_json_offset);
+			FS::Read(fd, param_json_data, param_json_size);
+			FS::Write(out, param_json_data, param_json_size);
+			FS::Close(out);
+			free(param_json_data);
+		}
+
 		FS::Close(fd);
 		return true;
 	}
 
-	bool ExtractRemotePkg(const std::string &path, const std::string sfo_path, const std::string icon_path)
+	bool ExtractRemotePkg(const std::string &path, const std::string sfo_path, const std::string param_json_path, const std::string icon_path)
 	{
-		pkg_header tmp_hdr;
-		if (!remoteclient->Head(path, &tmp_hdr, sizeof(pkg_header)))
+		pkg_header cnt_hdr;
+		fih_header fih_hdr;
+		uint64_t pkg_entry_base = 0;
+
+		if (!remoteclient->Head(path, &cnt_hdr, sizeof(pkg_header)))
 			return false;
 
-		if (BE32(tmp_hdr.pkg_magic) != PS4_PKG_MAGIC)
-			return false;
+		if (BE32(cnt_hdr.pkg_magic) != PKG_CNT_MAGIC)
+		{
+			remoteclient->Head(path, &fih_hdr, sizeof(fih_header));
+			if (BE32(fih_hdr.magic) != PKG_FIH_MAGIC)
+				return false;
 
-		size_t entry_count = BE32(tmp_hdr.pkg_entry_count);
-		uint32_t entry_table_offset = BE32(tmp_hdr.pkg_table_offset);
+			remoteclient->GetRange(path, &cnt_hdr, sizeof(pkg_header), fih_hdr.embedded_cnt_offset);
+			pkg_entry_base = fih_hdr.embedded_cnt_offset;
+		}
+
+		size_t entry_count = BE32(cnt_hdr.pkg_entry_count);
+		uint32_t entry_table_offset = pkg_entry_base + BE32(cnt_hdr.pkg_table_offset);
 		uint64_t entry_table_size = entry_count * sizeof(pkg_table_entry);
 		void *entry_table_data = malloc(entry_table_size);
 
@@ -590,19 +633,27 @@ namespace INSTALLER
 		void *icon0_png_data = NULL;
 		uint32_t icon0_png_offset = 0;
 		uint32_t icon0_png_size = 0;
+		uint32_t param_json_offset = 0;
+		uint32_t param_json_size = 0;
+		void *param_json_data = NULL;
 		short items = 0;
 		for (size_t i = 0; i < entry_count; ++i)
 		{
 			switch (BE32(entries[i].id))
 			{
 			case PKG_ENTRY_ID_PARAM_SFO:
-				param_sfo_offset = BE32(entries[i].offset);
+				param_sfo_offset = pkg_entry_base + BE32(entries[i].offset);
 				param_sfo_size = BE32(entries[i].size);
 				items++;
 				break;
 			case PKG_ENTRY_ID_ICON0_PNG:
-				icon0_png_offset = BE32(entries[i].offset);
+				icon0_png_offset = pkg_entry_base + BE32(entries[i].offset);
 				icon0_png_size = BE32(entries[i].size);
+				items++;
+				break;
+			case PKG_ENTRY_ID_PARAM_JSON:
+				param_json_offset = pkg_entry_base + BE32(entries[i].offset);
+				param_json_size = BE32(entries[i].size);
 				items++;
 				break;
 			default:
@@ -614,6 +665,8 @@ namespace INSTALLER
 		}
 		free(entry_table_data);
 
+		FS::Rm(sfo_path);
+		FS::Rm(param_json_path);
 		if (param_sfo_offset > 0 && param_sfo_size > 0)
 		{
 			param_sfo_data = malloc(param_sfo_size);
@@ -640,6 +693,20 @@ namespace INSTALLER
 			FS::Write(out, icon0_png_data, icon0_png_size);
 			FS::Close(out);
 			free(icon0_png_data);
+		}
+
+		if (param_json_offset > 0 && param_json_size > 0)
+		{
+			param_json_data = malloc(param_json_size);
+			FILE *out = FS::Create(param_json_path);
+			if (!remoteclient->GetRange(path, param_json_data, param_json_size, param_json_offset))
+			{
+				FS::Close(out);
+				return false;
+			}
+			FS::Write(out, param_json_data, param_json_size);
+			FS::Close(out);
+			free(param_json_data);
 		}
 
 		return true;

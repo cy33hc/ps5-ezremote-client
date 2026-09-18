@@ -2622,21 +2622,41 @@ namespace Windows
             selected_action = ACTION_NONE;
             break;
         case ACTION_VIEW_LOCAL_PKG:
-            if (INSTALLER::ExtractLocalPkg(selected_local_file.path, TMP_SFO_PATH, TMP_ICON_PATH))
+            if (INSTALLER::ExtractLocalPkg(selected_local_file.path, TMP_SFO_PATH, TMP_PARAM_JSON_PATH, TMP_ICON_PATH))
             {
                 Textures::LoadImageFile(TMP_ICON_PATH, &texture);
-                sfo = FS::Load(TMP_SFO_PATH);
-                sfo_params = SFO::GetParams(sfo.data(), sfo.size());
+                sfo.clear();
+                sfo_params.clear();
+                if (FS::FileExists(TMP_SFO_PATH))
+                {
+                    sfo = FS::Load(TMP_SFO_PATH);
+                    sfo_params = SFO::GetParams(sfo.data(), sfo.size());
+                }
+                else if (FS::FileExists(TMP_PARAM_JSON_PATH))
+                {
+                    sfo = FS::Load(TMP_PARAM_JSON_PATH);
+                    sfo_params = SFO::GetParamsFromParamJson(sfo.data(), sfo.size());
+                }
                 show_pkg_info = true;
             }
             selected_action = ACTION_NONE;
             break;
         case ACTION_VIEW_REMOTE_PKG:
-            if (INSTALLER::ExtractRemotePkg(selected_remote_file.path, TMP_SFO_PATH, TMP_ICON_PATH))
+            if (INSTALLER::ExtractRemotePkg(selected_remote_file.path, TMP_SFO_PATH, TMP_PARAM_JSON_PATH, TMP_ICON_PATH))
             {
                 Textures::LoadImageFile(TMP_ICON_PATH, &texture);
-                sfo = FS::Load(TMP_SFO_PATH);
-                sfo_params = SFO::GetParams(sfo.data(), sfo.size());
+                sfo.clear();
+                sfo_params.clear();
+                if (FS::FileExists(TMP_SFO_PATH))
+                {
+                    sfo = FS::Load(TMP_SFO_PATH);
+                    sfo_params = SFO::GetParams(sfo.data(), sfo.size());
+                }
+                else if (FS::FileExists(TMP_PARAM_JSON_PATH))
+                {
+                    sfo = FS::Load(TMP_PARAM_JSON_PATH);
+                    sfo_params = SFO::GetParamsFromParamJson(sfo.data(), sfo.size());
+                }
                 show_pkg_info = true;
             }
             selected_action = ACTION_NONE;

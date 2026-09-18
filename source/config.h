@@ -16,6 +16,7 @@
 #define COOKIE_FILE DATA_PATH "/cookies.txt"
 #define TMP_EDITOR_FILE DATA_PATH "/tmp_editor.txt"
 #define TMP_SFO_PATH DATA_PATH "/tmp_pkg.sfo"
+#define TMP_PARAM_JSON_PATH DATA_PATH "/tmp_pkg.json"
 #define TMP_ICON_PATH DATA_PATH "/tmp_icon.png"
 #define TMP_FOLDER_PATH DATA_PATH "/tmp"
 #define CACERT_FILE DATA_PATH "/assets/certs/cacert.pem"
@@ -78,7 +79,7 @@
 #define HTTP_SERVER_MYRIENT "Myrient"
 #define HTTP_SERVER_GITHUB "Github"
 
-#define EZREMOTE_SERVER_REQUIRED_VERSION "1.09"
+#define EZREMOTE_SERVER_REQUIRED_VERSION "1.10"
 
 #define MAX_EDIT_FILE_SIZE 32768
 

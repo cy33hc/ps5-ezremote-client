@@ -24,6 +24,7 @@
 #include "lang.h"
 #include "zip_util.h"
 #include "util.h"
+// #include "dbglogger.h"
 
 #define SUCCESS_MSG "{ \"result\": { \"success\": true, \"error\": null } }"
 #define FAILURE_MSG "{ \"result\": { \"success\": false, \"error\": \"%s\" } }"
@@ -979,14 +980,15 @@ namespace HttpServer
             }
 
             res.status = 206;
-            size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
+            uint64_t file_size;
+            tmp_client->Size(path, &file_size);
                 
             std::pair<ssize_t, ssize_t> range = req.ranges[0];
             res.set_content_provider(
-                range_len, "application/octet-stream",
-                [tmp_client, path, range, range_len](size_t offset, size_t length, DataSink &sink) {
+                file_size, "application/octet-stream",
+                [tmp_client, path](size_t offset, size_t length, DataSink &sink) {
                     int ret;
-                    ret = tmp_client->GetRange(path, sink, range_len, range.first);
+                    ret = tmp_client->GetRange(path, sink, length, offset);
                     return (ret==1);
                 },
                 [tmp_client](bool success) {
@@ -1000,13 +1002,11 @@ namespace HttpServer
             ArchivePkgInstallData *pkg_data = INSTALLER::GetArchivePkgInstallData(hash);
 
             res.status = 206;
-            size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
-            std::pair<ssize_t, ssize_t> range = req.ranges[0];
             res.set_content_provider(
-                range_len, "application/octet-stream",
-                [pkg_data, range, range_len](size_t offset, size_t length, DataSink &sink) {
-                    char *buf = (char*) malloc(range_len);
-                    size_t bytes_read = pkg_data->split_file->Read(buf, range_len, range.first);
+                pkg_data->archive_entry->filesize, "application/octet-stream",
+                [pkg_data](size_t offset, size_t length, DataSink &sink) {
+                    char *buf = (char*) malloc(length);
+                    size_t bytes_read = pkg_data->split_file->Read(buf, length, offset);
                     sink.write(buf, bytes_read);
                     free(buf);
                     return true;
@@ -1029,13 +1029,11 @@ namespace HttpServer
             }
 
             res.status = 206;
-            size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
-            std::pair<ssize_t, ssize_t> range = req.ranges[0];
             res.set_content_provider(
-                range_len, "application/octet-stream",
-                [pkg_data, range, range_len](size_t offset, size_t length, DataSink &sink) {
-                    char *buf = (char*) malloc(range_len);
-                    size_t bytes_read = pkg_data->split_file->Read(buf, range_len, range.first);
+                pkg_data->size, "application/octet-stream",
+                [pkg_data](size_t offset, size_t length, DataSink &sink) {
+                    char *buf = (char*) malloc(length);
+                    size_t bytes_read = pkg_data->split_file->Read(buf, length, offset);
                     sink.write(buf, bytes_read);
                     free(buf);
                     return true;
@@ -1128,6 +1126,7 @@ namespace HttpServer
 			std::string host = download_url.substr(0, root_pos);
 			std::string path = download_url.substr(root_pos);
             pkg_header header;
+            uint64_t file_size;
 
             BaseClient *baseclient = new BaseClient();
             baseclient->Connect(host, "", "");
@@ -1141,11 +1140,12 @@ namespace HttpServer
                 return;
             }
             baseclient->Head(path, &header, sizeof(pkg_header));
+            baseclient->Size(path, &file_size);
 
             FileHost::AddCacheDownloadUrl(hash, download_url);
             std::string title = INSTALLER::GetRemotePkgTitle(baseclient, path, &header);
 
-            if (BE32(header.pkg_magic) == 0x7F434E54)
+            if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
             {
                 if (enable_rpi && !use_disk_cache)
                 {
@@ -1156,6 +1156,7 @@ namespace HttpServer
                     json_object_object_add(history_item_obj, "username", json_object_new_string(""));
                     json_object_object_add(history_item_obj, "password", json_object_new_string(""));
                     json_object_object_add(history_item_obj, "type", json_object_new_int(CLIENT_TYPE_FILEHOST));
+                    json_object_object_add(history_item_obj, "file_size", json_object_new_uint64(file_size));
 
                     const char *params_str = json_object_to_json_string(history_item_obj);
 
@@ -1185,7 +1186,7 @@ namespace HttpServer
                     file_transfering = false;
                     Windows::SetModalMode(false);
                 }
-                else if (enable_rpi && use_disk_cache)
+                else if (enable_rpi && use_disk_cache && BE32(header.pkg_magic) == PKG_CNT_MAGIC)
                 {
                     SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
                     memset(install_data, 0, sizeof(SplitPkgInstallData));

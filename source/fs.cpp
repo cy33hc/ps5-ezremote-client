@@ -459,11 +459,12 @@ namespace FS
         return path1 + "/" + path2;
     }
 
-    int Head(const std::string &path, void *buffer, uint16_t len)
+    int Head(const std::string &path, void *buffer, uint16_t len, uint64_t offset)
     {
         FILE *file = OpenRead(path);
         if (file == nullptr)
             return 0;
+        Seek(file, offset);
         int ret = Read(file, buffer, len);
         if (ret != len)
         {

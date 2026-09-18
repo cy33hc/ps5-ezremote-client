@@ -34,8 +34,8 @@
 #define BE32(x) SWAP32(x)
 #define BE64(x) SWAP64(x)
 
-#define PS4_PKG_MAGIC 0x7F434E54
-#define PS5_PKG_MAGIC 0x7F464948
+#define PKG_CNT_MAGIC 0x7F434E54
+#define PKG_FIH_MAGIC 0x7F464948
 
 #define PKG_CONTENT_FLAGS_FIRST_PATCH 0x00100000
 #define PKG_CONTENT_FLAGS_PATCHGO 0x00200000
@@ -48,8 +48,9 @@
 #define PKG_CONTENT_FLAGS_DELTA_PATCH 0x41000000
 #define PKG_CONTENT_FLAGS_CUMULATIVE_PATCH 0x60000000
 
-#define PKG_ENTRY_ID_PARAM_SFO 0x1000
-#define PKG_ENTRY_ID_ICON0_PNG 0x1200
+#define PKG_ENTRY_ID_PARAM_SFO   0x1000
+#define PKG_ENTRY_ID_ICON0_PNG   0x1200
+#define PKG_ENTRY_ID_PARAM_JSON  0x2000
 
 #define INSTALL_ARCHIVE_PKG_SPLIT_SIZE 10485760
 
@@ -115,6 +116,21 @@ typedef struct
     uint64_t padding;         // blank padding
 } pkg_table_entry;
 
+typedef struct 
+{
+    uint32_t magic;                 /* 0x00: Magic bytes (0x7F 'F' 'I' 'H') */
+    uint8_t  reserved_04;           /* 0x04: Reserved */
+    uint8_t  signed_byte;           /* 0x05: Signed byte (0x80=official, 0x00=debug) */
+    uint16_t format_version;        /* 0x06: Format version (LE) */
+    uint8_t  reserved_08[8];        /* 0x08: Reserved */
+    uint64_t pfs_image_offset;      /* 0x10: PFS image offset (LE) */
+    uint64_t pfs_image_size;        /* 0x18: PFS image size (LE) */
+    uint8_t  reserved_20[48];       /* 0x20: Reserved */
+    uint64_t data_region_block_count; /* 0x50: Data region block count (LE) */
+    uint64_t embedded_cnt_offset;   /* 0x58: Embedded CNT offset (LE) */
+    /* Additional fields follow */
+} fih_header;
+
 enum pkg_content_type
 {
     PKG_CONTENT_TYPE_GD = 0x1A, /* pkg_ps4_app, pkg_ps4_patch, pkg_ps4_remaster */
@@ -151,12 +167,12 @@ namespace INSTALLER
     void Exit(void);
 
     bool canInstallRemotePkg(const std::string &url);
-    std::string getRemoteUrl(const std::string path, bool encodeUrl = false);
+    std::string getRemoteUrl(const std::string path, uint64_t size, bool encodeUrl = false);
     int InstallRemotePkg(const std::string &path, pkg_header *header, std::string title);
     int InstallLocalPkg(const std::string &path, pkg_header *header, bool remove_after_install = false);
     int InstallLocalPkg(const std::string &path);
-    bool ExtractLocalPkg(const std::string &path, const std::string sfo_path, const std::string icon_path);
-    bool ExtractRemotePkg(const std::string &path, const std::string sfo_path, const std::string icon_path);
+    bool ExtractLocalPkg(const std::string &path, const std::string sfo_path, const std::string param_json_path, const std::string icon_path);
+    bool ExtractRemotePkg(const std::string &path, const std::string sfo_path, const std::string param_json_path, const std::string icon_path);
     std::string GetRemotePkgTitle(RemoteClient *client, const std::string &path, pkg_header *header);
     std::string GetLocalPkgTitle(const std::string &path, pkg_header *header);
     ArchivePkgInstallData *GetArchivePkgInstallData(const std::string &hash);
@@ -172,7 +188,7 @@ namespace INSTALLER
     int InstallWithDirectPackageInstaller(const std::string &url);
     std::string EzRemoteServerVersion();
     int StartEzRemoteServer();
-    std::string StoreBgInstallHostData(RemoteSettings *remote_settings, const std::string &path);
+    std::string StoreBgInstallHostData(RemoteSettings *remote_settings, const std::string &path, uint64_t size);
     RemoteClient *GetRemoteClient(int site_idx);
     RemoteClient *GetRemoteClient(RemoteSettings *settings);
 }

@@ -722,8 +722,10 @@ namespace Actions
                         failed++;
                     else
                     {
-                        if (BE32(header.pkg_magic) == PS4_PKG_MAGIC)
+                        if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
                         {
+                            uint64_t file_size;
+                            remoteclient->Size(path, &file_size);
                             if (!remote_settings->enable_rpi)
                             {
                                 if (DownloadAndInstallPkg(it->path, &header) == 0)
@@ -758,7 +760,7 @@ namespace Actions
                                 }
                                 else
                                 {
-                                    std::string url = INSTALLER::getRemoteUrl(it->path, true);
+                                    std::string url = INSTALLER::getRemoteUrl(it->path, file_size, true);
                                     std::string title = INSTALLER::GetRemotePkgTitle(remoteclient, it->path, &header);
                                     if (INSTALLER::InstallRemotePkg(url, &header, title) == 0)
                                         failed++;
@@ -917,7 +919,7 @@ namespace Actions
                         failed++;
                     else
                     {
-                        if (BE32(header.pkg_magic) == PS4_PKG_MAGIC)
+                        if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
                         {
                             if ((ret = INSTALLER::InstallLocalPkg(it->path, &header)) <= 0)
                             {
@@ -1207,7 +1209,7 @@ namespace Actions
 
         FS::Read(in, (void *)&header, s);
         FS::Close(in);
-        if (BE32(header.pkg_magic) == PS4_PKG_MAGIC)
+        if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
         {
             int ret;
             if ((ret = INSTALLER::InstallLocalPkg(filename, &header, true)) != 1)

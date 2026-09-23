@@ -725,7 +725,7 @@ namespace Actions
                         if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
                         {
                             uint64_t file_size;
-                            remoteclient->Size(path, &file_size);
+                            remoteclient->Size(it->path, &file_size);
                             if (!remote_settings->enable_rpi)
                             {
                                 if (DownloadAndInstallPkg(it->path, &header) == 0)

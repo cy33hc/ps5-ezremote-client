@@ -34,7 +34,6 @@
 #include "sceUserService.h"
 #include "sceSystemService.h"
 #include "installer.h"
-// #include "dbglogger.h"
 
 struct BgProgressCheck
 {
@@ -512,9 +511,9 @@ namespace INSTALLER
 			pkg_entry_base = fih_hdr.embedded_cnt_offset;
 		}
 
-		size_t entry_count = BE32(cnt_hdr.pkg_entry_count);
-		uint32_t entry_table_offset = pkg_entry_base +BE32(cnt_hdr.pkg_table_offset);
-		uint64_t entry_table_size = entry_count * sizeof(pkg_table_entry);
+		uint32_t entry_count = BE32(cnt_hdr.pkg_entry_count);
+		uint64_t entry_table_offset = pkg_entry_base +BE32(cnt_hdr.pkg_table_offset);
+		uint32_t entry_table_size = entry_count * sizeof(pkg_table_entry);
 		void *entry_table_data = malloc(entry_table_size);
 
 		FILE *fd = FS::OpenRead(path);
@@ -523,12 +522,12 @@ namespace INSTALLER
 
 		pkg_table_entry *entries = (pkg_table_entry *)entry_table_data;
 		void *param_sfo_data = NULL;
-		uint32_t param_sfo_offset = 0;
+		uint64_t param_sfo_offset = 0;
 		uint32_t param_sfo_size = 0;
 		void *icon0_png_data = NULL;
-		uint32_t icon0_png_offset = 0;
+		uint64_t icon0_png_offset = 0;
 		uint32_t icon0_png_size = 0;
-		uint32_t param_json_offset = 0;
+		uint64_t param_json_offset = 0;
 		uint32_t param_json_size = 0;
 		void *param_json_data = NULL;
 		short items = 0;
@@ -618,9 +617,9 @@ namespace INSTALLER
 			pkg_entry_base = fih_hdr.embedded_cnt_offset;
 		}
 
-		size_t entry_count = BE32(cnt_hdr.pkg_entry_count);
-		uint32_t entry_table_offset = pkg_entry_base + BE32(cnt_hdr.pkg_table_offset);
-		uint64_t entry_table_size = entry_count * sizeof(pkg_table_entry);
+		uint32_t entry_count = BE32(cnt_hdr.pkg_entry_count);
+		uint64_t entry_table_offset = pkg_entry_base + BE32(cnt_hdr.pkg_table_offset);
+		uint32_t entry_table_size = entry_count * sizeof(pkg_table_entry);
 		void *entry_table_data = malloc(entry_table_size);
 
 		if (!remoteclient->GetRange(path, entry_table_data, entry_table_size, entry_table_offset))
@@ -628,16 +627,16 @@ namespace INSTALLER
 
 		pkg_table_entry *entries = (pkg_table_entry *)entry_table_data;
 		void *param_sfo_data = NULL;
-		uint32_t param_sfo_offset = 0;
+		uint64_t param_sfo_offset = 0;
 		uint32_t param_sfo_size = 0;
 		void *icon0_png_data = NULL;
-		uint32_t icon0_png_offset = 0;
+		uint64_t icon0_png_offset = 0;
 		uint32_t icon0_png_size = 0;
-		uint32_t param_json_offset = 0;
+		uint64_t param_json_offset = 0;
 		uint32_t param_json_size = 0;
 		void *param_json_data = NULL;
 		short items = 0;
-		for (size_t i = 0; i < entry_count; ++i)
+		for (uint32_t i = 0; i < entry_count; ++i)
 		{
 			switch (BE32(entries[i].id))
 			{

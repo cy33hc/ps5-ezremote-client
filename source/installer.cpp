@@ -323,6 +323,7 @@ namespace INSTALLER
 		}
 
 		SceAppInstallStatusInstalled progress_info;
+		memset(&progress_info, 0, sizeof(progress_info));
 		while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 		{
 			ret = sceAppInstUtilGetInstallStatus(bg_check_data->content_id, &progress_info);
@@ -480,6 +481,7 @@ namespace INSTALLER
 		prev_tick = Util::GetTick();
 
 		SceAppInstallStatusInstalled progress_info;
+		memset(&progress_info, 0, sizeof(progress_info));
 		while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 		{
 			ret = sceAppInstUtilGetInstallStatus((const char *)header->pkg_content_id, &progress_info);
@@ -794,6 +796,7 @@ namespace INSTALLER
 			prev_tick = Util::GetTick();
 
 			SceAppInstallStatusInstalled progress_info;
+			memset(&progress_info, 0, sizeof(progress_info));
 			while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 			{
 				ret = sceAppInstUtilGetInstallStatus((const char *)header.pkg_content_id, &progress_info);
@@ -894,6 +897,7 @@ namespace INSTALLER
 			prev_tick = Util::GetTick();
 
 			SceAppInstallStatusInstalled progress_info;
+			memset(&progress_info, 0, sizeof(progress_info));
 			while (strcmp(progress_info.status, "playable") != 0 && strcmp(progress_info.status, "none") != 0 )
 			{
 				ret = sceAppInstUtilGetInstallStatus((const char *)header.pkg_content_id, &progress_info);

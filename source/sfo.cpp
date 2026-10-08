@@ -1,5 +1,6 @@
 #include <cstring>
 #include <json-c/json.h>
+#include "json_object_ref.h"
 #include "sfo.h"
 
 static constexpr uint32_t SFO_MAGIC = 0x46535000;
@@ -69,6 +70,7 @@ namespace SFO {
         const char* value;
 
         json_object *parent_obj = json_tokener_parse(buffer);
+        JsonObjectRef parent_obj_ref(parent_obj);
         
         value = json_object_get_string(json_object_object_get(parent_obj, "contentId"));
         if (value != nullptr)

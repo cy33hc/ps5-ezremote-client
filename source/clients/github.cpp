@@ -1,5 +1,6 @@
 #include <curl/curl.h>
 #include <json-c/json.h>
+#include "json_object_ref.h"
 #include <fstream>
 #include <algorithm>
 #include "common.h"
@@ -10,6 +11,31 @@
 #include "lang.h"
 #include "util.h"
 #include "windows.h"
+
+// GitHub timestamps look like "2024-05-11T20:55:31Z". Any part may be absent on
+// a malformed response, so every split is size-checked before indexing.
+static DateTime ParseGithubDate(const std::string &date_time)
+{
+    DateTime modified;
+    memset(&modified, 0, sizeof(modified));
+
+    auto date_time_array = Util::Split(date_time, "T");
+    if (date_time_array.size() < 2)
+        return modified;
+
+    auto date_array = Util::Split(date_time_array[0], "-");
+    auto time_array = Util::Split(date_time_array[1], ":");
+    if (date_array.size() < 3 || time_array.size() < 3)
+        return modified;
+
+    modified.year = std::atoi(date_array[0].c_str());
+    modified.month = std::atoi(date_array[1].c_str());
+    modified.day = std::atoi(date_array[2].c_str());
+    modified.hours = std::atoi(time_array[0].c_str());
+    modified.minutes = std::atoi(time_array[1].c_str());
+    modified.seconds = std::atoi(time_array[2].substr(0, 2).c_str());
+    return modified;
+}
 
 int GithubClient::Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping)
 {
@@ -296,25 +322,22 @@ bool GithubClient::ParseReleases()
             if (HTTP_SUCCESS(res.iCode))
             {
                 json_object *jobj = json_tokener_parse(res.strBody.data());
+                JsonObjectRef jobj_ref(jobj);
                 struct array_list *areleases = json_object_get_array(jobj);
+                if (areleases == nullptr)
+                {
+                    return 0;
+                }
 
                 for (size_t release_idx = 0; release_idx < areleases->length; ++release_idx)
                 {
                     GitRelease release_entry;
 
                     json_object *release = (json_object *)array_list_get_idx(areleases, release_idx);
-                    release_entry.name = std::string(json_object_get_string(json_object_object_get(release, "tag_name")));
-                    std::string date_time = std::string(json_object_get_string(json_object_object_get(release, "published_at")));
+                    release_entry.name = JsonGetString(release, "tag_name");
+                    std::string date_time = JsonGetString(release, "published_at");
 
-                    auto date_time_array = Util::Split(date_time, "T");
-                    auto date_array = Util::Split(date_time_array[0], "-");
-                    auto time_array = Util::Split(date_time_array[1], ":");
-                    release_entry.modified.year = std::atoi(date_array[0].c_str());
-                    release_entry.modified.month = std::atoi(date_array[1].c_str());
-                    release_entry.modified.day = std::atoi(date_array[2].c_str());
-                    release_entry.modified.hours = std::atoi(time_array[0].c_str());
-                    release_entry.modified.minutes = std::atoi(time_array[1].c_str());
-                    release_entry.modified.seconds = std::atoi(time_array[2].substr(0,2).c_str());
+                    release_entry.modified = ParseGithubDate(date_time);
 
                     json_object *obj_assets = json_object_object_get(release, "assets");
                     if (json_object_get_type(obj_assets) == json_type_array)
@@ -327,21 +350,13 @@ bool GithubClient::ParseReleases()
                             GitAsset asset_entry;
 
                             json_object *asset = (json_object *)array_list_get_idx(aassets, asset_idx);
-                            asset_entry.name = std::string(json_object_get_string(json_object_object_get(asset, "name")));
+                            asset_entry.name = JsonGetString(asset, "name");
                             asset_entry.size = json_object_get_int64(json_object_object_get(asset, "size"));
-                            std::string date_time = std::string(json_object_get_string(json_object_object_get(asset, "updated_at")));
-                            asset_entry.url = std::string(json_object_get_string(json_object_object_get(asset, "browser_download_url")));
+                            std::string date_time = JsonGetString(asset, "updated_at");
+                            asset_entry.url = JsonGetString(asset, "browser_download_url");
                             Util::ReplaceAll(asset_entry.url, "https://github.com", "");
 
-                            auto date_time_array = Util::Split(date_time, "T");
-                            auto date_array = Util::Split(date_time_array[0], "-");
-                            auto time_array = Util::Split(date_time_array[1], ":");
-                            asset_entry.modified.year = std::atoi(date_array[0].c_str());
-                            asset_entry.modified.month = std::atoi(date_array[1].c_str());
-                            asset_entry.modified.day = std::atoi(date_array[2].c_str());
-                            asset_entry.modified.hours = std::atoi(time_array[0].c_str());
-                            asset_entry.modified.minutes = std::atoi(time_array[1].c_str());
-                            asset_entry.modified.seconds = std::atoi(time_array[2].substr(0,2).c_str());
+                            asset_entry.modified = ParseGithubDate(date_time);
 
                             assets.insert(std::make_pair(asset_entry.name, asset_entry));
                         }

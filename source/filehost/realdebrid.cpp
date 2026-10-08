@@ -1,5 +1,6 @@
 #include "httpclient/HTTPClient.h"
 #include <json-c/json.h>
+#include "json_object_ref.h"
 
 #include "config.h"
 #include "common.h"
@@ -27,6 +28,7 @@ bool RealDebridHost::IsValidUrl()
         if (HTTP_SUCCESS(res.iCode))
         {
             json_object *jobj = json_tokener_parse(res.strBody.data());
+            JsonObjectRef jobj_ref(jobj);
             uint64_t supported = json_object_get_uint64(json_object_object_get(jobj, "supported"));
 
             if (supported == 1)
@@ -55,6 +57,7 @@ std::string RealDebridHost::GetDownloadUrl()
         if (HTTP_SUCCESS(res.iCode))
         {
             json_object *jobj = json_tokener_parse(res.strBody.data());
+            JsonObjectRef jobj_ref(jobj);
             const char *download = json_object_get_string(json_object_object_get(jobj, "download"));
 
             if (download != nullptr)

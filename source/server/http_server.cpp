@@ -1,6 +1,7 @@
 #include <string>
 #include <shared_mutex>
 #include <json-c/json.h>
+#include "json_object_ref.h"
 #include <server/range_parser.h>
 #include "http/httplib.h"
 #include "server/http_server.h"
@@ -245,6 +246,7 @@ namespace HttpServer
             const char *path;
             bool onlyFolders = false;
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 path = json_object_get_string(json_object_object_get(jobj, "path"));
@@ -284,6 +286,7 @@ namespace HttpServer
                 it++;
             }
             json_object *results = json_object_new_object();
+            JsonObjectRef results_ref(results);
             json_object_object_add(results, "result", json_files);
             const char *results_str = json_object_to_json_string(results);
 
@@ -295,6 +298,7 @@ namespace HttpServer
             const char *item;
             const char *newItemPath;
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 item = json_object_get_string(json_object_object_get(jobj, "item"));
@@ -326,11 +330,12 @@ namespace HttpServer
             const json_object *items;
             const char *newPath;
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 items = json_object_object_get(jobj, "items");
                 newPath = json_object_get_string(json_object_object_get(jobj, "newPath"));
-                if (items == nullptr || newPath == nullptr)
+                if (items == nullptr || json_object_get_type(items) != json_type_array || newPath == nullptr)
                 {
                     bad_request(res, "Required items or newPath parameter missing");
                     return;
@@ -347,6 +352,8 @@ namespace HttpServer
             for (size_t i=0; i < len; i++)
             {
                 const char *item = json_object_get_string(json_object_array_get_idx(items, i));
+                if (item == nullptr)
+                    continue;
                 DirEntry entry;
                 std::string temp = std::string(item);
                 size_t slash_pos = temp.find_last_of("/");
@@ -388,13 +395,14 @@ namespace HttpServer
             const char *singleFilename;
 
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 items = json_object_object_get(jobj, "items");
                 newPath = json_object_get_string(json_object_object_get(jobj, "newPath"));
                 singleFilename = json_object_get_string(json_object_object_get(jobj, "singleFilename"));
 
-                if (items == nullptr || newPath == nullptr)
+                if (items == nullptr || json_object_get_type(items) != json_type_array || newPath == nullptr)
                 {
                     bad_request(res, "Required items or newPath or singleFilename parameter missing");
                     return;
@@ -410,6 +418,11 @@ namespace HttpServer
             if (singleFilename != nullptr)
             {
                 const char *src = json_object_get_string(json_object_array_get_idx(items, 0));
+                if (src == nullptr)
+                {
+                    bad_request(res, "Required items parameter missing");
+                    return;
+                }
                 std::string dest = std::string(newPath) + "/" + singleFilename;
 
                 std::string temp = std::string(src);
@@ -430,6 +443,8 @@ namespace HttpServer
                 for (size_t i=0; i < len; i++)
                 {
                     const char *item = json_object_get_string(json_object_array_get_idx(items, i));
+                    if (item == nullptr)
+                        continue;
                     DirEntry entry;
                     std::string temp = std::string(item);
                     size_t slash_pos = temp.find_last_of("/");
@@ -465,10 +480,11 @@ namespace HttpServer
 
             json_object *items;
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 items = json_object_object_get(jobj, "items");
-                if (items == nullptr)
+                if (items == nullptr || json_object_get_type(items) != json_type_array)
                 {
                     bad_request(res, "Required items parameter missing");
                     return;
@@ -485,6 +501,8 @@ namespace HttpServer
             for (size_t i=0; i < len; i++)
             {
                 const char *item = json_object_get_string(json_object_array_get_idx(items, i));
+                if (item == nullptr)
+                    continue;
                 bool ret = FS::RmRecursive(item);
                 if (!ret)
                 {
@@ -510,10 +528,11 @@ namespace HttpServer
 
             json_object *items;
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 items = json_object_object_get(jobj, "items");
-                if (items == nullptr)
+                if (items == nullptr || json_object_get_type(items) != json_type_array)
                 {
                     bad_request(res, "Required items parameter missing");
                     return;
@@ -530,6 +549,8 @@ namespace HttpServer
             for (size_t i=0; i < len; i++)
             {
                 const char *item = json_object_get_string(json_object_array_get_idx(items, i));
+                if (item == nullptr)
+                    continue;
                 if (!INSTALLER::InstallLocalPkg(item))
                     failed_items += (std::string(item) + ",");
             }
@@ -549,6 +570,7 @@ namespace HttpServer
             const char *content;
             size_t content_len;
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 item = json_object_get_string(json_object_object_get(jobj, "item"));
@@ -580,6 +602,7 @@ namespace HttpServer
         {
             const char *item;
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 item = json_object_get_string(json_object_object_get(jobj, "item"));
@@ -597,7 +620,9 @@ namespace HttpServer
 
             std::vector<char> content = FS::Load(item);
             json_object *result = json_object_new_object();
-            json_object_object_add(result, "result", json_object_new_string(content.data()));
+            JsonObjectRef result_ref(result);
+            const char *content_str = content.empty() ? "" : content.data();
+            json_object_object_add(result, "result", json_object_new_string(content_str));
             const char *result_str = json_object_to_json_string(result);
 
             res.status = 200;
@@ -608,6 +633,7 @@ namespace HttpServer
         {
             const char *newPath;
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 newPath = json_object_get_string(json_object_object_get(jobj, "newPath"));
@@ -642,13 +668,14 @@ namespace HttpServer
             const char* compressedFilename;
             
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 items = json_object_object_get(jobj, "items");
                 destination = json_object_get_string(json_object_object_get(jobj, "destination"));
                 compressedFilename = json_object_get_string(json_object_object_get(jobj, "compressedFilename"));
 
-                if (items == nullptr || destination == nullptr || compressedFilename == nullptr)
+                if (items == nullptr || json_object_get_type(items) != json_type_array || destination == nullptr || compressedFilename == nullptr)
                 {
                     bad_request(res, "Required items,destination,compressedFilename parameter missing");
                     return;
@@ -670,6 +697,8 @@ namespace HttpServer
                 for (size_t i=0; i < len; i++)
                 {
                     const char *item = json_object_get_string(json_object_array_get_idx(items, i));
+                    if (item == nullptr)
+                        continue;
                     std::string src = std::string(item);
                     size_t slash_pos = src.find_last_of("/");
                     int ret = ZipUtil::ZipAddPath(zf, src, (slash_pos != std::string::npos ? slash_pos + 1 : 1), Z_DEFAULT_COMPRESSION);
@@ -701,6 +730,7 @@ namespace HttpServer
             const char* folderName;
             
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 item = json_object_get_string(json_object_object_get(jobj, "item"));
@@ -1059,6 +1089,7 @@ namespace HttpServer
             bool enable_rpi = false;
 
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 url_param = json_object_get_string(json_object_object_get(jobj, "url"));
@@ -1150,6 +1181,7 @@ namespace HttpServer
                 if (enable_rpi && !use_disk_cache)
                 {
                     json_object *history_item_obj = json_object_new_object();
+                    JsonObjectRef history_item_ref(history_item_obj);
                     json_object_object_add(history_item_obj, "hash", json_object_new_string(hash.c_str()));
                     json_object_object_add(history_item_obj, "url", json_object_new_string(host.c_str()));
                     json_object_object_add(history_item_obj, "path", json_object_new_string(path.c_str()));
@@ -1267,6 +1299,7 @@ namespace HttpServer
             bool use_realdebrid = false;
 
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
             if (jobj != nullptr)
             {
                 url_param = json_object_get_string(json_object_object_get(jobj, "url"));
@@ -1322,6 +1355,7 @@ namespace HttpServer
 
             uint64_t id = Util::GetTick();
             json_object *params = json_object_new_object();
+            JsonObjectRef params_ref(params);
             json_object_object_add(params, "type", json_object_new_int(CLIENT_TYPE_FILEHOST));
             json_object_object_add(params, "url", json_object_new_string(host.c_str()));
             json_object_object_add(params, "username", json_object_new_string(""));

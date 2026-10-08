@@ -37,13 +37,13 @@ int SplitFile::Open()
     return (block_in_progress->fd == nullptr);
 }
 
-size_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
+ssize_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
 {
     int first_block_num, block_num;
     size_t block_offset;
     size_t remaining;
     size_t bytes_read;
-    size_t total_bytes_read;
+    ssize_t total_bytes_read;
     FileBlock *block;
     FILE *fd;
     char *p;

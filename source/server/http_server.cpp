@@ -1043,7 +1043,12 @@ namespace HttpServer
                 pkg_data->archive_entry->filesize, "application/octet-stream",
                 [pkg_data](size_t offset, size_t length, DataSink &sink) {
                     char *buf = (char*) malloc(length);
-                    size_t bytes_read = pkg_data->split_file->Read(buf, length, offset);
+                    ssize_t bytes_read = pkg_data->split_file->Read(buf, length, offset);
+                    if (bytes_read < 0)
+                    {
+                        free(buf);
+                        return false;
+                    }
                     sink.write(buf, bytes_read);
                     free(buf);
                     return true;
@@ -1070,7 +1075,12 @@ namespace HttpServer
                 pkg_data->size, "application/octet-stream",
                 [pkg_data](size_t offset, size_t length, DataSink &sink) {
                     char *buf = (char*) malloc(length);
-                    size_t bytes_read = pkg_data->split_file->Read(buf, length, offset);
+                    ssize_t bytes_read = pkg_data->split_file->Read(buf, length, offset);
+                    if (bytes_read < 0)
+                    {
+                        free(buf);
+                        return false;
+                    }
                     sink.write(buf, bytes_read);
                     free(buf);
                     return true;

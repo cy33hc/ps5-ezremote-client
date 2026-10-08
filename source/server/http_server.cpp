@@ -104,9 +104,10 @@ namespace HttpServer
     void failed(Response &res, int status, const std::string &msg)
     {
         res.status = status;
-        char response_msg[msg.length() + strlen(FAILURE_MSG) + 2];
-        snprintf(response_msg, sizeof(response_msg), "{ \"result\": { \"success\": false, \"error\": \"%s\" } }", msg.c_str());
+        char *response_msg = (char*) malloc(msg.length() + strlen(FAILURE_MSG) + 10);
+        snprintf(response_msg, msg.length() + strlen(FAILURE_MSG), "{ \"result\": { \"success\": false, \"error\": \"%s\" } }", msg.c_str());
         res.set_content(response_msg, strlen(response_msg), "application/json");
+        free(response_msg);
         return;
     }
 

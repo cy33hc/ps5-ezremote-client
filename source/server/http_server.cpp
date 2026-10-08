@@ -1032,6 +1032,12 @@ namespace HttpServer
             std::string hash = req.matches[1];
             ArchivePkgInstallData *pkg_data = INSTALLER::GetArchivePkgInstallData(hash);
 
+            if (pkg_data == nullptr)
+            {
+                failed(res, 200, "Cannot resume archive_inst");
+                return;
+            }
+
             res.status = 206;
             res.set_content_provider(
                 pkg_data->archive_entry->filesize, "application/octet-stream",

@@ -400,7 +400,10 @@ namespace Actions
                 if (entries[i].isDir)
                 {
                     if (strcmp(entries[i].name, "..") == 0)
+                    {
+                        free(new_path);
                         continue;
+                    }
 
                     remoteclient->Mkdir(new_path);
                     ret = Upload(entries[i], new_path);
@@ -606,7 +609,10 @@ namespace Actions
                 if (entries[i].isDir)
                 {
                     if (strcmp(entries[i].name, "..") == 0)
+                    {
+                        free(new_path);
                         continue;
+                    }
 
                     FS::MkDirs(new_path);
                     ret = Download(entries[i], new_path);
@@ -1772,7 +1778,10 @@ namespace Actions
                 if (entries[i].isDir)
                 {
                     if (strcmp(entries[i].name, "..") == 0)
+                    {
+                        free(new_path);
                         continue;
+                    }
 
                     remoteclient->Mkdir(new_path);
                     ret = CopyRemotePath(entries[i], new_path);

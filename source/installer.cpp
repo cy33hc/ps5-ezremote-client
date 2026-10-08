@@ -141,6 +141,11 @@ namespace INSTALLER
 		void *entry_table_data = malloc(entry_table_size);
 
 		FILE *fd = FS::OpenRead(path);
+		if (fd == NULL)
+		{
+			free(entry_table_data);
+			return "";
+		}
 		FS::Seek(fd, entry_table_offset);
 		FS::Read(fd, entry_table_data, entry_table_size);
 
@@ -173,6 +178,7 @@ namespace INSTALLER
 				title = std::string(tmp_title);
 			free(param_sfo_data);
 		}
+		FS::Close(fd);
 
 		return title;
 	}
@@ -715,7 +721,8 @@ namespace INSTALLER
 
 	ArchivePkgInstallData *GetArchivePkgInstallData(const std::string &hash)
 	{
-		return archive_pkg_install_data_list[hash];
+		auto it = archive_pkg_install_data_list.find(hash);
+		return it != archive_pkg_install_data_list.end() ? it->second : nullptr;
 	}
 
 	void AddArchivePkgInstallData(const std::string &hash, ArchivePkgInstallData *pkg_data)
@@ -814,7 +821,8 @@ namespace INSTALLER
 
 	SplitPkgInstallData *GetSplitPkgInstallData(const std::string &hash)
 	{
-		return split_pkg_install_data_list[hash];
+		auto it = split_pkg_install_data_list.find(hash);
+		return it != split_pkg_install_data_list.end() ? it->second : nullptr;
 	}
 
 	void AddSplitPkgInstallData(const std::string &hash, SplitPkgInstallData *pkg_data)
@@ -937,6 +945,7 @@ namespace INSTALLER
 		if (hostent == NULL)
 		{
 			printf("error: gethostbyname(\"%s\")\n", "127.0.0.1");
+			close(sockfd);
 			return false;
 		}
 	
@@ -944,6 +953,7 @@ namespace INSTALLER
 		if (in_addr == (in_addr_t)-1)
 		{
 			printf("error: inet_addr(\"%s\")\n", *(hostent->h_addr_list));
+			close(sockfd);
 			return false;
 		}
 	
@@ -954,9 +964,11 @@ namespace INSTALLER
 		if (connect(sockfd, (struct sockaddr *)&sockaddr_in, sizeof(sockaddr_in)) == -1)
 		{
 			printf("Couldn't connect to ELF loader\n");
+			close(sockfd);
 			return false;
 		}
 
+		close(sockfd);
 		return true;
 	}
 

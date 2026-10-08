@@ -631,7 +631,10 @@ namespace INSTALLER
 		void *entry_table_data = malloc(entry_table_size);
 
 		if (!remoteclient->GetRange(path, entry_table_data, entry_table_size, entry_table_offset))
+		{
+			free(entry_table_data);
 			return false;
+		}
 
 		pkg_table_entry *entries = (pkg_table_entry *)entry_table_data;
 		void *param_sfo_data = NULL;
@@ -681,6 +684,7 @@ namespace INSTALLER
 			if (!remoteclient->GetRange(path, param_sfo_data, param_sfo_size, param_sfo_offset))
 			{
 				FS::Close(out);
+				free(param_sfo_data);
 				return false;
 			}
 			FS::Write(out, param_sfo_data, param_sfo_size);
@@ -695,6 +699,7 @@ namespace INSTALLER
 			if (!remoteclient->GetRange(path, icon0_png_data, icon0_png_size, icon0_png_offset))
 			{
 				FS::Close(out);
+				free(icon0_png_data);
 				return false;
 			}
 			FS::Write(out, icon0_png_data, icon0_png_size);
@@ -709,6 +714,7 @@ namespace INSTALLER
 			if (!remoteclient->GetRange(path, param_json_data, param_json_size, param_json_offset))
 			{
 				FS::Close(out);
+				free(param_json_data);
 				return false;
 			}
 			FS::Write(out, param_json_data, param_json_size);

@@ -1003,6 +1003,7 @@ namespace INSTALLER
 		sockfd = socket(AF_INET, SOCK_STREAM, 0);
 		if (sockfd == -1)
 		{
+			close(filefd);
 			return -1;
 		}
 	
@@ -1010,12 +1011,16 @@ namespace INSTALLER
 		hostent = gethostbyname("127.0.0.1");
 		if (hostent == NULL)
 		{
+			close(filefd);
+			close(sockfd);
 			return -1;
 		}
 	
 		in_addr = inet_addr(inet_ntoa(*(struct in_addr *)*(hostent->h_addr_list)));
 		if (in_addr == (in_addr_t)-1)
 		{
+			close(filefd);
+			close(sockfd);
 			return -1;
 		}
 	
@@ -1025,6 +1030,8 @@ namespace INSTALLER
 		/* Do the actual connection. */
 		if (connect(sockfd, (struct sockaddr *)&sockaddr_in, sizeof(sockaddr_in)) == -1)
 		{
+			close(filefd);
+			close(sockfd);
 			return -1;
 		}
 	
@@ -1035,10 +1042,14 @@ namespace INSTALLER
 				break;
 			if (read_return == -1)
 			{
+				close(filefd);
+				close(sockfd);
 				return -1;
 			}
 			if (write(sockfd, buffer, read_return) == -1)
 			{
+				close(filefd);
+				close(sockfd);
 				return -1;
 			}
 		}
@@ -1074,12 +1085,14 @@ namespace INSTALLER
 		hostent = gethostbyname("127.0.0.1");
 		if (hostent == NULL)
 		{
+			close(sockfd);
 			return -1;
 		}
 	
 		in_addr = inet_addr(inet_ntoa(*(struct in_addr *)*(hostent->h_addr_list)));
 		if (in_addr == (in_addr_t)-1)
 		{
+			close(sockfd);
 			return -1;
 		}
 	
@@ -1089,6 +1102,7 @@ namespace INSTALLER
 		/* Do the actual connection. */
 		if (connect(sockfd, (struct sockaddr *)&sockaddr_in, sizeof(sockaddr_in)) == -1)
 		{
+			close(sockfd);
 			return -1;
 		}
 	

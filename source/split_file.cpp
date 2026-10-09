@@ -1,31 +1,48 @@
 #include <stdio.h>
-#include <stdio.h>
 #include "unistd.h"
 #include <string>
 
 #include "common.h"
 #include "split_file.h"
 
-SplitFile::SplitFile(const std::string &path, size_t block_size)
+SplitFile::SplitFile(const std::string &path, size_t block_size, size_t file_size)
 {
     this->block_size = block_size;
+    this->file_size = file_size;
     this->path = path;
     this->complete = false;
+    this->block_index = 0;
+
+    // Number of fixed-size blocks needed to hold the file. The final block may
+    // be partial. Always keep at least one slot so Close() can publish a final
+    // (possibly empty) is_last block even for a zero-byte file.
+    this->num_blocks = (block_size > 0) ? ((file_size + block_size - 1) / block_size) : 0;
+    if (this->num_blocks == 0)
+        this->num_blocks = 1;
+
+    // Size the slot array once; it is never resized, so slot addresses are
+    // stable and can be published/consumed lock-free.
+    this->file_blocks = std::vector<std::atomic<FileBlock *>>(this->num_blocks);
+    for (size_t i = 0; i < this->num_blocks; i++)
+        this->file_blocks[i].store(nullptr, std::memory_order_relaxed);
+
     sem_init(&this->block_ready, 0, 0);
 }
 
 SplitFile::~SplitFile()
 {
-    for (int i = 0; i < this->file_blocks.size(); i++)
+    for (size_t i = 0; i < this->num_blocks; i++)
     {
-        if (this->file_blocks[i] != nullptr && this->file_blocks[i]->status != BLOCK_STATUS_DELETED)
+        FileBlock *block = this->file_blocks[i].load(std::memory_order_relaxed);
+        if (block != nullptr && block->status != BLOCK_STATUS_DELETED)
         {
-            if (this->file_blocks[i]->fd != nullptr)
+            if (block->fd != nullptr)
             {
-                fclose(this->file_blocks[i]->fd);
+                fclose(block->fd);
             }
-            remove(this->file_blocks[i]->block_file.c_str());
-            delete this->file_blocks[i];
+            remove(block->block_file.c_str());
+            delete block;
+            this->file_blocks[i].store(nullptr, std::memory_order_relaxed);
         }
     }
     sem_destroy(&this->block_ready);
@@ -48,12 +65,16 @@ ssize_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
     FILE *fd;
     char *p;
 
-    first_block_num= offset / this->block_size;
+    first_block_num = offset / this->block_size;
     block_num = first_block_num;
     block_offset = offset % this->block_size;
 
-    while ((block_num >= this->file_blocks.size() && !this->complete) ||
-           (block_num < this->file_blocks.size() && this->file_blocks[block_num]->status == BLOCK_STATUS_NOT_EXISTS))
+    // Wait until the requested block has been published, or the writer is done.
+    // Readiness is determined by the slot pointer, not by a growing count: the
+    // slot array has its final size from construction.
+    while (block_num < (int)this->num_blocks &&
+           this->file_blocks[block_num].load(std::memory_order_acquire) == nullptr &&
+           !this->complete)
     {
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
@@ -61,11 +82,14 @@ ssize_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
         sem_timedwait(&this->block_ready, &ts);
     }
 
-    // If complete and block_num is past the end, the requested offset is beyond EOF
-    if (block_num >= this->file_blocks.size())
+    // Offset beyond the last block, or block never arrived before completion.
+    if (block_num >= (int)this->num_blocks)
         return 0;
 
-    block = this->file_blocks[block_num];
+    block = this->file_blocks[block_num].load(std::memory_order_acquire);
+    if (block == nullptr)
+        return 0;
+
     if (block->status == BLOCK_STATUS_DELETED)
     {
         return -1;
@@ -123,8 +147,13 @@ ssize_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
         block_num++;
         block_offset = 0;
 
-        while ((block_num > this->file_blocks.size() - 1 && !this->complete) ||
-               (block_num < this->file_blocks.size() && this->file_blocks[block_num]->status == BLOCK_STATUS_NOT_EXISTS))
+        // Reached the end of the slot array: no more data.
+        if (block_num >= (int)this->num_blocks)
+            break;
+
+        // Wait for the next block to be published, unless the writer is done.
+        while (this->file_blocks[block_num].load(std::memory_order_acquire) == nullptr &&
+               !this->complete)
         {
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
@@ -132,28 +161,27 @@ ssize_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
             sem_timedwait(&this->block_ready, &ts);
         }
 
-        // If complete and block_num is past the end, no more data
-        if (block_num >= this->file_blocks.size())
+        block = this->file_blocks[block_num].load(std::memory_order_acquire);
+        if (block == nullptr)
             break;
-
-        block = this->file_blocks[block_num];
     }
 
     // delete blocks before the first read offset block. Assumuption, that reads are always
     // forward and won't read previously already read blocks. For safety, keeping only current block and 2 previous blocks
-    for (int j=0; j < first_block_num - 13; j++)
+    for (int j = 0; j < first_block_num - 13; j++)
     {
-        if (this->file_blocks[j] != nullptr && this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
+        FileBlock *old = this->file_blocks[j].load(std::memory_order_acquire);
+        if (old != nullptr && old->status == BLOCK_STATUS_CREATED)
         {
-            if (this->file_blocks[j]->fd != nullptr)
+            if (old->fd != nullptr)
             {
-                fclose(this->file_blocks[j]->fd);
-                this->file_blocks[j]->fd = nullptr;
+                fclose(old->fd);
+                old->fd = nullptr;
             }
-            this->file_blocks[j]->status = BLOCK_STATUS_DELETED;
-            remove(this->file_blocks[j]->block_file.c_str());
-            delete (this->file_blocks[j]);
-            this->file_blocks[j] = nullptr;
+            old->status = BLOCK_STATUS_DELETED;
+            remove(old->block_file.c_str());
+            delete old;
+            this->file_blocks[j].store(nullptr, std::memory_order_release);
         }
     }
 
@@ -198,7 +226,15 @@ ssize_t SplitFile::Write(char *buf, size_t buf_size)
             fclose(block_in_progress->fd);
             block_in_progress->fd = nullptr;
             block_in_progress->status = BLOCK_STATUS_CREATED;
-            this->file_blocks.push_back(block_in_progress);
+
+            // Publish the finished block into its slot (release), then advance.
+            // Guard against an index overrun if the written size exceeds the
+            // file_size the array was sized for.
+            if (this->block_index < this->num_blocks)
+            {
+                this->file_blocks[this->block_index].store(block_in_progress, std::memory_order_release);
+                this->block_index++;
+            }
 
             sem_post(&this->block_ready);
 
@@ -212,27 +248,30 @@ ssize_t SplitFile::Write(char *buf, size_t buf_size)
 
 int SplitFile::Close()
 {
+    bool expected = false;
+    // Publish completion exactly once. If already complete, nothing to do.
+    if (!this->complete.compare_exchange_strong(expected, true))
+        return 0;
+
+    if (block_in_progress->fd != nullptr)
     {
-        std::unique_lock<std::shared_mutex> lock(mutex_);
-        if (this->complete)
-            return 0;
+        fflush(block_in_progress->fd);
+        fclose(block_in_progress->fd);
+        block_in_progress->fd = nullptr;
+    }
+    block_in_progress->status = BLOCK_STATUS_CREATED;
+    block_in_progress->is_last = true;
 
-        this->complete = true;
-
-        if (block_in_progress->fd != nullptr)
-        {
-            fflush(block_in_progress->fd);
-            fclose(block_in_progress->fd);
-            block_in_progress->fd = nullptr;
-        }
-        block_in_progress->status = BLOCK_STATUS_CREATED;
-        block_in_progress->is_last = true;
-        this->file_blocks.push_back(block_in_progress);
-        sem_post(&this->block_ready);
-    } // lock released here — readers can proceed while we wait
+    // Publish the final (possibly partial) block into its slot.
+    if (this->block_index < this->num_blocks)
+    {
+        this->file_blocks[this->block_index].store(block_in_progress, std::memory_order_release);
+        this->block_index++;
+    }
+    sem_post(&this->block_ready);
 
     // Wait until file is fully read, if file isn't full read
-    // in 5 mins then go ahead and delete all file chunks
+    // in time then go ahead and delete all file chunks
     int retries = 10;
     size_t prev_read_offset = 0;
     while (this->read_offset != this->write_offset && retries > 0)
@@ -244,11 +283,12 @@ int SplitFile::Close()
     }
     sleep(5);
 
-    for (size_t j = 0; j < this->file_blocks.size(); j++)
+    for (size_t j = 0; j < this->num_blocks; j++)
     {
-        if (this->file_blocks[j] != nullptr && this->file_blocks[j]->status == BLOCK_STATUS_CREATED)
+        FileBlock *block = this->file_blocks[j].load(std::memory_order_acquire);
+        if (block != nullptr && block->status == BLOCK_STATUS_CREATED)
         {
-            remove(this->file_blocks[j]->block_file.c_str());
+            remove(block->block_file.c_str());
         }
     }
     return 0;
@@ -265,7 +305,7 @@ FileBlock *SplitFile::NewBlock()
 
     block->is_last = false;
     block->size = 0;
-    block->block_file = this->path + "." + std::to_string(this->file_blocks.size());
+    block->block_file = this->path + "." + std::to_string(this->block_index);
     block->fd = fopen(block->block_file.c_str(), "w");
 
     return block;

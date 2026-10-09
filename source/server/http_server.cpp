@@ -1241,12 +1241,12 @@ namespace HttpServer
                     memset(install_data, 0, sizeof(SplitPkgInstallData));
 
                     std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
-                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
+                    baseclient->Size(path, &install_data->size);
+                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2, install_data->size);
 
                     install_data->split_file = sp;
                     install_data->remote_client = baseclient;
                     install_data->path = path;
-                    baseclient->Size(path, &install_data->size);
                     install_data->stop_write_thread = false;
                     install_data->delete_client = true;
 
@@ -1273,7 +1273,7 @@ namespace HttpServer
                     memset(install_data, 0, sizeof(ArchivePkgInstallData));
 
                     std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
+                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE, entry->filesize);
                     
                     install_data->archive_entry = entry;
                     install_data->split_file = sp;

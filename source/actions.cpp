@@ -750,7 +750,7 @@ namespace Actions
 
                                     uint64_t tick = Util::GetTick();
                                     std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(tick) + ".pkg";
-                                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
+                                    SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2, INSTALL_ARCHIVE_PKG_MAX_WRITE_AHEAD);
 
                                     install_data->split_file = sp;
                                     install_data->remote_client = INSTALLER::GetRemoteClient(remote_settings);
@@ -800,7 +800,7 @@ namespace Actions
                             memset(install_data, 0, sizeof(ArchivePkgInstallData));
 
                             std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
+                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE, INSTALL_ARCHIVE_PKG_MAX_WRITE_AHEAD);
                             
                             install_data->archive_entry = entry;
                             install_data->split_file = sp;
@@ -962,7 +962,7 @@ namespace Actions
                             memset(install_data, 0, sizeof(ArchivePkgInstallData));
 
                             std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
+                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE, INSTALL_ARCHIVE_PKG_MAX_WRITE_AHEAD);
                             
                             install_data->archive_entry = entry;
                             install_data->split_file = sp;

@@ -54,6 +54,8 @@
 
 #define INSTALL_ARCHIVE_PKG_SPLIT_SIZE 10485760
 
+#define INSTALL_ARCHIVE_PKG_MAX_WRITE_AHEAD (64 * 1024 * 1024)
+
 typedef struct
 {
     uint32_t pkg_magic;                 // 0x000 - 0x7F434E54

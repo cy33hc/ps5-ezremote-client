@@ -1,16 +1,18 @@
 #include <stdio.h>
 #include <stdio.h>
 #include "unistd.h"
+#include <time.h>
 #include <string>
 
 #include "common.h"
 #include "split_file.h"
 
-SplitFile::SplitFile(const std::string &path, size_t block_size)
+SplitFile::SplitFile(const std::string &path, size_t block_size, size_t max_write_ahead)
 {
     this->block_size = block_size;
     this->path = path;
     this->complete = false;
+    this->max_write_ahead = max_write_ahead;
     sem_init(&this->block_ready, 0, 0);
 }
 
@@ -176,6 +178,16 @@ ssize_t SplitFile::Write(char *buf, size_t buf_size)
 
     while (remaining_to_write > 0 && !this->complete)
     {
+        size_t pending_write_offset = this->write_offset + total_bytes_written;
+        if (pending_write_offset > this->read_offset &&
+            pending_write_offset - this->read_offset > this->max_write_ahead)
+        {
+            struct timespec nap;
+            nap.tv_sec = 0;
+            nap.tv_nsec = 10 * 1000 * 1000;
+            nanosleep(&nap, NULL);
+        }
+
         block_space_remaining = this->block_size - block_in_progress->size;
         bytes_to_write = MIN(remaining_to_write, block_space_remaining);
 

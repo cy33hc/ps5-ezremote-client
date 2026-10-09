@@ -27,7 +27,7 @@ typedef struct
 class SplitFile
 {
 public:
-    SplitFile(const std::string& path, size_t block_size);
+    SplitFile(const std::string& path, size_t block_size, size_t max_write_ahead);
     ~SplitFile();
     ssize_t Read(char* buf, size_t buf_size, size_t offset);
     ssize_t Write(char* buf, size_t buf_size);
@@ -46,6 +46,8 @@ private:
     FileBlock *block_in_progress;
     sem_t block_ready;
     std::shared_mutex mutex_;
+
+    size_t max_write_ahead;
 
     FileBlock *NewBlock();
 };

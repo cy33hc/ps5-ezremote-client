@@ -818,7 +818,7 @@ namespace Actions
                             memset(install_data, 0, sizeof(ArchivePkgInstallData));
 
                             std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
-                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE, INSTALL_ARCHIVE_PKG_WRITE_THROTTLE_DISTANCE);
+                            SplitFile *sp = new SplitFile(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2, INSTALL_ARCHIVE_PKG_WRITE_THROTTLE_DISTANCE);
                             
                             install_data->archive_entry = entry;
                             install_data->split_file = sp;

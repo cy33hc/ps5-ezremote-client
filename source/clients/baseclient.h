@@ -41,6 +41,7 @@ public:
     int Quit();
     ClientType clientType();
     uint32_t SupportedActions();
+    void SetClientPathEncoding(bool enabled);
     static std::string Escape(const std::string &url);
     static std::string UnEscape(const std::string &url);
     static int DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
@@ -52,11 +53,14 @@ public:
     static size_t WriteBufferCallback(void *pCurlData, size_t usBlockCount, size_t usBlockSize, void *pUserData);
 
 protected:
-    CHTTPClient *client;
+    std::string BuildUrl(const std::string &path);
+
+    CHTTPClient *client = nullptr;
     std::string base_path;
     std::string host_url;
     char response[512];
     bool connected = false;
+    bool encode_path = true;
 };
 
 #endif

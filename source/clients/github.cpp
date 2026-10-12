@@ -46,14 +46,16 @@ int GithubClient::Connect(const std::string &url, const std::string &username, c
     this->base_path = "/repos" + url.substr(18);
     Util::Rtrim(this->base_path, "/");
     this->base_path += "/releases";
-    this->m_download_url = "https://github.com";
-
+    this->m_download_url = "https://release-assets.githubusercontent.com";
 
     client = new CHTTPClient([](const std::string& log){});
     client->SetBasicAuth(username, password);
     client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
     client->SetCertificateFile(CACERT_FILE);
     client->SetBufferSize(524288L);
+
+    m_client.Connect(this->m_download_url, "", "");
+    m_client.SetClientPathEncoding(false);
 
     if (!send_ping)
         this->connected = true;
@@ -150,26 +152,7 @@ int GithubClient::Head(const std::string &path, void *buffer, uint64_t size)
         return 0;
     }
 
-    CHTTPClient::HttpResponse res;
-    CHTTPClient::HeadersMap headers;
-
-    char range_header[128];
-    sprintf(range_header, "bytes=%lu-%lu", 0L, size - 1);
-    headers["Range"] = range_header;
-
-    std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
-    client->SetProgressFnCallback(nullptr, NothingCallback);
-    if (client->Get(encoded_url, headers, res))
-    {
-        uint64_t len = MIN(size, res.strBody.size());
-        memcpy(buffer, res.strBody.data(), len);
-        return 1;
-    }
-    else
-    {
-        sprintf(this->response, "%s", res.errMessage.c_str());
-    }
-    return 0;
+    return m_client.Head(GetRedirectUrl(path), buffer, size);
 }
 
 int GithubClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
@@ -184,28 +167,8 @@ int GithubClient::Get(const std::string &outputfile, const std::string &path, ui
         return 0;
     }
 
-    long status;
-    bytes_transfered = 0;
-    prev_tick = Util::GetTick();
-    CHTTPClient::HeadersMap headers;
-
-    if (!Size(path, &bytes_to_download))
-    {
-        sprintf(this->response, "%s", lang_strings[STR_FAIL_DOWNLOAD_MSG]);
-        return 0;
-    }
-
-    client->SetProgressFnCallback(&bytes_transfered, DownloadProgressCallback);
-    std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
-    if (client->DownloadFile(outputfile, encoded_url, status))
-    {
-        return 1;
-    }
-    else
-    {
-        sprintf(this->response, "%ld - %s", status, lang_strings[STR_FAIL_DOWNLOAD_MSG]);
-    }
-    return 0;
+    std::string url = GetRedirectUrl(path);
+    return m_client.Get(outputfile, url, offset);
 }
 
 int GithubClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
@@ -220,22 +183,7 @@ int GithubClient::Get(SplitFile *split_file, const std::string &path, uint64_t o
         return 0;
     }
 
-    long status;
-    CHTTPClient::HeadersMap headers;
-
-    prev_tick = Util::GetTick();
-    std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
-    client->SetProgressFnCallback(nullptr, NothingCallback);
-    if (client->DownloadFile((void*)split_file, encoded_url, (void*)WriteToSplitFileCallback, status))
-    {
-        return 1;
-    }
-    else
-    {
-        sprintf(this->response, "%ld - %s", status, lang_strings[STR_FAIL_DOWNLOAD_MSG]);
-    }
-
-    return 0;
+    return m_client.Get(split_file, GetRedirectUrl(path), offset);
 }
 
 
@@ -251,26 +199,7 @@ int GithubClient::GetRange(const std::string &path, void *buffer, uint64_t size,
         return 0;
     }
 
-    CHTTPClient::HttpResponse res;
-    CHTTPClient::HeadersMap headers;
-
-    char range_header[128];
-    sprintf(range_header, "bytes=%lu-%lu", offset, offset + size - 1);
-    headers["Range"] = range_header;
-
-    std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
-    client->SetProgressFnCallback(nullptr, NothingCallback);
-    if (client->Get(encoded_url, headers, res))
-    {
-        uint64_t len = MIN(size, res.strBody.size());
-        memcpy(buffer, res.strBody.data(), len);
-        return 1;
-    }
-    else
-    {
-        sprintf(this->response, "%s", res.errMessage.c_str());
-    }
-    return 0;
+    return m_client.GetRange(GetRedirectUrl(path), buffer, size, offset);
 }
 
 int GithubClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)
@@ -285,27 +214,7 @@ int GithubClient::GetRange(const std::string &path, DataSink &sink, uint64_t siz
         return 0;
     }
 
-    CHTTPClient::HttpResponse res;
-    CHTTPClient::HeadersMap headers;
-
-    char range_header[128];
-    sprintf(range_header, "bytes=%lu-%lu", offset, offset + size - 1);
-    headers["Range"] = range_header;
-
-    std::string encoded_url = this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
-    client->SetProgressFnCallback(nullptr, NothingCallback);
-    if (client->Get(encoded_url, headers, res))
-    {
-        uint64_t len = MIN(size, res.strBody.size());
-        sink.write(res.strBody.data(), len);
-        return 1;
-    }
-    else
-    {
-        sprintf(this->response, "%s", res.errMessage.c_str());
-    }
-    
-    return 0;
+    return m_client.GetRange(GetRedirectUrl(path), sink, size, offset);
 }
 
 bool GithubClient::ParseReleases()
@@ -377,7 +286,7 @@ bool GithubClient::ParseReleases()
     return 1;
 }
 
-std::string GithubClient::GetDownloadUrl(const std::string &path)
+std::string GithubClient::GetRedirectUrl(const std::string &path)
 {
     if (!ParseReleases())
         return "";
@@ -389,5 +298,27 @@ std::string GithubClient::GetDownloadUrl(const std::string &path)
         return "";
     }
 
-    return this->m_download_url + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
+    std::string asset_url = "https://github.com" + CHTTPClient::EncodeUrl(m_assets[path_parts[0]][path_parts[1]].url);
+
+    CHTTPClient tmp_client([](const std::string& log){});
+    tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+    tmp_client.SetCertificateFile(CACERT_FILE);
+    tmp_client.SetTimeout(30);
+
+    CHTTPClient::HttpResponse res;
+    CHTTPClient::HeadersMap headers;
+
+    std::string redirect_url = "";
+    if (tmp_client.Head(asset_url, headers, res))
+    {
+        CHTTPClient::HeadersMap::iterator location = res.mapHeadersLowercase.find("location");
+        if (location != res.mapHeadersLowercase.end())
+        {
+            redirect_url = location->second;
+            size_t slash_pos = redirect_url.find('/', 8);
+            redirect_url = (slash_pos != std::string::npos) ? redirect_url.substr(slash_pos) : "";
+        }
+    }
+
+    return redirect_url;
 }

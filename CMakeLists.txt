@@ -135,14 +135,8 @@ add_custom_target(package
    COMMAND zip -r ezremote-client.zip ${APPDIR}/
 )
 
-# Upload the packaged payload to the PS5 FTP server, recreating the directory
-# tree (assets/, sce_sys/, ...) with --ftp-create-dirs.
-#
-# Each shell token has to be a separate CMake argument: CMake escapes the spaces
-# *inside* an argument, so wrapping the whole snippet in sh -c "..." glues the
-# shell keywords together and breaks the loop. The semicolons are escaped as \;
-# so CMake does not treat them as list separators.
 add_custom_target(upload
    DEPENDS package
-   COMMAND cd ${APPDIR} && find . -type f | sed 's|^\\./||' | while read -r f \; do curl -sS --fail --ftp-create-dirs -T \"\$f\" \"ftp://192.168.100.116:2121/data/homebrew/ezremote-client/\$f\" || exit 1 \; done
+   COMMAND /bin/bash ${CMAKE_CURRENT_SOURCE_DIR}/upload.sh ${APPDIR}
+   VERBATIM
 )

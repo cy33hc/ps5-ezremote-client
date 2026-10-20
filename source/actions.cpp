@@ -795,7 +795,7 @@ namespace Actions
 
                                     if (it != files.end())
                                     {
-                                        sleep(5);
+                                        sleep(1);
                                     }
                                 }
                             }

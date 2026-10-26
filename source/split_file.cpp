@@ -391,7 +391,7 @@ FileBlock *SplitFile::NewBlock()
     block->is_last = false;
     block->size = 0;
     block->block_file = this->path + "." + std::to_string(this->file_blocks.size());
-    block->fd = fopen(block->block_file.c_str(), "w");
+    block->fd = fopen(block->block_file.c_str(), "wb");
 
     return block;
 }

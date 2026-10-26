@@ -171,7 +171,7 @@ int GithubClient::Get(const std::string &outputfile, const std::string &path, ui
     return m_client.Get(outputfile, url, offset);
 }
 
-int GithubClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
+int GithubClient::Get(FileStream *split_file, const std::string &path, uint64_t offset)
 {
     if (!ParseReleases())
         return 0;

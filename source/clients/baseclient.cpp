@@ -58,7 +58,7 @@ size_t BaseClient::WriteToSplitFileCallback(void *buff, size_t size, size_t nmem
     if ((size == 0) || (nmemb == 0) || ((size * nmemb) < 1) || (data == nullptr))
         return 0;
 
-    SplitFile *split_file = reinterpret_cast<SplitFile *>(data);
+    FileStream *split_file = reinterpret_cast<FileStream *>(data);
     if (!split_file->IsClosed())
     {
         if (split_file->Write(reinterpret_cast<char *>(buff), size * nmemb) < 0)
@@ -205,7 +205,7 @@ int BaseClient::Get(const std::string &outputfile, const std::string &path, uint
     return 0;
 }
 
-int BaseClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
+int BaseClient::Get(FileStream *split_file, const std::string &path, uint64_t offset)
 {
     long status;
     CHTTPClient::HeadersMap headers;

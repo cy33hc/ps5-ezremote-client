@@ -886,7 +886,7 @@ int FtpClient::FtpXfer(const std::string &localfile, const std::string &path, ft
  *
  * return 1 if successful, 0 otherwise
  */
-int FtpClient::FtpXfer(SplitFile *split_file, const std::string &path, ftphandle *nControl, accesstype type, transfermode mode)
+int FtpClient::FtpXfer(FileStream *split_file, const std::string &path, ftphandle *nControl, accesstype type, transfermode mode)
 {
 	int l, c;
 	char *dbuf;
@@ -1311,7 +1311,7 @@ int FtpClient::Get(const std::string &outputfile, const std::string &path, uint6
 		return FtpXfer(outputfile, path, mp_ftphandle, FtpClient::filereadappend, FtpClient::transfermode::image);
 }
 
-int FtpClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
+int FtpClient::Get(FileStream *split_file, const std::string &path, uint64_t offset)
 {
 	mp_ftphandle->offset = offset;
 	if (offset == 0)

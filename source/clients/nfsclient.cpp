@@ -234,7 +234,7 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 	return 1;
 }
 
-int NfsClient::Get(SplitFile *split_file, const std::string &ppath, uint64_t offset)
+int NfsClient::Get(FileStream *split_file, const std::string &ppath, uint64_t offset)
 {
 	struct nfsfh *nfsfh = nullptr;
 	int ret = nfs_open(nfs, ppath.c_str(), 0400, &nfsfh);

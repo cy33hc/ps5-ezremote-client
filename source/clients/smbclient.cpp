@@ -251,7 +251,7 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 	return 1;
 }
 
-int SmbClient::Get(SplitFile *split_file, const std::string &ppath, uint64_t offset)
+int SmbClient::Get(FileStream *split_file, const std::string &ppath, uint64_t offset)
 {
 	std::string path = std::string(ppath);
 	path = Util::Trim(path, "/");

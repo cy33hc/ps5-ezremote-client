@@ -62,6 +62,8 @@ add_executable(ezremote_client.elf
   source/windows.cpp
   source/zip_util.cpp
   source/split_file.cpp
+  source/mem_file.cpp
+  source/file_stream.cpp
 )
 
 target_compile_definitions(ezremote_client.elf PRIVATE CPPHTTPLIB_THREAD_POOL_COUNT=64)

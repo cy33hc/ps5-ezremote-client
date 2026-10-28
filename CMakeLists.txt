@@ -7,6 +7,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -fpermissive")
 
 add_subdirectory(ps5-ezremote-dpi)
 add_subdirectory(ps5-ezremote-server)
+add_subdirectory(ps5-ezremote-loader)
 
 include_directories(
   source
@@ -121,12 +122,14 @@ add_custom_target(package
    DEPENDS ezremote-dpi.elf
    DEPENDS ezremote_client.elf
    DEPENDS ezremote-server.elf
+   DEPENDS ezremote-loader.elf
    COMMAND rm -rf ${APPDIR}
    COMMAND rm -f ezremote-client.zip
    COMMAND mkdir -p ${APPDIR}
    COMMAND ${PS5_PAYLOAD_SDK}/bin/prospero-strip ezremote_client.elf
    COMMAND ${PS5_PAYLOAD_SDK}/bin/prospero-strip ps5-ezremote-dpi/ezremote-dpi.elf
    COMMAND ${PS5_PAYLOAD_SDK}/bin/prospero-strip ps5-ezremote-server/ezremote-server.elf
+   COMMAND ${PS5_PAYLOAD_SDK}/bin/prospero-strip ps5-ezremote-loader/*.elf
    COMMAND cp ezremote_client.elf ${APPDIR}
    COMMAND cp ps5-ezremote-dpi/ezremote-dpi.elf ${APPDIR}
    COMMAND cp ps5-ezremote-server/ezremote-server.elf ${APPDIR}
@@ -135,6 +138,9 @@ add_custom_target(package
    COMMAND sed -i "s/ezRemote Client/ezRemote Client v${APP_VERSION}/g"  ${APPDIR}/homebrew.js
 
    COMMAND zip -r ezremote-client.zip ${APPDIR}/
+   COMMAND cp ${PROJECT_SOURCE_DIR}/Ps5_ezRemote_Client_2.00.pkg .
+   COMMAND cp ps5-ezremote-loader/*.elf .
+   COMMAND echo -n "${APP_VERSION}" > ./version.txt
 )
 
 add_custom_target(upload

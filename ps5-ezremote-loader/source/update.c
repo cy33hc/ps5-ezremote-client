@@ -627,7 +627,7 @@ static int extract_zip(const char *zip_path, const char *dest_root)
     done++;
     if(global.number_entry && done % 25 == 0)
     {
-      Notify("Extracting %zu/%lu", done, (unsigned long)global.number_entry);
+      Notify("Extracted %zu/%lu files", done, (unsigned long)global.number_entry);
     }
   } while(unzGoToNextFile(zip) == UNZ_OK);
 

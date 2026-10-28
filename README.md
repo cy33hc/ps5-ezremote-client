@@ -2,6 +2,8 @@
 
 ezRemote Client is an application that allows you to connect the PS5 to remote FTP/SFTP, SMB(Windows Share), NFS, WebDAV, HTTP servers to transfer files. The interface is inspired by Filezilla client which provides a commander like GUI.
 
+**NEW: As of version 2.16. There is new payload called ezRemote-Loader.elf. Add this to Payload Manager to auto install/update and launch ezRemote Client.**
+
 **NEW: As of version 2.12. You can install PS5 fpkgs.**
 
 **NEW: As of version 2.02, You can download large file in the background.**

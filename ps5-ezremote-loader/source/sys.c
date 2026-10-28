@@ -16,6 +16,7 @@ along with this program; see the file COPYING. If not, see
 
 #include <fcntl.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,36 @@ along with this program; see the file COPYING. If not, see
 
 int  sceUserServiceInitialize(void*);
 void sceUserServiceTerminate(void);
+
+
+void
+Notify(const char *fmt, ...) {
+  notify_request_t req;
+  va_list args;
+
+  memset(&req, 0, sizeof req);
+  va_start(args, fmt);
+  vsnprintf(req.message, sizeof req.message, fmt, args);
+  va_end(args);
+
+  sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
+}
+
+/**
+ * Write a diagnostic line to the payload log. Not shown to the user; use Notify
+ * for progress the user should see.
+ **/
+void log_msg(const char *fmt, ...)
+{
+  va_list ap;
+
+  fprintf(stderr, "[ezremote-loader] ");
+  va_start(ap, fmt);
+  vfprintf(stderr, fmt, ap);
+  va_end(ap);
+  fprintf(stderr, "\n");
+}
+
 
 
 /**
@@ -168,7 +199,7 @@ sys_launch_homebrew(const char* cwd, const char* path, const char* args,
     env = "";
   }
 
-  printf("launch homebrew: CWD=%s %s %s %s\n", cwd, env, path, args);
+  Notify("Launching ezRemote Client");
 
   // Detach the homebrew's stdout/stderr from the launcher. The launcher
   // exits right after the hijack, so a pipe or socket would give the

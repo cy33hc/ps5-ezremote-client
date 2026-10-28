@@ -27,6 +27,7 @@ along with this program; see the file COPYING. If not, see
 #include <curl/curl.h>
 #include <minizip/unzip.h>
 
+#include "sys.h"
 #include "update.h"
 
 /* libnet, needed before any socket (and thus libcurl) use. */
@@ -50,19 +51,6 @@ int sceNetPoolCreate(const char *name, int size, int flags);
 
 #define ZIP_TIMEOUT     900L  /* seconds, the archive is ~66 MiB */
 #define VERSION_TIMEOUT  30L
-
-
-static void log_msg(const char *fmt, ...)
-{
-  va_list ap;
-
-  fprintf(stderr, "[ezremote-loader] ");
-  va_start(ap, fmt);
-  vfprintf(stderr, fmt, ap);
-  va_end(ap);
-  fprintf(stderr, "\n");
-}
-
 
 static int is_dir(const char *path)
 {
@@ -409,7 +397,7 @@ static int http_download(const char *url, const char *dest)
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, file_write_cb);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
-  log_msg("downloading %s", url);
+  Notify("Downloading ezRemote Client");
   rc = curl_easy_perform(curl);
   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
   curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &size);
@@ -425,15 +413,15 @@ static int http_download(const char *url, const char *dest)
   {
     if(rc != CURLE_OK)
     {
-      log_msg("download failed: %s", curl_easy_strerror(rc));
+      log_msg("Download ezRemote Client failed: %s", curl_easy_strerror(rc));
     }
     else if(code != 200)
     {
-      log_msg("download failed: HTTP %ld", code);
+      log_msg("Download ezRemote Client failed: HTTP %ld", code);
     }
     else
     {
-      log_msg("download failed: cannot write %s: %s", dest, strerror(errno));
+      log_msg("Download ezRemote Client failed: cannot write %s: %s", dest, strerror(errno));
     }
     unlink(dest);
     return -1;
@@ -637,14 +625,14 @@ static int extract_zip(const char *zip_path, const char *dest_root)
     }
 
     done++;
-    if(global.number_entry && done % 16 == 0)
+    if(global.number_entry && done % 25 == 0)
     {
-      log_msg("extracting %zu/%lu", done, (unsigned long)global.number_entry);
+      Notify("Extracting %zu/%lu", done, (unsigned long)global.number_entry);
     }
   } while(unzGoToNextFile(zip) == UNZ_OK);
 
   rc = 0;
-  log_msg("extracted %zu entries", done);
+  log_msg("Complete extracing", done);
 
 out:
   unzClose(zip);
@@ -678,7 +666,7 @@ static int download_and_extract(const char *root_dir, const char *version_path,
     return -1;
   }
 
-  log_msg("extracting to %s", root_dir);
+  Notify("Extracting ezRemote Client to %s", root_dir);
   if(extract_zip(zip_path, root_dir) != 0)
   {
     unlink(zip_path);
@@ -690,10 +678,10 @@ static int download_and_extract(const char *root_dir, const char *version_path,
      we just installed ourselves. */
   if(write_local_version(version_path, version) != 0)
   {
-    log_msg("installed %s but could not record its version", version);
+    Notify("Installed ezRemote Client %s but could not record its version", version);
   }
 
-  log_msg("installed version %s", version);
+  Notify("Installed ezRemote Client version %s", version);
   return 0;
 }
 
@@ -744,9 +732,9 @@ int update_prepare(const char *root_dir, const char *home_dir)
 
   if(http_get_text(RELEASE_VERSION_URL, remote, sizeof(remote)) != 0)
   {
-    log_msg("cannot determine the latest version; %s",
-            installed ? "launching the installed version"
-                      : "the homebrew is not installed");
+    Notify("Cannot determine the latest version;\n %s",
+            installed ? "Launching the installed version"
+                      : "The homebrew is not installed");
     curl_global_cleanup();
     return installed ? 0 : -1;
   }
@@ -760,7 +748,7 @@ int update_prepare(const char *root_dir, const char *home_dir)
     return 0;
   }
 
-  log_msg("%s version %s", installed ? "updating to" : "installing", remote);
+  Notify("%s version %s", installed ? "Updating ezRemote Client to" : "Installing ezRemote Client", remote);
   rc = download_and_extract(root_dir, version_path, remote);
   curl_global_cleanup();
 
@@ -768,7 +756,7 @@ int update_prepare(const char *root_dir, const char *home_dir)
   {
     if(installed)
     {
-      log_msg("update failed, launching the installed version");
+      Notify("Update failed, launching the installed version");
       return 0;
     }
     return -1;

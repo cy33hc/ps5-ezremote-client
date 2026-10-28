@@ -16,6 +16,24 @@ along with this program; see the file COPYING. If not, see
 
 #pragma once
 
+#include <stddef.h>
+
+
+typedef struct notify_request
+{
+  char useless1[45];
+  char message[3075];
+} notify_request_t;
+
+int sceKernelSendNotificationRequest(int, notify_request_t *, size_t, int);
+
+/**
+ * Post a system notification. The loader runs as a payload, so progress is
+ * reported this way rather than on stdout, which the user never sees.
+ **/
+void Notify(const char *fmt, ...);
+
+void log_msg(const char *fmt, ...);
 
 /**
  * Launch a homebrew ELF as a bigapp. The homebrew's stdout/stderr are

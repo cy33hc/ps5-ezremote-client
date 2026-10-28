@@ -42,14 +42,14 @@ int main(int argc, char** argv)
   // version differs from the one recorded in version.txt.
   if(update_prepare(HOMEBREW_ROOT, HOMEBREW_CWD) < 0)
   {
-    fprintf(stderr, "failed to install %s\n", HOMEBREW_CWD);
+    Notify("Failed to install ezRemote Client");
     return EXIT_FAILURE;
   }
 
   if(sys_launch_homebrew(HOMEBREW_CWD, HOMEBREW_PATH,
                          HOMEBREW_ARGS, HOMEBREW_ENV) < 0)
   {
-    fprintf(stderr, "failed to launch %s\n", HOMEBREW_PATH);
+    Notify("Failed to launch ezRemote Client");
     return EXIT_FAILURE;
   }
 

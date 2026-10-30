@@ -136,6 +136,7 @@ add_custom_target(package
    COMMAND cp ps5-ezremote-loader/ezRemote-Loader-*.elf ${APPDIR}/ezremote-loader.elf
    COMMAND cp ${PS5_PAYLOAD_SDK}/target/user/homebrew/lib/libOSMesa.so.8.0.0 ${APPDIR}/libOSMesa.so.8
    COMMAND cp -R ${PROJECT_SOURCE_DIR}/data/* ${APPDIR}
+   COMMAND echo -n "${APP_VERSION}" > ${APPDIR}/version.txt
    COMMAND sed -i "s/ezRemote Client/ezRemote Client v${APP_VERSION}/g"  ${APPDIR}/homebrew.js
 
    COMMAND zip -r ezremote-client.zip ${APPDIR}/

@@ -11,19 +11,27 @@
     ]
   },
   "ageLevel": {
-    "US": 0,
-    "default": 0
+    "EN": 17,
+    "default": 18
   },
   "applicationCategoryType": 0,
   "applicationDrmType": "free",
   "attribute": 0,
   "attribute2": 0,
-  "attribute3": 0,
+  "attribute3": 4,
   "conceptId": "0",
-  "contentBadgeType": 2,
-  "contentId": "IV9999-RMTC00001_00-XXXXXXXXXXXXXXXX",
-  "contentVersion": "02.000.000",
-  "deeplinkUri": "http://127.0.0.1:8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/ezremote-client/ezremote_client.elf&env=LD_LIBRARY_PATH=/data/homebrew/ezremote-client",
+  "contentBadgeType": 1,
+  "contentId": "IV9999-EZRC00001_00-EZREMOTECLIENT01",
+  "contentVersion": "00.300.100",
+  "deeplinkUri": "http://127.0.0.1:8080/elfldr?pipe=1&daemon=1&elf=/data/homebrew/ezremote-client/ezremote-loader.elf",
+  "downloadDataSize": 0,
+  "gameIntent": {
+    "permittedIntents": [
+      {
+        "intentType": "launchActivity"
+      }
+    ]
+  },
   "localizedParameters": {
     "defaultLanguage": "en-US",
     "en-US": {
@@ -31,12 +39,14 @@
     }
   },
   "masterVersion": "01.00",
+  "originContentVersion": "00.300.000",
   "pubtools": {
-    "creationDate": "2023-12-23 15:04:39",
+    "creationDate": "2024-07-17 19:03:24",
     "toolVersion": "1.21"
   },
   "requiredSystemSoftwareVersion": "0x0000000000000000",
   "sdkVersion": "0x0000000000000000",
-  "titleId": "RMTC00001",
-  "versionFileUri": "                                                                                                                                                                                                                                                               "
+  "titleId": "EZRC00001",
+  "userDefinedParam1": 1,
+  "versionFileUri": "https://sgst.prod.dl.playstation.net/                                                                                                                                                                                                                          "
 }

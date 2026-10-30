@@ -52,7 +52,7 @@ endif()
 
 project(ezremote-loader.elf C)
 
-set(APP_VERSION "1.00")
+set(APP_VERSION "1.01")
 
 add_executable(ezremote-loader.elf
   source/main.c

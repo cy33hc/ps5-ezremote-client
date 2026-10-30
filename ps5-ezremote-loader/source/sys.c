@@ -32,10 +32,18 @@ along with this program; see the file COPYING. If not, see
 #include "hbldr.h"
 #include "sys.h"
 
+/* ShellUI / UserService externs */
+typedef struct {
+    unsigned int size;
+    uint32_t userId;
+} SceShellUIUtilLaunchByUriParam;
 
 int  sceUserServiceInitialize(void*);
 void sceUserServiceTerminate(void);
-
+int sceKernelLoadStartModule(const char *path, size_t args, const void *argp,
+                                    uint32_t flags, const void *pOpt, int *pRes);
+int sceUserServiceGetForegroundUser(int *userId);
+int sceUserServiceGetInitialUser(int *userId);
 
 void
 Notify(const char *fmt, ...) {
@@ -48,6 +56,64 @@ Notify(const char *fmt, ...) {
   va_end(args);
 
   sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
+}
+
+/**
+ * Navigate to PS5 Home Screen via libSceShellUIUtil.sprx URI launch.
+ * Uses: pshomeui:navigateToHome?bootCondition=psButton
+ * Based on the Return-to-Home mechanism by LightningMods / etaHEN.
+ */
+static int return_to_home_by_uri(void) {
+    int (*p_sceShellUIUtilInitialize)(void) = NULL;
+    int (*p_sceShellUIUtilLaunchByUri)(const char *uri, SceShellUIUtilLaunchByUriParam *param) = NULL;
+
+    /* Initialize User Service so user queries succeed */
+    int user_prio = 256;
+    int u_init = sceUserServiceInitialize(&user_prio);
+    printf("[autoloader] sceUserServiceInitialize returned: 0x%08x (%d)\n", u_init, u_init);
+
+    int mod = sceKernelLoadStartModule("/system_ex/common_ex/lib/libSceShellUIUtil.sprx", 0, 0, 0, 0, 0);
+    if (mod < 0) {
+        printf("[autoloader] return_to_home_by_uri: sceKernelLoadStartModule failed: 0x%08x (%d)\n", mod, mod);
+        fflush(stdout);
+        return -1;
+    }
+
+    /* Resolve symbols directly via kernel_dynlib_dlsym as in etaHEN */
+    p_sceShellUIUtilInitialize = (void *)kernel_dynlib_dlsym(-1, (uint32_t)mod, "sceShellUIUtilInitialize");
+    p_sceShellUIUtilLaunchByUri = (void *)kernel_dynlib_dlsym(-1, (uint32_t)mod, "sceShellUIUtilLaunchByUri");
+
+    if (!p_sceShellUIUtilInitialize || !p_sceShellUIUtilLaunchByUri) {
+        printf("[autoloader] return_to_home_by_uri: failed to resolve libSceShellUIUtil symbols\n");
+        fflush(stdout);
+        return -1;
+    }
+
+    SceShellUIUtilLaunchByUriParam param;
+    memset(&param, 0, sizeof(param));
+    param.size = sizeof(SceShellUIUtilLaunchByUriParam);
+
+    int ui_init = p_sceShellUIUtilInitialize();
+    printf("[autoloader] sceShellUIUtilInitialize returned: 0x%08x (%d)\n", ui_init, ui_init);
+
+    int u_fg = sceUserServiceGetForegroundUser((int *)&param.userId);
+    printf("[autoloader] sceUserServiceGetForegroundUser returned: 0x%08x (%d), userId=0x%08x\n",
+           u_fg, u_fg, param.userId);
+
+    if (param.userId == 0 || param.userId == (uint32_t)-1) {
+        int u_init_u = sceUserServiceGetInitialUser((int *)&param.userId);
+        printf("[autoloader] sceUserServiceGetInitialUser returned: 0x%08x (%d), userId=0x%08x\n",
+               u_init_u, u_init_u, param.userId);
+    }
+
+    printf("[autoloader] return_to_home_by_uri: launching pshomeui with userId=0x%08x\n", param.userId);
+    fflush(stdout);
+
+    int res = p_sceShellUIUtilLaunchByUri("pshomeui:navigateToHome?bootCondition=psButton", &param);
+    printf("[autoloader] return_to_home_by_uri: sceShellUIUtilLaunchByUri returned: 0x%08x (%d)\n", res, res);
+    fflush(stdout);
+
+    return res;
 }
 
 /**
@@ -199,7 +265,7 @@ sys_launch_homebrew(const char* cwd, const char* path, const char* args,
     env = "";
   }
 
-  Notify("Launching ezRemote Client");
+  // Notify("Launching ezRemote Client");
 
   // Detach the homebrew's stdout/stderr from the launcher. The launcher
   // exits right after the hijack, so a pipe or socket would give the
@@ -207,6 +273,8 @@ sys_launch_homebrew(const char* cwd, const char* path, const char* args,
   if((stdio=open("/dev/null", O_WRONLY)) < 0) {
     perror("open");
   }
+
+  return_to_home_by_uri();
 
   args_split(args, argv, 255);
   args_split(env, envp, 255);
@@ -226,7 +294,7 @@ sys_launch_homebrew(const char* cwd, const char* path, const char* args,
   if(pid < 0) {
     return -1;
   }
-
+  
   return 0;
 }
 

@@ -116,7 +116,7 @@ target_link_libraries(ezremote_client.elf
 )
 
 set(APPDIR "ezremote-client")
-set(APP_VERSION "2.16")
+set(APP_VERSION "2.17")
 
 add_custom_target(package
    DEPENDS ezremote-dpi.elf
@@ -133,12 +133,13 @@ add_custom_target(package
    COMMAND cp ezremote_client.elf ${APPDIR}
    COMMAND cp ps5-ezremote-dpi/ezremote-dpi.elf ${APPDIR}
    COMMAND cp ps5-ezremote-server/ezremote-server.elf ${APPDIR}
+   COMMAND cp ps5-ezremote-loader/ezRemote-Loader-*.elf ${APPDIR}/ezremote-loader.elf
    COMMAND cp ${PS5_PAYLOAD_SDK}/target/user/homebrew/lib/libOSMesa.so.8.0.0 ${APPDIR}/libOSMesa.so.8
    COMMAND cp -R ${PROJECT_SOURCE_DIR}/data/* ${APPDIR}
    COMMAND sed -i "s/ezRemote Client/ezRemote Client v${APP_VERSION}/g"  ${APPDIR}/homebrew.js
 
    COMMAND zip -r ezremote-client.zip ${APPDIR}/
-   COMMAND cp ${PROJECT_SOURCE_DIR}/Ps5_ezRemote_Client_2.00.pkg .
+   COMMAND cp ${PROJECT_SOURCE_DIR}/PS5_ezRemote_Client_3.00.pkg .
    COMMAND cp ps5-ezremote-loader/*.elf .
    COMMAND echo -n "${APP_VERSION}" > ./version.txt
 )

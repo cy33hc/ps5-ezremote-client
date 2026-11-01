@@ -22,8 +22,8 @@
   "conceptId": "0",
   "contentBadgeType": 1,
   "contentId": "IV9999-EZRC00001_00-EZREMOTECLIENT01",
-  "contentVersion": "00.300.100",
-  "deeplinkUri": "http://127.0.0.1:8080/elfldr?pipe=1&daemon=1&elf=/data/homebrew/ezremote-client/ezremote-loader.elf",
+  "contentVersion": "00.400.100",
+  "deeplinkUri": "http://127.0.0.1:9021?uri=file://data/homebrew/ezremote-client/ezremote-loader.elf",
   "downloadDataSize": 0,
   "gameIntent": {
     "permittedIntents": [
@@ -39,7 +39,7 @@
     }
   },
   "masterVersion": "01.00",
-  "originContentVersion": "00.300.000",
+  "originContentVersion": "00.400.000",
   "pubtools": {
     "creationDate": "2024-07-17 19:03:24",
     "toolVersion": "1.21"

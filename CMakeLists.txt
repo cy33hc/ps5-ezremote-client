@@ -116,7 +116,7 @@ target_link_libraries(ezremote_client.elf
 )
 
 set(APPDIR "ezremote-client")
-set(APP_VERSION "2.17")
+set(APP_VERSION "2.18")
 
 add_custom_target(package
    DEPENDS ezremote-dpi.elf
@@ -140,7 +140,7 @@ add_custom_target(package
    COMMAND sed -i "s/ezRemote Client/ezRemote Client v${APP_VERSION}/g"  ${APPDIR}/homebrew.js
 
    COMMAND zip -r ezremote-client.zip ${APPDIR}/
-   COMMAND cp ${PROJECT_SOURCE_DIR}/PS5_ezRemote_Client_3.00.pkg .
+   COMMAND cp ${PROJECT_SOURCE_DIR}/PS5_ezRemote_Client_4.00.pkg .
    COMMAND cp ps5-ezremote-loader/*.elf .
    COMMAND echo -n "${APP_VERSION}" > ./version.txt
 )

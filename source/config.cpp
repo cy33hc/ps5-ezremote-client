@@ -4,6 +4,7 @@
 #include <cstring>
 #include <map>
 #include <vector>
+#include <mutex>
 #include <regex>
 #include <stdlib.h>
 #include "server/http_server.h"
@@ -24,6 +25,11 @@ char local_directory[255];
 char remote_directory[255];
 char app_ver[6];
 char last_site[32];
+char web_last_site[32];
+
+// Serialises the ini writers: the HTTP worker threads and the native render
+// thread both call CONFIG::Save*() and the ini layer is not re-entrant.
+static std::mutex config_write_mutex;
 char display_site[32];
 std::vector<std::string> langs;
 char language[128];
@@ -274,6 +280,12 @@ namespace CONFIG
         remote_settings = &site_settings[std::string(last_site)];
         sprintf(remote_directory, "%s", remote_settings->default_directory);
 
+        // The web UI selects a site independently of the native UI's last_site.
+        sprintf(web_last_site, "%s", ReadString(CONFIG_GLOBAL, CONFIG_WEB_LAST_SITE, last_site));
+        if (site_settings.find(std::string(web_last_site)) == site_settings.end())
+            sprintf(web_last_site, "%s", last_site);
+        WriteString(CONFIG_GLOBAL, CONFIG_WEB_LAST_SITE, web_last_site);
+
         for (int i = 0; i < MAX_FAVORITE_URLS; i++)
         {
             const char *index = std::to_string(i).c_str();
@@ -286,6 +298,7 @@ namespace CONFIG
 
     void SaveConfig()
     {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
         OpenIniFile(CONFIG_INI_FILE);
 
         std::string encrypted_text;
@@ -306,8 +319,42 @@ namespace CONFIG
         CloseIniFile();
     }
 
+    // Persists one server profile. SaveConfig() only writes the currently
+    // selected site, which is not enough when the web UI edits any of them.
+    void SaveSiteConfig(const std::string &site)
+    {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
+
+        std::map<std::string, RemoteSettings>::iterator it = site_settings.find(site);
+        if (it == site_settings.end())
+        {
+            return;
+        }
+
+        RemoteSettings *setting = &it->second;
+        OpenIniFile(CONFIG_INI_FILE);
+
+        std::string encrypted_text;
+        if (strlen(setting->password) > 0)
+            Encrypt(setting->password, encrypted_text);
+        else
+            encrypted_text = std::string(setting->password);
+
+        WriteString(site.c_str(), CONFIG_REMOTE_SERVER_URL, setting->server);
+        WriteString(site.c_str(), CONFIG_REMOTE_SERVER_USER, setting->username);
+        WriteString(site.c_str(), CONFIG_REMOTE_SERVER_PASSWORD, encrypted_text.c_str());
+        WriteBool(site.c_str(), CONFIG_ENABLE_RPI, setting->enable_rpi);
+        WriteBool(site.c_str(), CONFIG_REMOTE_ENABLE_DISK_CACHE, setting->enable_disk_cache);
+        WriteString(site.c_str(), CONFIG_REMOTE_HTTP_SERVER_TYPE, setting->http_server_type);
+        WriteString(site.c_str(), CONFIG_REMOTE_DEFAULT_DIRECTORY, setting->default_directory);
+
+        WriteIniFile(CONFIG_INI_FILE);
+        CloseIniFile();
+    }
+
     void SaveGlobalConfig()
     {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
         OpenIniFile(CONFIG_INI_FILE);
 
         std::string encrypted_api_key;
@@ -349,14 +396,26 @@ namespace CONFIG
 
     void SaveLocalDirecotry(const std::string &path)
     {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
         OpenIniFile(CONFIG_INI_FILE);
         WriteString(CONFIG_GLOBAL, CONFIG_LOCAL_DIRECTORY, path.c_str());
         WriteIniFile(CONFIG_INI_FILE);
         CloseIniFile();
     }
 
+    void SaveWebSite(const std::string &site)
+    {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
+
+        OpenIniFile(CONFIG_INI_FILE);
+        WriteString(CONFIG_GLOBAL, CONFIG_WEB_LAST_SITE, site.c_str());
+        WriteIniFile(CONFIG_INI_FILE);
+        CloseIniFile();
+    }
+
     void SaveFavoriteUrl(int index, char *url)
     {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
         OpenIniFile(CONFIG_INI_FILE);
         const char *idx = std::to_string(index).c_str();
         WriteString(CONFIG_FAVORITE_URLS, idx, url);

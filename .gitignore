@@ -12,3 +12,9 @@ _deps
 CMakeUserPresets.json
 build
 .vscode
+# web UI build tooling
+web/node_modules
+web/.npm-cache
+web/.npm-logs
+web/dist
+web/*.tsbuildinfo

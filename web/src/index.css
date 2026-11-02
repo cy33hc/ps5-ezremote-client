@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* Palette lifted from main.cpp (InitImgui):
+   bgColor 37,37,38 · panelColor 51,51,55 · titleColor 10,100,142
+   panelHover 29,151,236 · panelActive 0,119,200 · border 78,78,78
+   text 255,255,255 · textDisabled 151,151,151 */
+@theme {
+  --color-abyss-950: #1b1b1c;
+  --color-abyss-900: #252526;
+  --color-abyss-850: #2d2d30;
+  --color-abyss-800: #333337;
+  --color-abyss-700: #3f3f46;
+  --color-abyss-600: #4e4e4e;
+  --color-mist-100: #ffffff;
+  --color-mist-300: #e4e4e4;
+  --color-mist-500: #979797;
+  --color-accent-200: #9ad4f6;
+  --color-accent-300: #1d97ec;
+  --color-accent-400: #1d97ec;
+  --color-accent-500: #0077c8;
+  --color-accent-600: #00609f;
+  --color-title: #0a648e;
+  --color-mint-400: #57a64a;
+  --color-amber-400: #d7ba7d;
+  --color-rose-400: #f14c4c;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-abyss-900);
+  color: var(--color-mist-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-abyss-600) var(--color-abyss-800);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-abyss-600);
+  border-radius: 2px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--color-abyss-800);
+}
+
+::selection {
+  background: var(--color-accent-500);
+  color: var(--color-mist-100);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-400);
+  outline-offset: 1px;
+}
+
+.input {
+  width: 100%;
+  border-radius: 0.25rem;
+  border: 1px solid var(--color-abyss-600);
+  background: var(--color-abyss-800);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-mist-100);
+  transition: border-color 120ms ease;
+}
+
+.input::placeholder {
+  color: var(--color-mist-500);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-accent-300);
+}

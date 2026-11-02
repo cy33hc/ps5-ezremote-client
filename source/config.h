@@ -58,6 +58,7 @@
 #define CONFIG_MAX_EDIT_FILE_SIZE "max_edit_file_size"
 
 #define CONFIG_LAST_SITE "last_site"
+#define CONFIG_WEB_LAST_SITE "web_last_site"
 #define CONFIG_AUTO_DELETE_TMP_PKG "auto_delete_tmp_pkg"
 
 #define CONFIG_LOCAL_DIRECTORY "local_directory"
@@ -118,6 +119,7 @@ extern char local_directory[255];
 extern char remote_directory[255];
 extern char app_ver[6];
 extern char last_site[32];
+extern char web_last_site[32];
 extern char display_site[32];
 extern std::vector<std::string> langs;
 extern char language[128];
@@ -141,9 +143,11 @@ namespace CONFIG
 {
     void LoadConfig();
     void SaveConfig();
+    void SaveSiteConfig(const std::string &site);
     void SaveGlobalConfig();
     void SaveLocalDirecotry(const std::string &path);
     void SaveFavoriteUrl(int index, char *url);
+    void SaveWebSite(const std::string &site);
     void SetClientType(RemoteSettings *settings);
 }
 #endif

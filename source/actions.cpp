@@ -1340,54 +1340,59 @@ namespace Actions
         }
     }
 
-    void Connect()
+    RemoteClient *CreateRemoteClient(RemoteSettings *settings)
     {
-        CONFIG::SaveConfig();
+        if (strncmp(settings->server, "https://", 8) == 0 || strncmp(settings->server, "http://", 7) == 0)
+        {
+            if (strcmp(settings->http_server_type, HTTP_SERVER_APACHE) == 0)
+                return new ApacheClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_MS_IIS) == 0)
+                return new IISClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_NGINX) == 0)
+                return new NginxClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_NPX_SERVE) == 0)
+                return new NpxServeClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_RCLONE) == 0)
+                return new RCloneClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_ARCHIVEORG) == 0)
+                return new ArchiveOrgClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_MYRIENT) == 0)
+                return new MyrientClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
+                return new GithubClient();
+            return nullptr;
+        }
 
-        if (strncmp(remote_settings->server, "https://", 8) == 0 || strncmp(remote_settings->server, "http://", 7) == 0)
-        {
-            if (strcmp(remote_settings->http_server_type, HTTP_SERVER_APACHE) == 0)
-                remoteclient = new ApacheClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MS_IIS) == 0)
-                remoteclient = new IISClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_NGINX) == 0)
-                remoteclient = new NginxClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_NPX_SERVE) == 0)
-                remoteclient = new NpxServeClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_RCLONE) == 0)
-                remoteclient = new RCloneClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_ARCHIVEORG) == 0)
-                remoteclient = new ArchiveOrgClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MYRIENT) == 0)
-                remoteclient = new MyrientClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
-                remoteclient = new GithubClient();
-        }
-        else if (strncmp(remote_settings->server, "webdavs://", 10) == 0 || strncmp(remote_settings->server, "webdav://", 9) == 0)
-        {
-            remoteclient = new WebDAVClient();
-        }
-        else if (strncmp(remote_settings->server, "smb://", 6) == 0)
-        {
-            remoteclient = new SmbClient();
-        }
-        else if (strncmp(remote_settings->server, "ftp://", 6) == 0)
+        if (strncmp(settings->server, "webdavs://", 10) == 0 || strncmp(settings->server, "webdav://", 9) == 0)
+            return new WebDAVClient();
+
+        if (strncmp(settings->server, "smb://", 6) == 0)
+            return new SmbClient();
+
+        if (strncmp(settings->server, "ftp://", 6) == 0)
         {
             FtpClient *client = new FtpClient();
             client->SetConnmode(FtpClient::pasv);
             client->SetCallbackBytes(1);
             client->SetCallbackXferFunction(FtpCallback);
-            remoteclient = client;
+            return client;
         }
-        else if (strncmp(remote_settings->server, "sftp://", 7) == 0)
-        {
-            remoteclient = new SFTPClient();
-        }
-        else if (strncmp(remote_settings->server, "nfs://", 6) == 0)
-        {
-            remoteclient = new NfsClient();
-        }
-        else
+
+        if (strncmp(settings->server, "sftp://", 7) == 0)
+            return new SFTPClient();
+
+        if (strncmp(settings->server, "nfs://", 6) == 0)
+            return new NfsClient();
+
+        return nullptr;
+    }
+
+    void Connect()
+    {
+        CONFIG::SaveConfig();
+
+        remoteclient = CreateRemoteClient(remote_settings);
+        if (remoteclient == nullptr)
         {
             sprintf(status_message, "%s", lang_strings[STR_PROTOCOL_NOT_SUPPORTED]);
             selected_action = ACTION_NONE;

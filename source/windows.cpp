@@ -2485,6 +2485,8 @@ namespace Windows
             Actions::Disconnect();
             HttpServer::Stop();
             done = true;
+            // If teardown or a blocked action wedges, leave anyway.
+            ArmExitWatchdog();
             break;
         case ACTION_INSTALL_REMOTE_PKG:
             if (INSTALLER::EzRemoteServerVersion().empty())

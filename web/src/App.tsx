@@ -664,6 +664,18 @@ export default function App() {
     });
   };
 
+  const stopHttpServer = () => {
+    if (!window.confirm("Stop the ezRemote Client HTTP server? The web UI will disconnect.")) return;
+    void (async () => {
+      try {
+        await fetch("/stop");
+      } catch {
+        // The listener is torn down mid-response; a network error means it worked.
+      }
+      notify("ezRemote Client stopped", "info");
+    })();
+  };
+
   const disconnectRemote = async () => {
     if (!serverInfo) return;
     try {
@@ -881,6 +893,26 @@ export default function App() {
   // Unknown capabilities (older backend) fall back to "all allowed".
   const canRemote = (flag: number) => ((activeProfile?.supportedActions ?? 0x1fff) & flag) !== 0;
 
+  const installRemotePackages = (entries: DirEntry[]) => {
+    if (!serverInfo) return;
+    const packageCount = entries.length;
+    void runRemote(`Installing ${packageCount} package${packageCount > 1 ? "s" : ""}…`, async () => {
+      let failed = 0;
+      for (const entry of entries) {
+        try {
+          await api.installRemotePackage(serverInfo.active, joinPath(remotePath, entry.name), Number(entry.size) || 0);
+        } catch (error) {
+          failed += 1;
+          notify(error instanceof Error ? `${entry.name}: ${error.message}` : `${entry.name} failed`, "error");
+        }
+      }
+      if (failed === 0)
+        notify(`${packageCount} package${packageCount > 1 ? "s" : ""} installing`, "success");
+      else if (failed < packageCount)
+        notify(`${packageCount - failed} of ${packageCount} packages installing`, "info");
+    });
+  };
+
   const remoteMenu = (entry: DirEntry | null): MenuItem[] => {
     const items: MenuItem[] = [];
     if (entry) {
@@ -888,6 +920,16 @@ export default function App() {
       else {
         if (TEXT_FILE.test(entry.name))
           items.push({ label: "Edit", icon: "text", onSelect: remoteEditFile, disabled: !canRemote(RA.EDIT) });
+        const targets =
+          remoteSelected.length > 1 && remoteSelected.some((item) => item.name === entry.name) ? remoteSelected : [entry];
+        const packages = targets.filter((item) => item.type !== "dir" && item.name.toLowerCase().endsWith(".pkg"));
+        if (packages.length > 0)
+          items.push({
+            label: packages.length > 1 ? `Install ${packages.length} packages` : "Install package",
+            icon: "package",
+            onSelect: () => installRemotePackages(packages),
+            disabled: !canRemote(RA.INSTALL) || transferBusy,
+          });
         if (IMAGE_FILE.test(entry.name) && serverInfo)
           items.push({
             label: "Preview image",
@@ -943,7 +985,7 @@ export default function App() {
             <button
               type="button"
               onClick={(event) => setEzMenu({ x: event.clientX, y: event.clientY })}
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition hover:brightness-125 ${
+              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-sm font-medium transition hover:brightness-125 ${
                 ezremoteVersion === null
                   ? "border-abyss-600 bg-abyss-800 text-mist-500"
                   : ezremoteVersion
@@ -970,6 +1012,7 @@ export default function App() {
             />
             <HeaderButton icon="server" label="Servers" onClick={() => setServersOpen(true)} />
             <HeaderButton icon="settings" label="Settings" onClick={() => setSettingsOpen(true)} />
+            <HeaderButton icon="power" label="Stop" onClick={stopHttpServer} />
           </div>
         </div>
       </header>

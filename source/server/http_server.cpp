@@ -29,6 +29,9 @@
 #include "zip_util.h"
 #include "sfo.h"
 #include "util.h"
+#include "installer.h"
+
+extern bool done;
 // #include "dbglogger.h"
 
 #define SUCCESS_MSG "{ \"result\": { \"success\": true, \"error\": null } }"
@@ -1385,6 +1388,129 @@ namespace HttpServer
             CONFIG::SaveWebSite(name);
 
             success(res); });
+
+        svr->Post("/__local__/install_bg", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+
+            const char *path = nullptr;
+            uint64_t size = 0;
+            std::string site = ResolveSite(nullptr);
+
+            if (jobj != nullptr)
+            {
+                path = json_object_get_string(json_object_object_get(jobj, "path"));
+                size = json_object_get_uint64(json_object_object_get(jobj, "size"));
+                site = ResolveSite(json_object_get_string(json_object_object_get(jobj, "site")));
+            }
+
+            if (path == nullptr)
+            {
+                bad_request(res, "Required path parameter missing");
+                return;
+            }
+
+            std::map<std::string, RemoteSettings>::iterator it = site_settings.find(site);
+            if (it == site_settings.end())
+            {
+                failed(res, 200, "Unknown site");
+                return;
+            }
+
+            RemoteSettings &settings = it->second;
+            bool anonymous = strlen(settings.username) == 0 && strlen(settings.password) == 0 &&
+                (settings.type == CLIENT_TYPE_WEBDAV ||
+                 (settings.type == CLIENT_TYPE_HTTP_SERVER &&
+                  strcmp(settings.http_server_type, HTTP_SERVER_ARCHIVEORG) != 0 &&
+                  strcmp(settings.http_server_type, HTTP_SERVER_GITHUB) != 0));
+
+            std::string url;
+            if (anonymous)
+            {
+                // No credentials: stream straight from the server, as
+                // INSTALLER::getRemoteUrl does for this case.
+                std::string full_url = WebDAVClient::GetHttpUrl(std::string(settings.server) + path);
+                size_t scheme_pos = full_url.find("://");
+                size_t root_pos = (scheme_pos == std::string::npos) ? std::string::npos : full_url.find("/", scheme_pos + 3);
+                if (root_pos == std::string::npos)
+                {
+                    failed(res, 200, "Invalid server URL");
+                    return;
+                }
+                url = full_url.substr(0, root_pos) + httplib::detail::encode_url(full_url.substr(root_pos));
+            }
+            else
+            {
+                std::string target_path(path);
+                if (settings.type == CLIENT_TYPE_HTTP_SERVER &&
+                    strcmp(settings.http_server_type, HTTP_SERVER_GITHUB) == 0)
+                {
+                    std::lock_guard<std::mutex> lock(remote_session_mutex);
+                    std::string error;
+                    RemoteClient *client = GetRemoteSession(site, error);
+                    if (client == nullptr)
+                    {
+                        failed(res, 200, error);
+                        return;
+                    }
+                    target_path = static_cast<GithubClient *>(client)->GetRedirectUrl(target_path);
+                }
+
+                std::string hash = INSTALLER::StoreBgInstallHostData(&settings, target_path, size);
+                if (hash.empty())
+                {
+                    failed(res, 200, "Could not queue the install");
+                    return;
+                }
+                url = "http://localhost:" + std::to_string(http_int_server_port) + "/bg_install/" + hash;
+            }
+
+            pkg_header header;
+            memset(&header, 0, sizeof(header));
+            std::string title;
+            {
+                std::lock_guard<std::mutex> lock(remote_session_mutex);
+                std::string error;
+                RemoteClient *client = GetRemoteSession(site, error);
+                if (client == nullptr)
+                {
+                    failed(res, 200, error);
+                    return;
+                }
+                title = INSTALLER::GetRemotePkgTitle(client, path, &header);
+            }
+
+            if (INSTALLER::InstallRemotePkg(url, &header, title) == 0)
+            {
+                failed(res, 200, "Install failed");
+                return;
+            }
+
+            success(res);
+        });
+
+        // Identifies the client; the server's launcher polls it to know when the
+        // web UI is ready.
+        svr->Get("/version", [&](const Request &req, Response &res)
+        {
+            std::string version = "unknown";
+            FILE *file = fopen(DATA_PATH "/version.txt", "r");
+            if (file != nullptr)
+            {
+                char buffer[64] = {0};
+                if (fgets(buffer, sizeof(buffer), file) != nullptr)
+                    version = buffer;
+                fclose(file);
+
+                while (!version.empty() && (version[version.size() - 1] == '\n' || version[version.size() - 1] == '\r'))
+                    version.erase(version.size() - 1);
+            }
+
+            res.status = 200;
+            res.set_header("Access-Control-Allow-Origin", "*");
+            res.set_content(version, "text/plain");
+        });
 
         svr->Get("/__local__/ezremote_server/version", [&](const Request &req, Response &res)
         {
@@ -3461,9 +3587,13 @@ namespace HttpServer
             failed(res, 200, "Failed to download");
         });
 
-        svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
+        svr->Get("/stop", [&](const Request & /*req*/, Response &res)
         {
+            res.status = 200;
+            res.set_content("Stopping", "text/plain");
             svr->stop();
+            // Ends the render loop in gui.cpp so the client terminates.
+            done = true;
         });
 
         svr->set_error_handler([](const Request & /*req*/, Response &res)

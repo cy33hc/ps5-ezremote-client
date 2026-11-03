@@ -843,6 +843,27 @@ namespace HttpServer
         web_sessions.clear();
     }
 
+    // Converts "rwxr-xr-x" (optionally prefixed with the file type) to mode bits.
+    static int ParseRights(const char *rights)
+    {
+        std::string text(rights);
+        if (text.size() == 10 && (text[0] == 'd' || text[0] == '-'))
+            text = text.substr(1);
+        if (text.size() != 9)
+            return -1;
+
+        int mode = 0;
+        for (int i = 0; i < 9; i++)
+        {
+            char c = text[i];
+            if (c == 'r' || c == 'w' || c == 'x' || c == 's' || c == 't')
+                mode |= 1 << (8 - i);
+            else if (c != '-' && c != ' ')
+                return -1;
+        }
+        return mode;
+    }
+
     void *ServerThread(void *argp)
     {
         svr->Get("/", [&](const Request &req, Response &res)
@@ -922,7 +943,7 @@ namespace HttpServer
                     char display_date[32];
                     sprintf(display_date, "%04d-%02d-%02d %02d:%02d:%02d", it->modified.year, it->modified.month, it->modified.day, it->modified.hours, it->modified.minutes, it->modified.seconds);
                     json_object_object_add(new_file, "name", json_object_new_string(it->name));
-                    json_object_object_add(new_file, "rights", json_object_new_string(it->isDir ? "drwxrwxrwx" : "rw-rw-rw-"));
+                    json_object_object_add(new_file, "rights", json_object_new_string(it->rights));
                     json_object_object_add(new_file, "date", json_object_new_string(display_date));
                     json_object_object_add(new_file, "size", json_object_new_string(it->isDir ? "" : std::to_string(it->file_size).c_str()));
                     json_object_object_add(new_file, "type", json_object_new_string(it->isDir ? "dir" : "file"));
@@ -2689,7 +2710,7 @@ namespace HttpServer
                     json_object_object_add(file, "type", json_object_new_string(entry.isDir ? "dir" : "file"));
                     json_object_object_add(file, "size", json_object_new_string(entry.isDir ? "" : std::to_string(entry.file_size).c_str()));
                     json_object_object_add(file, "date", json_object_new_string(display_date));
-                    json_object_object_add(file, "rights", json_object_new_string(entry.isDir ? "drwxrwxrwx" : "rw-rw-rw-"));
+                    json_object_object_add(file, "rights", json_object_new_string(entry.rights));
                     json_object_array_add(entries, file);
                 }
             }
@@ -3036,6 +3057,41 @@ namespace HttpServer
                 failed(res, 200, "Failed to remove: " + failed_items);
                 return;
             }
+            success(res);
+        });
+
+        svr->Post("/__local__/chmod", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+
+            const char *path = nullptr;
+            const char *rights = nullptr;
+            if (jobj != nullptr)
+            {
+                path = json_object_get_string(json_object_object_get(jobj, "path"));
+                rights = json_object_get_string(json_object_object_get(jobj, "rights"));
+            }
+
+            if (path == nullptr || rights == nullptr)
+            {
+                bad_request(res, "Required path and rights parameters missing");
+                return;
+            }
+
+            int mode = ParseRights(rights);
+            if (mode < 0)
+            {
+                failed(res, 200, "Expected rights like rwxr-xr-x");
+                return;
+            }
+
+            if (chmod(path, mode) != 0)
+            {
+                failed(res, 200, "Could not change permissions");
+                return;
+            }
+
             success(res);
         });
 

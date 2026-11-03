@@ -253,6 +253,7 @@ namespace FS
         entry.file_size = 0;
         entry.isDir = true;
         entry.selectable = false;
+        sprintf(entry.rights, "%s", "rwxrwxrwx");
         out.push_back(entry);
 
         DIR *fd = opendir(path.c_str());
@@ -305,6 +306,10 @@ namespace FS
                 entry.modified.minutes = tm.tm_min;
                 entry.modified.seconds = tm.tm_sec;
                 entry.file_size = file_stat.st_size;
+
+                for (int i = 0; i < 9; i++)
+                    entry.rights[i] = (file_stat.st_mode & (S_IRUSR >> i)) ? "rwx"[i % 3] : '-';
+                entry.rights[9] = '\0';
                
                 if (dirent->d_type & DT_DIR)
                 {

@@ -1293,7 +1293,13 @@ export default function App() {
           save={editor.remote && serverInfo ? (item, content) => api.remoteEdit(serverInfo.active, item, content) : undefined}
         />
       ) : null}
-      {properties ? <PropertiesDialog entry={properties} path={activePane === "local" ? path : remotePath} onClose={() => setProperties(null)} /> : null}
+      {properties ? <PropertiesDialog
+        entry={properties}
+        path={activePane === "local" ? path : remotePath}
+        remote={activePane !== "local"}
+        onClose={() => setProperties(null)}
+        onRefresh={refresh}
+      /> : null}
       {powerMenu ? (
         <>
           <div className="fixed inset-0 z-40" onMouseDown={() => setPowerMenu(null)} />

@@ -107,6 +107,10 @@ export async function extract(item: string, destination: string, folderName: str
   await request("/__local__/extract", { item, destination, folderName });
 }
 
+export async function chmod(path: string, rights: string): Promise<void> {
+  await request("/__local__/chmod", { path, rights });
+}
+
 export async function createLocalFile(path: string): Promise<void> {
   await request("/__local__/newfile", { path });
 }

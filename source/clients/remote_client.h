@@ -1,6 +1,7 @@
 #ifndef REMOTECLIENT_H
 #define REMOTECLIENT_H
 
+#include <atomic>
 #include <string>
 #include <vector>
 #include "common.h"
@@ -45,6 +46,17 @@ class RemoteClient
 public:
     RemoteClient(){};
     virtual ~RemoteClient(){};
+
+    // Bytes moved by the transfer currently running on this connection. Kept
+    // per instance so two concurrent transfers cannot overwrite each other.
+    uint64_t TransferredBytes() const { return transferred_bytes_.load(std::memory_order_relaxed); }
+    void ResetTransferredBytes() { transferred_bytes_.store(0, std::memory_order_relaxed); }
+    void AddTransferredBytes(uint64_t n) { transferred_bytes_.fetch_add(n, std::memory_order_relaxed); }
+    void SetTransferredBytes(uint64_t n) { transferred_bytes_.store(n, std::memory_order_relaxed); }
+
+    // Total size of that same transfer, so progress = moved / total.
+    uint64_t TotalBytes() const { return total_bytes_.load(std::memory_order_relaxed); }
+    void SetTotalBytes(uint64_t n) { total_bytes_.store(n, std::memory_order_relaxed); }
     virtual int Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping=false) = 0;
     virtual int Mkdir(const std::string &path) = 0;
     virtual int Rmdir(const std::string &path, bool recursive) = 0;
@@ -72,6 +84,10 @@ public:
     virtual int Quit() = 0;
     virtual ClientType clientType() = 0;
     virtual uint32_t SupportedActions() = 0;
+
+protected:
+    std::atomic<uint64_t> transferred_bytes_{0};
+    std::atomic<uint64_t> total_bytes_{0};
 };
 
 #endif

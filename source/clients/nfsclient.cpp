@@ -189,11 +189,13 @@ int NfsClient::Rmdir(const std::string &path, bool recursive)
 
 int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint64_t offset)
 {
-	if (!Size(ppath.c_str(), &bytes_to_download))
+	uint64_t transfer_total = 0;
+	if (!Size(ppath.c_str(), &transfer_total))
 	{
 		sprintf(response, "%s", nfs_get_error(nfs));
 		return 0;
 	}
+	SetTotalBytes(transfer_total);
 
 	struct nfsfh *nfsfh = nullptr;
 	int ret = nfs_open(nfs, ppath.c_str(), 0400, &nfsfh);
@@ -212,7 +214,7 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 
 	void *buff = malloc(BUF_SIZE);
 	int count = 0;
-	bytes_transfered = 0;
+	ResetTransferredBytes();
 	prev_tick = Util::GetTick();
 	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) > 0)
 	{
@@ -225,7 +227,7 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 			return 0;
 		}
 		FS::Write(out, buff, count);
-		bytes_transfered += count;
+		AddTransferredBytes(count);
 	}
 	FS::Close(out);
 	nfs_close(nfs, nfsfh);
@@ -404,12 +406,13 @@ bool NfsClient::FileExists(const std::string &ppath)
  */
 int NfsClient::Put(const std::string &inputfile, const std::string &ppath, uint64_t offset)
 {
-	bytes_to_download = FS::GetSize(inputfile);
-	if (bytes_to_download < 0)
+	int64_t transfer_total = FS::GetSize(inputfile);
+	if (transfer_total < 0)
 	{
 		sprintf(response, "%s", lang_strings[STR_FAILED]);
 		return 0;
 	}
+	SetTotalBytes((uint64_t) transfer_total);
 
 	FILE* in = FS::OpenRead(inputfile);
 	if (in == NULL)
@@ -435,7 +438,7 @@ int NfsClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 
 	void* buff = malloc(BUF_SIZE);
 	int count = 0;
-	bytes_transfered = 0;
+	ResetTransferredBytes();
 	prev_tick = Util::GetTick();
 	while ((count = FS::Read(in, buff, BUF_SIZE)) != 0)
 	{
@@ -457,7 +460,7 @@ int NfsClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 			free(buff);
 			return 0;
 		}
-		bytes_transfered += count;
+		AddTransferredBytes(count);
 	}
 	FS::Close(in);
 	nfs_close(nfs, nfsfh);

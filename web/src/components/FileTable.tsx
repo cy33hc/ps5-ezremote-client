@@ -136,7 +136,9 @@ export function FileTable({ entries, selected, loading, sort, onSort, onToggle, 
                     size={17}
                     className={entry.type === "dir" ? "shrink-0 text-accent-400" : "shrink-0 text-mist-500"}
                   />
-                  <span className={`truncate ${entry.type === "dir" ? "font-medium text-mist-100" : ""}`}>{entry.name}</span>
+                  <span className={`truncate ${entry.type === "dir" ? "font-medium text-mist-100" : ""}`} title={entry.name}>
+                    {entry.name}
+                  </span>
                 </span>
                 <span className="text-right font-mono text-xs text-mist-500">{entry.type === "dir" ? "—" : formatSize(entry.size)}</span>
                 <span className="hidden font-mono text-xs text-mist-500 sm:block">{formatDate(entry.date)}</span>

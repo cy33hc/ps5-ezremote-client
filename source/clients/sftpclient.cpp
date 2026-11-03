@@ -1,3 +1,4 @@
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
@@ -13,6 +14,28 @@
 #include "windows.h"
 
 #define FTP_CLIENT_BUFSIZ 1048576
+
+// Wait until libssh2 can make progress on the socket again. Used while the
+// session is temporarily in non-blocking mode during uploads.
+static int SftpWaitSocket(LIBSSH2_SESSION *session, int sockfd, int seconds = 30)
+{
+    fd_set fd_in;
+    fd_set fd_out;
+    FD_ZERO(&fd_in);
+    FD_ZERO(&fd_out);
+
+    int dirs = libssh2_session_block_directions(session);
+    if (dirs & LIBSSH2_SESSION_BLOCK_INBOUND)
+        FD_SET(sockfd, &fd_in);
+    if (dirs & LIBSSH2_SESSION_BLOCK_OUTBOUND)
+        FD_SET(sockfd, &fd_out);
+
+    struct timeval tv;
+    tv.tv_sec = seconds;
+    tv.tv_usec = 0;
+
+    return select(sockfd + 1, &fd_in, &fd_out, NULL, &tv);
+}
 
 SFTPClient::SFTPClient()
 {
@@ -262,10 +285,12 @@ int SFTPClient::Size(const std::string &path, uint64_t *size)
 
 int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
 {
-    if (!Size(path, &bytes_to_download))
+    uint64_t transfer_total = 0;
+    if (!Size(path, &transfer_total))
     {
         return 0;
     }
+    SetTotalBytes(transfer_total);
 
     LIBSSH2_SFTP_HANDLE *sftp_handle = libssh2_sftp_open(sftp_session, path.c_str(), LIBSSH2_FXF_READ, 0);
     if (!sftp_handle)
@@ -283,7 +308,7 @@ int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint
 
     char *buff = (char *)malloc(FTP_CLIENT_BUFSIZ);
     int rc, count = 0;
-    bytes_transfered = 0;
+    ResetTransferredBytes();
     prev_tick = Util::GetTick();
 
     do
@@ -291,7 +316,7 @@ int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint
         rc = libssh2_sftp_read(sftp_handle, buff, FTP_CLIENT_BUFSIZ);
         if (rc > 0)
         {
-            bytes_transfered += rc;
+            AddTransferredBytes(rc);
             FS::Write(out, buff, rc);
         }
         else
@@ -444,13 +469,24 @@ int SFTPClient::GetRange(void *fp, void *buffer, uint64_t size, uint64_t offset)
 int SFTPClient::Put(const std::string &inputfile, const std::string &path, uint64_t offset)
 {
     char *ptr, *buff;
-    int rc;
+    ssize_t rc;
 
-    bytes_to_download = FS::GetSize(inputfile);
-    if (bytes_to_download < 0)
+    int64_t transfer_total = FS::GetSize(inputfile);
+    if (transfer_total < 0)
     {
         sprintf(response, "%s", lang_strings[STR_FAILED]);
         return 0;
+    }
+    SetTotalBytes((uint64_t) transfer_total);
+
+    // SCP streams the file without per-packet replies, so it is much faster for
+    // uploads when the server accepts the legacy protocol. -1 means "not
+    // supported", in which case fall through to the SFTP implementation.
+    if (offset == 0)
+    {
+        int scp_result = PutScp(inputfile, path, (uint64_t) transfer_total);
+        if (scp_result >= 0)
+            return scp_result;
     }
 
     FILE *in = FS::OpenRead(inputfile);
@@ -472,11 +508,18 @@ int SFTPClient::Put(const std::string &inputfile, const std::string &path, uint6
     }
 
     buff = (char *)malloc(FTP_CLIENT_BUFSIZ);
-    int nread, count = 0;
-    bytes_transfered = 0;
+    ResetTransferredBytes();
     prev_tick = Util::GetTick();
 
-    do
+    // In blocking mode every SFTP write waits for the server's reply, which
+    // caps uploads at roughly packet size / round trip. Switch to non-blocking
+    // and drive the socket with select() so libssh2 can keep the pipe full.
+    libssh2_session_set_blocking(session, 0);
+
+    int ok = 1;
+    int nread;
+
+    while (ok)
     {
         nread = FS::Read(in, buff, FTP_CLIENT_BUFSIZ);
         if (nread <= 0)
@@ -484,25 +527,145 @@ int SFTPClient::Put(const std::string &inputfile, const std::string &path, uint6
             /* end of file */
             break;
         }
-        ptr = buff;
 
-        do
+        ptr = buff;
+        while (nread > 0)
         {
-            /* write data in a loop until we block */
             rc = libssh2_sftp_write(sftp_handle, ptr, nread);
 
-            if (rc < 0)
+            if (rc > 0)
+            {
+                ptr += rc;
+                nread -= rc;
+                AddTransferredBytes((uint64_t) rc);
+                continue;
+            }
+
+            if (rc == LIBSSH2_ERROR_EAGAIN || rc == 0)
+            {
+                if (SftpWaitSocket(session, sock) <= 0)
+                {
+                    sprintf(response, "%s", "SFTP upload timed out");
+                    ok = 0;
+                    break;
+                }
+                continue;
+            }
+
+            sprintf(response, "SFTP upload failed: %ld", (long) rc);
+            ok = 0;
+            break;
+        }
+    }
+
+    // Flush anything libssh2 still holds before returning to blocking mode.
+    if (ok)
+    {
+        ssize_t flush;
+        while ((flush = libssh2_sftp_write(sftp_handle, NULL, 0)) == LIBSSH2_ERROR_EAGAIN)
+        {
+            if (SftpWaitSocket(session, sock) <= 0)
+            {
+                sprintf(response, "%s", "SFTP upload flush timed out");
+                ok = 0;
                 break;
-            ptr += rc;
-            nread -= rc;
-            bytes_transfered += rc;
-        } while (nread);
-    } while (rc > 0);
+            }
+        }
+        if (ok && flush < 0)
+        {
+            sprintf(response, "SFTP upload flush failed: %ld", (long) flush);
+            ok = 0;
+        }
+    }
+
+    libssh2_session_set_blocking(session, 1);
 
     libssh2_sftp_close(sftp_handle);
     FS::Close(in);
     free(buff);
-    return 1;
+    return ok;
+}
+
+int SFTPClient::PutScp(const std::string &inputfile, const std::string &path, uint64_t total)
+{
+    LIBSSH2_CHANNEL *channel = libssh2_scp_send64(session, path.c_str(), 0644,
+                                                  (libssh2_int64_t) total, 0, 0);
+    if (channel == NULL)
+    {
+        // Most likely the server rejected the SCP request; let Put use SFTP.
+        return -1;
+    }
+
+    FILE *in = FS::OpenRead(inputfile);
+    if (in == NULL)
+    {
+        libssh2_channel_free(channel);
+        sprintf(response, "%s", lang_strings[STR_FAILED]);
+        return 0;
+    }
+
+    char *buff = (char *) malloc(FTP_CLIENT_BUFSIZ);
+    ResetTransferredBytes();
+    prev_tick = Util::GetTick();
+
+    int ok = 1;
+    int nread;
+
+    while (ok)
+    {
+        nread = FS::Read(in, buff, FTP_CLIENT_BUFSIZ);
+        if (nread <= 0)
+            break;
+
+        char *ptr = buff;
+        while (nread > 0)
+        {
+            ssize_t rc = libssh2_channel_write(channel, ptr, (size_t) nread);
+
+            if (rc > 0)
+            {
+                ptr += rc;
+                nread -= (int) rc;
+                AddTransferredBytes((uint64_t) rc);
+                continue;
+            }
+
+            if (rc == LIBSSH2_ERROR_EAGAIN)
+            {
+                if (SftpWaitSocket(session, sock) <= 0)
+                {
+                    sprintf(response, "%s", "SCP upload timed out");
+                    ok = 0;
+                    break;
+                }
+                continue;
+            }
+
+            sprintf(response, "SCP upload failed: %ld", (long) rc);
+            ok = 0;
+            break;
+        }
+    }
+
+    if (ok)
+    {
+        if (libssh2_channel_send_eof(channel) != 0)
+        {
+            sprintf(response, "%s", "SCP upload failed to finish");
+            ok = 0;
+        }
+        else
+        {
+            libssh2_channel_wait_eof(channel);
+            libssh2_channel_wait_closed(channel);
+        }
+    }
+
+    libssh2_channel_free(channel);
+    FS::Close(in);
+    free(buff);
+
+    return ok;
 }
 
 int SFTPClient::Rename(const std::string &src, const std::string &dst)
@@ -540,7 +703,8 @@ int SFTPClient::Move(const std::string &from, const std::string &to)
 
 int SFTPClient::Head(const std::string &path, void *buffer, uint64_t len)
 {
-    if (!Size(path.c_str(), &bytes_to_download))
+    uint64_t ignored_total = 0;
+    if (!Size(path.c_str(), &ignored_total))
     {
         return 0;
     }

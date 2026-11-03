@@ -8,9 +8,12 @@ interface EditorDialogProps {
   name: string;
   onClose: () => void;
   onSaved: () => void;
+  /** Overrides for remote files; default to the local endpoints. */
+  load?: (item: string) => Promise<string>;
+  save?: (item: string, content: string) => Promise<void>;
 }
 
-export function EditorDialog({ item, name, onClose, onSaved }: EditorDialogProps) {
+export function EditorDialog({ item, name, onClose, onSaved, load, save: saveFile }: EditorDialogProps) {
   const [content, setContent] = useState("");
   const [original, setOriginal] = useState("");
   const [loading, setLoading] = useState(true);
@@ -19,8 +22,7 @@ export function EditorDialog({ item, name, onClose, onSaved }: EditorDialogProps
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .getContent(item)
+    (load ?? api.getContent)(item)
       .then((text) => {
         if (cancelled) return;
         setContent(text);
@@ -35,7 +37,7 @@ export function EditorDialog({ item, name, onClose, onSaved }: EditorDialogProps
     return () => {
       cancelled = true;
     };
-  }, [item]);
+  }, [item, load]);
 
   const dirty = content !== original;
 
@@ -44,7 +46,7 @@ export function EditorDialog({ item, name, onClose, onSaved }: EditorDialogProps
     setSaving(true);
     setError(null);
     try {
-      await api.edit(item, content);
+      await (saveFile ?? api.edit)(item, content);
       setOriginal(content);
       onSaved();
       onClose();

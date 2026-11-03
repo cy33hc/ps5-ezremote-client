@@ -1477,8 +1477,10 @@ namespace Windows
                     cur_tick = Util::GetTick();
                     tick_delta = (cur_tick - prev_tick) * 1.0f / 1000000.0f;
 
-                    progress = bytes_transfered * 1.0f / (float)bytes_to_download;
-                    transfer_speed = (bytes_transfered * 1.0f / tick_delta) / 1048576.0f;
+                    uint64_t moved = remoteclient != nullptr ? remoteclient->TransferredBytes() : 0;
+                    uint64_t total = remoteclient != nullptr ? remoteclient->TotalBytes() : 0;
+                    progress = total > 0 ? moved * 1.0f / (float)total : 0.0f;
+                    transfer_speed = (moved * 1.0f / tick_delta) / 1048576.0f;
 
                     sprintf(progress_text, "%.2f MB/s", transfer_speed);
                     ImGui::ProgressBar(progress, ImVec2(625, 0), progress_text);

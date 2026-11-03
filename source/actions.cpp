@@ -38,7 +38,10 @@ namespace Actions
 {
     static int FtpCallback(int64_t xfered, void *arg)
     {
-        bytes_transfered = xfered;
+        // The owning client is passed as the callback argument so progress stays
+        // per-connection instead of going through the shared global.
+        if (arg != nullptr)
+            static_cast<FtpClient *>(arg)->SetTransferredBytes((uint64_t) xfered);
         return 1;
     }
 
@@ -1375,6 +1378,7 @@ namespace Actions
             client->SetConnmode(FtpClient::pasv);
             client->SetCallbackBytes(1);
             client->SetCallbackXferFunction(FtpCallback);
+            client->SetCallbackArg(client);
             return client;
         }
 
@@ -1645,6 +1649,33 @@ namespace Actions
         }
     }
 
+    static bool LocalPathExists(const std::string &path)
+    {
+        return FS::FileExists(path.c_str()) || FS::IsFolder(path.c_str()) == 1;
+    }
+
+    // "name" -> "name (2)", "file.txt" -> "file (2).txt"
+    static std::string UniqueLocalName(const std::string &dir, const std::string &name)
+    {
+        std::string sep = FS::hasEndSlash(dir.c_str()) ? "" : "/";
+        if (!LocalPathExists(dir + sep + name))
+            return name;
+
+        size_t dot = name.find_last_of('.');
+        std::string base = (dot == std::string::npos || dot == 0) ? name : name.substr(0, dot);
+        std::string ext = (dot == std::string::npos || dot == 0) ? "" : name.substr(dot);
+
+        for (int index = 2; index < 10000; index++)
+        {
+            char candidate[512];
+            snprintf(candidate, sizeof(candidate), "%s (%d)%s", base.c_str(), index, ext.c_str());
+            if (!LocalPathExists(dir + sep + candidate))
+                return std::string(candidate);
+        }
+
+        return name;
+    }
+
     void *CopyLocalFilesThread(void *argp)
     {
         file_transfering = true;
@@ -1653,8 +1684,7 @@ namespace Actions
             if (stop_activity)
                 break;
 
-            if (strcmp(it->directory, local_directory) == 0)
-                continue;
+            bool same_directory = strcmp(it->directory, local_directory) == 0;
 
             if (it->isDir)
             {
@@ -1663,9 +1693,16 @@ namespace Actions
                     sprintf(status_message, "%s", lang_strings[STR_CANT_COPY_TO_SUBDIR_MSG]);
                     continue;
                 }
+                std::string name = same_directory ? UniqueLocalName(local_directory, it->name) : std::string(it->name);
                 char new_dir[512];
-                sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", it->name);
+                sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", name.c_str());
                 CopyOrMove(*it, new_dir, true);
+            }
+            else if (same_directory)
+            {
+                std::string target = std::string(local_directory) +
+                    (FS::hasEndSlash(local_directory) ? "" : "/") + UniqueLocalName(local_directory, it->name);
+                CopyOrMoveLocalFile(it->path, target.c_str(), true);
             }
             else
             {

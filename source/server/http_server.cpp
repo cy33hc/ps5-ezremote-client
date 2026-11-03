@@ -128,6 +128,36 @@ namespace HttpServer
         return;
     }
 
+    // Copies src's contents into dest (which becomes the folder's final path).
+    static bool CopyDirInto(const std::string &src, const std::string &dest)
+    {
+        FS::MkDirs(dest.c_str());
+
+        int err = 0;
+        std::vector<DirEntry> entries = FS::ListDir(src, &err);
+        if (err)
+            return false;
+
+        for (size_t i = 0; i < entries.size(); i++)
+        {
+            if (!entries[i].selectable)
+                continue;
+
+            std::string target = dest + "/" + entries[i].name;
+            if (entries[i].isDir)
+            {
+                if (!CopyDirInto(entries[i].path, target))
+                    return false;
+            }
+            else if (FS::Copy(entries[i].path, target.c_str()) <= 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     int CopyOrMove(const DirEntry &src, const char *dest, bool isCopy)
     {
         int ret;
@@ -283,6 +313,468 @@ namespace HttpServer
 
         remote_sessions[site] = client;
         return client;
+    }
+
+    // Progress for cross-pane copies. The copy runs on a worker thread so the
+    // HTTP request can return immediately and the UI can poll for bytes.
+    struct WebTransfer
+    {
+        std::string name;
+        uint64_t loaded = 0;
+        uint64_t total = 0;
+        int state = 0; // 0 running, 1 done, 2 failed
+        std::string error;
+        // While an upload is in flight, progress is read from the connection's
+        // own counters instead of the shared globals.
+        RemoteClient *client = nullptr;
+        uint64_t base = 0;
+        bool live = false;
+    };
+
+    static std::mutex web_transfer_mutex;
+    static std::map<std::string, WebTransfer> web_transfers;
+    static unsigned long web_transfer_seq = 0;
+
+    static std::string NewTransferId()
+    {
+        std::lock_guard<std::mutex> lock(web_transfer_mutex);
+        web_transfer_seq++;
+        std::string id = std::to_string((unsigned long)time(nullptr)) + "-" + std::to_string(web_transfer_seq);
+        web_transfers[id] = WebTransfer();
+
+        // Keep the map from growing without bound.
+        if (web_transfers.size() > 32)
+        {
+            for (std::map<std::string, WebTransfer>::iterator it = web_transfers.begin(); it != web_transfers.end();)
+            {
+                if (it->second.state != 0 && it->first != id)
+                    it = web_transfers.erase(it);
+                else
+                    ++it;
+            }
+        }
+        return id;
+    }
+
+    static void UpdateTransfer(const std::string &id, uint64_t loaded, uint64_t total, const std::string &name)
+    {
+        std::lock_guard<std::mutex> lock(web_transfer_mutex);
+        std::map<std::string, WebTransfer>::iterator it = web_transfers.find(id);
+        if (it == web_transfers.end())
+            return;
+        it->second.loaded = loaded;
+        it->second.total = total;
+        if (!name.empty())
+            it->second.name = name;
+    }
+
+    static void SetTransferLive(const std::string &id, RemoteClient *client, uint64_t base, bool live)
+    {
+        std::lock_guard<std::mutex> lock(web_transfer_mutex);
+        std::map<std::string, WebTransfer>::iterator it = web_transfers.find(id);
+        if (it == web_transfers.end())
+            return;
+        it->second.client = live ? client : nullptr;
+        it->second.base = base;
+        it->second.live = live;
+    }
+
+    static void FinishTransfer(const std::string &id, int state, const std::string &error)
+    {
+        std::lock_guard<std::mutex> lock(web_transfer_mutex);
+        std::map<std::string, WebTransfer>::iterator it = web_transfers.find(id);
+        if (it == web_transfers.end())
+            return;
+        it->second.state = state;
+        it->second.error = error;
+    }
+
+    struct CopyItem
+    {
+        std::string path;
+        bool is_dir = false;
+    };
+
+    struct CopyJob
+    {
+        std::string id;
+        std::string site;
+        std::string dest;
+        std::vector<CopyItem> items;
+        std::set<std::string> skip;
+        bool to_remote = false;
+        uint64_t total = 0;
+    };
+
+    static std::string CopyItemName(const std::string &path)
+    {
+        size_t slash = path.find_last_of('/');
+        return (slash == std::string::npos) ? path : path.substr(slash + 1);
+    }
+
+    // Items may be plain paths (legacy) or {path, is_dir} objects.
+    static void ParseCopyItems(json_object *items, std::vector<CopyItem> *out)
+    {
+        size_t count = json_object_array_length(items);
+        for (size_t i = 0; i < count; i++)
+        {
+            json_object *entry = json_object_array_get_idx(items, i);
+            if (entry == nullptr)
+                continue;
+
+            if (json_object_get_type(entry) == json_type_object)
+            {
+                const char *path = json_object_get_string(json_object_object_get(entry, "path"));
+                if (path == nullptr)
+                    continue;
+
+                CopyItem item;
+                item.path = path;
+                json_object *dir = json_object_object_get(entry, "is_dir");
+                item.is_dir = dir != nullptr && json_object_get_boolean(dir) != 0;
+                out->push_back(item);
+            }
+            else
+            {
+                const char *path = json_object_get_string(entry);
+                if (path != nullptr)
+                {
+                    CopyItem item;
+                    item.path = path;
+                    out->push_back(item);
+                }
+            }
+        }
+    }
+
+    static void ProbeLocalConflicts(RemoteClient *client, const std::string &src, const std::string &dest, json_object *conflicts)
+    {
+        if (FS::IsFolder(src) == 1)
+        {
+            int err = 0;
+            std::vector<DirEntry> entries = FS::ListDir(src, &err);
+            if (err)
+                return;
+
+            for (size_t i = 0; i < entries.size(); i++)
+            {
+                if (!entries[i].selectable)
+                    continue;
+                std::string target = dest + "/" + entries[i].name;
+                if (entries[i].isDir)
+                    ProbeLocalConflicts(client, entries[i].path, target, conflicts);
+                else if (client->FileExists(target))
+                    json_object_array_add(conflicts, json_object_new_string(target.c_str()));
+            }
+            return;
+        }
+
+        if (client->FileExists(dest))
+            json_object_array_add(conflicts, json_object_new_string(dest.c_str()));
+    }
+
+    static void ProbeRemoteConflicts(RemoteClient *client, const std::string &src, const std::string &dest, bool is_dir, json_object *conflicts)
+    {
+        if (is_dir)
+        {
+            std::vector<DirEntry> entries = client->ListDir(src);
+            for (size_t i = 0; i < entries.size(); i++)
+            {
+                if (strcmp(entries[i].name, "..") == 0)
+                    continue;
+                std::string target = dest + "/" + entries[i].name;
+                ProbeRemoteConflicts(client, entries[i].path, target, entries[i].isDir, conflicts);
+            }
+            return;
+        }
+
+        if (FS::FileExists(dest))
+            json_object_array_add(conflicts, json_object_new_string(dest.c_str()));
+    }
+
+    static uint64_t LocalTreeSize(const std::string &path, const std::set<std::string> &skip)
+    {
+        int err = 0;
+        std::vector<DirEntry> entries = FS::ListDir(path, &err);
+        if (err)
+            return 0;
+
+        uint64_t total = 0;
+        for (size_t i = 0; i < entries.size(); i++)
+        {
+            if (!entries[i].selectable)
+                continue;
+            if (entries[i].isDir)
+                total += LocalTreeSize(entries[i].path, skip);
+            else if (skip.find(entries[i].path) == skip.end())
+                total += (uint64_t) entries[i].file_size;
+        }
+        return total;
+    }
+
+    static uint64_t RemoteTreeSize(RemoteClient *client, const std::string &path, const std::set<std::string> &skip)
+    {
+        std::vector<DirEntry> entries = client->ListDir(path);
+        uint64_t total = 0;
+        for (size_t i = 0; i < entries.size(); i++)
+        {
+            if (strcmp(entries[i].name, "..") == 0)
+                continue;
+            if (entries[i].isDir)
+                total += RemoteTreeSize(client, entries[i].path, skip);
+            else if (skip.find(entries[i].path) == skip.end())
+                total += entries[i].file_size;
+        }
+        return total;
+    }
+
+    static bool CopyLocalToRemote(RemoteClient *client, const CopyJob *job, const std::string &src,
+                                  const std::string &dest, uint64_t *loaded, std::string *failed)
+    {
+        if (job->skip.find(dest) != job->skip.end())
+            return true;
+
+        if (FS::IsFolder(src) == 1)
+        {
+            client->Mkdir(dest);
+
+            int err = 0;
+            std::vector<DirEntry> entries = FS::ListDir(src, &err);
+            if (err)
+            {
+                *failed += src + ",";
+                return false;
+            }
+
+            bool ok = true;
+            for (size_t i = 0; i < entries.size(); i++)
+            {
+                if (!entries[i].selectable)
+                    continue;
+                std::string target = dest + "/" + entries[i].name;
+                if (!CopyLocalToRemote(client, job, entries[i].path, target, loaded, failed))
+                    ok = false;
+            }
+            return ok;
+        }
+
+        UpdateTransfer(job->id, *loaded, job->total, CopyItemName(src));
+        SetTransferLive(job->id, client, *loaded, true);
+        int put_result = client->Put(src, dest);
+        SetTransferLive(job->id, nullptr, *loaded, false);
+
+        if (put_result == 0)
+        {
+            *failed += src + ",";
+            return false;
+        }
+
+        int64_t size = FS::GetSize(src);
+        if (size > 0)
+            *loaded += (uint64_t) size;
+        UpdateTransfer(job->id, *loaded, job->total, CopyItemName(src));
+        return true;
+    }
+
+    // Hands a remote file to the ezRemote server's background downloader, the
+    // same way Actions::BackgroundDownload does, using this site's settings.
+    static bool QueueBackgroundDownload(RemoteClient *client, const CopyJob *job, const std::string &src,
+                                        const std::string &dest, uint64_t size)
+    {
+        std::map<std::string, RemoteSettings>::iterator it = site_settings.find(job->site);
+        if (it == site_settings.end())
+            return false;
+
+        RemoteSettings &settings = it->second;
+        std::string source = src;
+
+        json_object *params = json_object_new_object();
+        JsonObjectRef params_ref(params);
+        json_object_object_add(params, "type", json_object_new_int(settings.type));
+        json_object_object_add(params, "username", json_object_new_string(settings.username));
+        json_object_object_add(params, "dest_path", json_object_new_string(dest.c_str()));
+        json_object_object_add(params, "size", json_object_new_uint64(size));
+        json_object_object_add(params, "id", json_object_new_uint64((uint64_t) Util::GetTick()));
+
+        if (settings.type == CLIENT_TYPE_HTTP_SERVER && strcmp(settings.http_server_type, HTTP_SERVER_GITHUB) == 0)
+        {
+            GithubClient *github = static_cast<GithubClient *>(client);
+            source = github->GetRedirectUrl(src);
+            json_object_object_add(params, "url", json_object_new_string("https://release-assets.githubusercontent.com"));
+        }
+        else
+        {
+            json_object_object_add(params, "url", json_object_new_string(settings.server));
+        }
+
+        json_object_object_add(params, "src_path", json_object_new_string(source.c_str()));
+        json_object_object_add(params, "password", json_object_new_string(settings.password));
+        if (settings.type == CLIENT_TYPE_HTTP_SERVER)
+            json_object_object_add(params, "http_server_type", json_object_new_string(settings.http_server_type));
+
+        std::string body = json_object_to_json_string(params);
+
+        CHTTPClient::HttpResponse res;
+        CHTTPClient::HeadersMap headers;
+        CHTTPClient tmp_client([](const std::string &log) {});
+        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+        tmp_client.SetCertificateFile(CACERT_FILE);
+        headers["Content-Type"] = "application/json";
+
+        std::string url = "http://localhost:" + std::to_string(http_int_server_port) + "/download_url";
+        return tmp_client.Post(url, headers, body, res) && HTTP_SUCCESS(res.iCode);
+    }
+
+    static bool CopyRemoteToLocal(RemoteClient *client, const CopyJob *job, const std::string &src,
+                                  const std::string &dest, bool is_dir, uint64_t *loaded, std::string *failed)
+    {
+        if (job->skip.find(dest) != job->skip.end())
+            return true;
+
+        if (is_dir)
+        {
+            FS::MkDirs(dest);
+
+            std::vector<DirEntry> entries = client->ListDir(src);
+            bool ok = true;
+            for (size_t i = 0; i < entries.size(); i++)
+            {
+                if (strcmp(entries[i].name, "..") == 0)
+                    continue;
+                std::string target = dest + "/" + entries[i].name;
+                if (!CopyRemoteToLocal(client, job, entries[i].path, target, entries[i].isDir, loaded, failed))
+                    ok = false;
+            }
+            return ok;
+        }
+
+        uint64_t size = 0;
+        client->Size(src, &size);
+
+        if (enable_background_download && size > minimum_backgrond_file_size &&
+            QueueBackgroundDownload(client, job, src, dest, size))
+        {
+            *loaded += size;
+            UpdateTransfer(job->id, *loaded, job->total, CopyItemName(src));
+            return true;
+        }
+
+        UpdateTransfer(job->id, *loaded, job->total, CopyItemName(src));
+        FILE *out = FS::Create(dest);
+        if (out == nullptr)
+        {
+            *failed += src + ",";
+            return false;
+        }
+
+        DataSink sink;
+        sink.write = [out, job, loaded](const char *data, size_t len) {
+            if (FS::Write(out, data, (uint32_t) len) != (int) len)
+                return false;
+            *loaded += len;
+            UpdateTransfer(job->id, *loaded, job->total, "");
+            return true;
+        };
+
+        int ret = client->GetRange(src, sink, size, 0);
+        FS::Close(out);
+
+        if (ret != 1)
+        {
+            FS::Rm(dest);
+            *failed += src + ",";
+            return false;
+        }
+
+        UpdateTransfer(job->id, *loaded, job->total, CopyItemName(src));
+        return true;
+    }
+
+    static void *CopyJobThread(void *argp)
+    {
+        CopyJob *job = static_cast<CopyJob *>(argp);
+        std::string failed_items;
+        uint64_t loaded = 0;
+
+        {
+            std::lock_guard<std::mutex> lock(remote_session_mutex);
+            std::string error;
+            RemoteClient *client = GetRemoteSession(job->site, error);
+            if (client == nullptr)
+            {
+                FinishTransfer(job->id, 2, error);
+                delete job;
+                return nullptr;
+            }
+
+            for (size_t i = 0; i < job->items.size(); i++)
+            {
+                const CopyItem &item = job->items[i];
+                if (job->to_remote)
+                {
+                    if (item.is_dir)
+                    {
+                        job->total += LocalTreeSize(item.path, job->skip);
+                    }
+                    else
+                    {
+                        int64_t size = FS::GetSize(item.path);
+                        if (size > 0)
+                            job->total += (uint64_t) size;
+                    }
+                }
+                else if (item.is_dir)
+                {
+                    job->total += RemoteTreeSize(client, item.path, job->skip);
+                }
+                else
+                {
+                    uint64_t size = 0;
+                    if (client->Size(item.path, &size))
+                        job->total += size;
+                }
+            }
+            UpdateTransfer(job->id, 0, job->total, "");
+
+            for (size_t i = 0; i < job->items.size(); i++)
+            {
+                const CopyItem &item = job->items[i];
+                std::string target = job->dest;
+                if (target.empty() || target[target.size() - 1] != '/')
+                    target += "/";
+                target += CopyItemName(item.path);
+
+                if (job->to_remote)
+                    CopyLocalToRemote(client, job, item.path, target, &loaded, &failed_items);
+                else
+                    CopyRemoteToLocal(client, job, item.path, target, item.is_dir, &loaded, &failed_items);
+            }
+        }
+
+        if (!failed_items.empty())
+            FinishTransfer(job->id, 2, "Failed: " + failed_items);
+        else
+            FinishTransfer(job->id, 1, "");
+
+        delete job;
+        return nullptr;
+    }
+
+    static void RespondConflicts(Response &res, json_object *conflicts)
+    {
+        json_object *result = json_object_new_object();
+        JsonObjectRef result_ref(result);
+        json_object_object_add(result, "id", json_object_new_string(""));
+        json_object_object_add(result, "conflicts", conflicts);
+        const char *result_str = json_object_to_json_string(result);
+        res.status = 200;
+        res.set_content(result_str, strlen(result_str), "application/json");
+    }
+
+    static void *RestartEzRemoteServerThread(void *argp)
+    {
+        Actions::RestartServer();
+        return nullptr;
     }
 
     void *ServerThread(void *argp)
@@ -518,10 +1010,18 @@ namespace HttpServer
                 sprintf(entry.name, "%s", temp.substr(slash_pos+1).c_str());
                 sprintf(entry.path, "%s", src);
                 entry.isDir = FS::IsFolder(src);
-                if (entry.isDir)
-                if (dest.compare(src) != 0 && !CopyOrMove(entry, dest.c_str(), true))
+                // The caller already chose the target name; honour it directly.
+                if (dest.compare(src) != 0)
                 {
-                    failed_items += src;
+                    if (!entry.isDir)
+                    {
+                        if (FS::Copy(src, dest.c_str()) <= 0)
+                            failed_items += src;
+                    }
+                    else if (!CopyDirInto(src, dest))
+                    {
+                        failed_items += src;
+                    }
                 }
             }
             else
@@ -761,6 +1261,18 @@ namespace HttpServer
                 json_object_object_add(item, "defaultDirectory", json_object_new_string(setting.default_directory));
                 json_object_object_add(item, "enableRpi", json_object_new_boolean(setting.enable_rpi));
                 json_object_object_add(item, "enableDiskCache", json_object_new_boolean(setting.enable_disk_cache));
+
+                uint32_t capabilities = 0;
+                if (strlen(setting.server) > 0)
+                {
+                    RemoteClient *probe = Actions::CreateRemoteClient(&setting);
+                    if (probe != nullptr)
+                    {
+                        capabilities = probe->SupportedActions();
+                        delete probe;
+                    }
+                }
+                json_object_object_add(item, "supportedActions", json_object_new_int64((int64_t)capabilities));
                 json_object_array_add(list, item);
             }
 
@@ -874,6 +1386,116 @@ namespace HttpServer
 
             success(res); });
 
+        svr->Get("/__local__/ezremote_server/version", [&](const Request &req, Response &res)
+        {
+            CHTTPClient::HttpResponse http_res;
+            CHTTPClient::HeadersMap headers;
+            CHTTPClient tmp_client([](const std::string &log) {});
+            tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+            tmp_client.SetCertificateFile(CACERT_FILE);
+            tmp_client.SetTimeout(1);
+
+            std::string version;
+            std::string url = "http://localhost:" + std::to_string(http_int_server_port) + "/version";
+            if (tmp_client.Get(url, headers, http_res) && HTTP_SUCCESS(http_res.iCode))
+                version.assign(http_res.strBody.begin(), http_res.strBody.end());
+
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "version", json_object_new_string(version.c_str()));
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
+
+        // Restarting sleeps a few seconds; run it off the request thread.
+        svr->Post("/__local__/ezremote_server/stop", [&](const Request &req, Response &res)
+        {
+            Actions::StopServer();
+            success(res);
+        });
+
+        svr->Post("/__local__/ezremote_server/restart", [&](const Request &req, Response &res)
+        {
+            pthread_t tid;
+            if (pthread_create(&tid, NULL, RestartEzRemoteServerThread, NULL) != 0)
+            {
+                failed(res, 200, "Could not restart the ezRemote server");
+                return;
+            }
+            pthread_detach(tid);
+            success(res);
+        });
+
+        // Proxies the ezRemote server's background download state.
+        svr->Get("/__local__/bg_downloads", [&](const Request &req, Response &res)
+        {
+            json_object *list = json_object_new_array();
+
+            CHTTPClient::HttpResponse http_res;
+            CHTTPClient::HeadersMap headers;
+            CHTTPClient tmp_client([](const std::string &log) {});
+            tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+            tmp_client.SetCertificateFile(CACERT_FILE);
+            tmp_client.SetTimeout(1);
+
+            std::string url = "http://localhost:" + std::to_string(http_int_server_port) + "/get_download_state";
+            if (tmp_client.Get(url, headers, http_res) && HTTP_SUCCESS(http_res.iCode))
+            {
+                std::string body(http_res.strBody.begin(), http_res.strBody.end());
+                json_object *jobj = json_tokener_parse(body.c_str());
+                JsonObjectRef jobj_ref(jobj);
+                if (jobj != nullptr && json_object_get_type(jobj) == json_type_array)
+                {
+                    size_t count = json_object_array_length(jobj);
+                    for (size_t i = 0; i < count; i++)
+                    {
+                        json_object *entry = json_object_array_get_idx(jobj, i);
+                        if (entry == nullptr)
+                            continue;
+
+                        json_object *item = json_object_new_object();
+                        json_object_object_add(item, "path", json_object_new_string(JsonGetString(entry, "path").c_str()));
+                        json_object_object_add(item, "loaded", json_object_new_int64((int64_t) json_object_get_uint64(json_object_object_get(entry, "bytes_transfered"))));
+                        json_object_object_add(item, "size", json_object_new_int64((int64_t) json_object_get_uint64(json_object_object_get(entry, "file_size"))));
+                        json_object_object_add(item, "state", json_object_new_int(json_object_get_int(json_object_object_get(entry, "state"))));
+                        json_object_array_add(list, item);
+                    }
+                }
+            }
+
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "result", list);
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
+
+        svr->Post("/__local__/bg_downloads/clear", [&](const Request &req, Response &res)
+        {
+            CHTTPClient::HttpResponse http_res;
+            CHTTPClient::HeadersMap headers;
+            CHTTPClient tmp_client([](const std::string &log) {});
+            tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+            tmp_client.SetCertificateFile(CACERT_FILE);
+            tmp_client.SetTimeout(5);
+
+            headers["Content-Type"] = "application/json";
+
+            std::string url = "http://localhost:" + std::to_string(http_int_server_port) + "/clear_download_history";
+            if (tmp_client.Post(url, headers, "{}", http_res) && HTTP_SUCCESS(http_res.iCode))
+            {
+                success(res);
+                return;
+            }
+
+            // Surface the status so a stale ezRemote server (no such route) is
+            // distinguishable from a real failure.
+            std::string message = "Could not clear the download history (HTTP " + std::to_string(http_res.iCode) + ")";
+            failed(res, 200, message);
+        });
+
         // Extracts the SFO/param.json and icon from a local package, the same way
         // the native package info dialog does.
         svr->Post("/__local__/pkg_info", [&](const Request &req, Response &res)
@@ -940,13 +1562,14 @@ namespace HttpServer
 
         // Cross-pane transfers: the commander layout copies files between the
         // local and remote panes without a browser round trip.
+        // Starts an async local -> remote copy; the UI polls /__local__/transfer.
         svr->Post("/__remote__/copy_from_local", [&](const Request &req, Response &res)
         {
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *items = nullptr;
             const char *dest = nullptr;
-            std::string site = last_site;
+            std::string site = ResolveSite(nullptr);
 
             if (jobj != nullptr)
             {
@@ -961,50 +1584,107 @@ namespace HttpServer
                 return;
             }
 
-            std::lock_guard<std::mutex> lock(remote_session_mutex);
-            std::string error;
-            RemoteClient *client = GetRemoteSession(site, error);
-            if (client == nullptr)
             {
-                failed(res, 200, error);
+                std::lock_guard<std::mutex> lock(web_transfer_mutex);
+                for (std::map<std::string, WebTransfer>::iterator it = web_transfers.begin(); it != web_transfers.end(); ++it)
+                {
+                    if (it->second.state == 0)
+                    {
+                        failed(res, 200, "Another transfer is already running");
+                        return;
+                    }
+                }
+            }
+
+            bool overwrite = false;
+            json_object *overwrite_obj = json_object_object_get(jobj, "overwrite");
+            if (overwrite_obj != nullptr)
+                overwrite = json_object_get_boolean(overwrite_obj) != 0;
+
+            CopyJob *job = new CopyJob();
+            job->site = site;
+            job->dest = dest;
+            job->to_remote = true;
+
+            ParseCopyItems(items, &job->items);
+
+            json_object *skip_obj = json_object_object_get(jobj, "skip");
+            if (skip_obj != nullptr && json_object_get_type(skip_obj) == json_type_array)
+            {
+                size_t skip_count = json_object_array_length(skip_obj);
+                for (size_t i = 0; i < skip_count; i++)
+                {
+                    const char *skipped = json_object_get_string(json_object_array_get_idx(skip_obj, i));
+                    if (skipped != nullptr)
+                        job->skip.insert(skipped);
+                }
+            }
+
+            if (!overwrite)
+            {
+                json_object *conflicts = json_object_new_array();
+                {
+                    std::lock_guard<std::mutex> lock(remote_session_mutex);
+                    std::string error;
+                    RemoteClient *client = GetRemoteSession(site, error);
+                    if (client == nullptr)
+                    {
+                        json_object_put(conflicts);
+                        delete job;
+                        failed(res, 200, error);
+                        return;
+                    }
+
+                    for (size_t i = 0; i < job->items.size(); i++)
+                    {
+                        std::string target = job->dest;
+                        if (target.empty() || target[target.size() - 1] != '/')
+                            target += "/";
+                        target += CopyItemName(job->items[i].path);
+
+                        ProbeLocalConflicts(client, job->items[i].path, target, conflicts);
+                    }
+                }
+
+                if (json_object_array_length(conflicts) > 0)
+                {
+                    delete job;
+                    RespondConflicts(res, conflicts);
+                    return;
+                }
+                json_object_put(conflicts);
+            }
+
+            job->id = NewTransferId();
+
+            std::string transfer_id = job->id;
+            pthread_t tid;
+            if (job->items.empty() || pthread_create(&tid, NULL, CopyJobThread, job) != 0)
+            {
+                FinishTransfer(transfer_id, 2, "Could not start the copy");
+                delete job;
+                failed(res, 200, "Could not start the copy");
                 return;
             }
+            pthread_detach(tid);
 
-            std::string failed_items;
-            size_t count = json_object_array_length(items);
-            for (size_t i = 0; i < count; i++)
-            {
-                const char *item = json_object_get_string(json_object_array_get_idx(items, i));
-                if (item == nullptr)
-                    continue;
-
-                std::string source(item);
-                size_t slash = source.find_last_of('/');
-                std::string name = (slash == std::string::npos) ? source : source.substr(slash + 1);
-                std::string target = std::string(dest);
-                if (target.empty() || target[target.size() - 1] != '/')
-                    target += "/";
-                target += name;
-
-                if (client->Put(source, target) == 0)
-                    failed_items += source + ",";
-            }
-
-            if (!failed_items.empty())
-            {
-                failed(res, 200, "Failed to copy: " + failed_items);
-                return;
-            }
-            success(res);
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "id", json_object_new_string(transfer_id.c_str()));
+            json_object_object_add(result, "conflicts", json_object_new_array());
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
         });
 
+        // Starts an async remote -> local copy.
         svr->Post("/__local__/copy_from_remote", [&](const Request &req, Response &res)
         {
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *items = nullptr;
             const char *dest = nullptr;
-            std::string site = last_site;
+            std::string site = ResolveSite(nullptr);
 
             if (jobj != nullptr)
             {
@@ -1017,6 +1697,133 @@ namespace HttpServer
             {
                 bad_request(res, "Required items and dest parameters missing");
                 return;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(web_transfer_mutex);
+                for (std::map<std::string, WebTransfer>::iterator it = web_transfers.begin(); it != web_transfers.end(); ++it)
+                {
+                    if (it->second.state == 0)
+                    {
+                        failed(res, 200, "Another transfer is already running");
+                        return;
+                    }
+                }
+            }
+
+            bool overwrite = false;
+            json_object *overwrite_obj = json_object_object_get(jobj, "overwrite");
+            if (overwrite_obj != nullptr)
+                overwrite = json_object_get_boolean(overwrite_obj) != 0;
+
+            CopyJob *job = new CopyJob();
+            job->site = site;
+            job->dest = dest;
+            job->to_remote = false;
+
+            ParseCopyItems(items, &job->items);
+
+            json_object *skip_obj = json_object_object_get(jobj, "skip");
+            if (skip_obj != nullptr && json_object_get_type(skip_obj) == json_type_array)
+            {
+                size_t skip_count = json_object_array_length(skip_obj);
+                for (size_t i = 0; i < skip_count; i++)
+                {
+                    const char *skipped = json_object_get_string(json_object_array_get_idx(skip_obj, i));
+                    if (skipped != nullptr)
+                        job->skip.insert(skipped);
+                }
+            }
+
+            if (!overwrite)
+            {
+                json_object *conflicts = json_object_new_array();
+                {
+                    std::lock_guard<std::mutex> lock(remote_session_mutex);
+                    std::string error;
+                    RemoteClient *client = GetRemoteSession(site, error);
+                    if (client == nullptr)
+                    {
+                        json_object_put(conflicts);
+                        delete job;
+                        failed(res, 200, error);
+                        return;
+                    }
+
+                    for (size_t i = 0; i < job->items.size(); i++)
+                    {
+                        std::string target = job->dest;
+                        if (target.empty() || target[target.size() - 1] != '/')
+                            target += "/";
+                        target += CopyItemName(job->items[i].path);
+
+                        ProbeRemoteConflicts(client, job->items[i].path, target, job->items[i].is_dir, conflicts);
+                    }
+                }
+
+                if (json_object_array_length(conflicts) > 0)
+                {
+                    delete job;
+                    RespondConflicts(res, conflicts);
+                    return;
+                }
+                json_object_put(conflicts);
+            }
+
+            job->id = NewTransferId();
+
+            std::string transfer_id = job->id;
+            pthread_t tid;
+            if (job->items.empty() || pthread_create(&tid, NULL, CopyJobThread, job) != 0)
+            {
+                FinishTransfer(transfer_id, 2, "Could not start the copy");
+                delete job;
+                failed(res, 200, "Could not start the copy");
+                return;
+            }
+            pthread_detach(tid);
+
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "id", json_object_new_string(transfer_id.c_str()));
+            json_object_object_add(result, "conflicts", json_object_new_array());
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
+
+        // Remote actions, gated in the UI by RemoteClient::SupportedActions().
+        svr->Post("/__remote__/copy", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+            json_object *items = nullptr;
+            const char *dest = nullptr;
+            std::string site = ResolveSite(nullptr);
+
+            if (jobj != nullptr)
+            {
+                items = json_object_object_get(jobj, "items");
+                dest = json_object_get_string(json_object_object_get(jobj, "dest"));
+                site = ResolveSite(json_object_get_string(json_object_object_get(jobj, "site")));
+            }
+
+            if (items == nullptr || json_object_get_type(items) != json_type_array || dest == nullptr)
+            {
+                bad_request(res, "Required items and dest parameters missing");
+                return;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(web_transfer_mutex);
+                for (std::map<std::string, WebTransfer>::iterator it = web_transfers.begin(); it != web_transfers.end(); ++it)
+                {
+                    if (it->second.state == 0)
+                    {
+                        failed(res, 200, "Another transfer is already running");
+                        return;
+                    }
+                }
             }
 
             std::lock_guard<std::mutex> lock(remote_session_mutex);
@@ -1037,14 +1844,12 @@ namespace HttpServer
                     continue;
 
                 std::string source(item);
-                size_t slash = source.find_last_of('/');
-                std::string name = (slash == std::string::npos) ? source : source.substr(slash + 1);
                 std::string target = std::string(dest);
                 if (target.empty() || target[target.size() - 1] != '/')
                     target += "/";
-                target += name;
+                target += CopyItemName(source);
 
-                if (client->Get(target, source) == 0)
+                if (client->Copy(source, target) == 0)
                     failed_items += source + ",";
             }
 
@@ -1056,7 +1861,250 @@ namespace HttpServer
             success(res);
         });
 
-        // Global settings, mirroring the native settings dialog.
+        svr->Post("/__remote__/move", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+            json_object *items = nullptr;
+            const char *dest = nullptr;
+            std::string site = ResolveSite(nullptr);
+
+            if (jobj != nullptr)
+            {
+                items = json_object_object_get(jobj, "items");
+                dest = json_object_get_string(json_object_object_get(jobj, "dest"));
+                site = ResolveSite(json_object_get_string(json_object_object_get(jobj, "site")));
+            }
+
+            if (items == nullptr || json_object_get_type(items) != json_type_array || dest == nullptr)
+            {
+                bad_request(res, "Required items and dest parameters missing");
+                return;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(web_transfer_mutex);
+                for (std::map<std::string, WebTransfer>::iterator it = web_transfers.begin(); it != web_transfers.end(); ++it)
+                {
+                    if (it->second.state == 0)
+                    {
+                        failed(res, 200, "Another transfer is already running");
+                        return;
+                    }
+                }
+            }
+
+            std::lock_guard<std::mutex> lock(remote_session_mutex);
+            std::string error;
+            RemoteClient *client = GetRemoteSession(site, error);
+            if (client == nullptr)
+            {
+                failed(res, 200, error);
+                return;
+            }
+
+            std::string failed_items;
+            size_t count = json_object_array_length(items);
+            for (size_t i = 0; i < count; i++)
+            {
+                const char *item = json_object_get_string(json_object_array_get_idx(items, i));
+                if (item == nullptr)
+                    continue;
+
+                std::string source(item);
+                std::string target = std::string(dest);
+                if (target.empty() || target[target.size() - 1] != '/')
+                    target += "/";
+                target += CopyItemName(source);
+
+                if (client->Move(source, target) == 0)
+                    failed_items += source + ",";
+            }
+
+            if (!failed_items.empty())
+            {
+                failed(res, 200, "Failed to move: " + failed_items);
+                return;
+            }
+            success(res);
+        });
+
+        svr->Post("/__remote__/newfile", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+            const char *path = nullptr;
+            std::string site = ResolveSite(nullptr);
+
+            if (jobj != nullptr)
+            {
+                path = json_object_get_string(json_object_object_get(jobj, "path"));
+                site = ResolveSite(json_object_get_string(json_object_object_get(jobj, "site")));
+            }
+
+            if (path == nullptr || path[0] == '\0')
+            {
+                bad_request(res, "Missing path");
+                return;
+            }
+
+            std::string temp_path = std::string(temp_folder) + "/remote_newfile";
+            FILE *fp = FS::Create(temp_path);
+            if (fp == nullptr)
+            {
+                failed(res, 200, "Cannot create a temporary file");
+                return;
+            }
+            FS::Close(fp);
+
+            bool ok = false;
+            std::string error;
+            {
+                std::lock_guard<std::mutex> lock(remote_session_mutex);
+                RemoteClient *client = GetRemoteSession(site, error);
+                if (client != nullptr)
+                    ok = client->Put(temp_path, path) != 0;
+            }
+            FS::Rm(temp_path);
+
+            if (!ok)
+            {
+                failed(res, 200, error.empty() ? "Cannot create this file" : error);
+                return;
+            }
+            success(res);
+        });
+
+        svr->Post("/__remote__/getContent", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+            const char *item = nullptr;
+            std::string site = ResolveSite(nullptr);
+
+            if (jobj != nullptr)
+            {
+                item = json_object_get_string(json_object_object_get(jobj, "item"));
+                site = ResolveSite(json_object_get_string(json_object_object_get(jobj, "site")));
+            }
+
+            if (item == nullptr)
+            {
+                bad_request(res, "Required item parameter missing");
+                return;
+            }
+
+            std::string temp_path = std::string(temp_folder) + "/remote_edit";
+            bool ok = false;
+            std::string error;
+            {
+                std::lock_guard<std::mutex> lock(remote_session_mutex);
+                RemoteClient *client = GetRemoteSession(site, error);
+                if (client != nullptr)
+                    ok = client->Get(temp_path, item) != 0;
+            }
+
+            std::vector<char> content;
+            if (ok)
+                content = FS::Load(temp_path);
+            FS::Rm(temp_path);
+
+            if (!ok)
+            {
+                failed(res, 200, error.empty() ? "Cannot read this file" : error);
+                return;
+            }
+
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            std::string text = content.empty() ? "" : std::string(content.data(), content.size());
+            json_object_object_add(result, "result", json_object_new_string(text.c_str()));
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
+
+        svr->Post("/__remote__/edit", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+            const char *item = nullptr;
+            const char *content = nullptr;
+            std::string site = ResolveSite(nullptr);
+
+            if (jobj != nullptr)
+            {
+                item = json_object_get_string(json_object_object_get(jobj, "item"));
+                content = json_object_get_string(json_object_object_get(jobj, "content"));
+                site = ResolveSite(json_object_get_string(json_object_object_get(jobj, "site")));
+            }
+
+            if (item == nullptr || content == nullptr)
+            {
+                bad_request(res, "Required item or content parameter missing");
+                return;
+            }
+
+            std::string temp_path = std::string(temp_folder) + "/remote_edit";
+            if (!FS::Save(temp_path, content, strlen(content)))
+            {
+                failed(res, 200, "Cannot stage the edited file");
+                return;
+            }
+
+            bool ok = false;
+            std::string error;
+            {
+                std::lock_guard<std::mutex> lock(remote_session_mutex);
+                RemoteClient *client = GetRemoteSession(site, error);
+                if (client != nullptr)
+                    ok = client->Put(temp_path, item) != 0;
+            }
+            FS::Rm(temp_path);
+
+            if (!ok)
+            {
+                failed(res, 200, error.empty() ? "Cannot save this file" : error);
+                return;
+            }
+            success(res);
+        });
+
+        svr->Get("/__local__/transfer", [&](const Request &req, Response &res)
+        {
+            std::string id = req.get_param_value("id");
+            std::lock_guard<std::mutex> lock(web_transfer_mutex);
+            std::map<std::string, WebTransfer>::iterator it = web_transfers.find(id);
+
+            if (it == web_transfers.end())
+            {
+                failed(res, 200, "Unknown transfer");
+                return;
+            }
+
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "id", json_object_new_string(id.c_str()));
+            json_object_object_add(result, "name", json_object_new_string(it->second.name.c_str()));
+            uint64_t loaded = it->second.loaded;
+            uint64_t total = it->second.total;
+            if (it->second.live && it->second.client != nullptr)
+            {
+                loaded = it->second.base + it->second.client->TransferredBytes();
+                if (total == 0)
+                    total = it->second.client->TotalBytes();
+            }
+
+            json_object_object_add(result, "loaded", json_object_new_int64((int64_t)loaded));
+            json_object_object_add(result, "total", json_object_new_int64((int64_t)total));
+            json_object_object_add(result, "state", json_object_new_int(it->second.state));
+            json_object_object_add(result, "error", json_object_new_string(it->second.error.c_str()));
+
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
+
         svr->Get("/__local__/settings", [&](const Request &req, Response &res)
                  {
             json_object *result = json_object_new_object();

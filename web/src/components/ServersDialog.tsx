@@ -40,6 +40,7 @@ export function ServersDialog({ onClose, onChanged }: ServersDialogProps) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
 
   const load = useCallback(async (keep?: string) => {
     const data = await api.listServers();
@@ -127,8 +128,8 @@ export function ServersDialog({ onClose, onChanged }: ServersDialogProps) {
   return (
     <Modal
       title="Servers"
-      subtitle="Profiles stored on the console. The active site is used for remote connections and installs."
       width="max-w-4xl"
+      panelClassName="min-h-[22rem] sm:min-h-0 [@media(max-height:520px)]:min-h-[30rem]"
       onClose={onClose}
       footer={
         <>
@@ -160,8 +161,24 @@ export function ServersDialog({ onClose, onChanged }: ServersDialogProps) {
       ) : !list ? (
         <p className="py-10 text-center text-sm text-rose-400">{error ?? "No server profiles"}</p>
       ) : (
+        <>
+        <div className="mb-3 flex items-start gap-2 rounded-lg border border-abyss-600 bg-abyss-800 px-3 py-2">
+          <p className={`min-w-0 flex-1 text-sm text-mist-300 ${showInfo ? "" : "truncate"}`}>
+            Profiles stored on the console. The active site is used for remote connections and installs.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowInfo((value) => !value)}
+            aria-label={showInfo ? "Collapse description" : "Expand description"}
+            title={showInfo ? "Collapse" : "Expand"}
+            className="shrink-0 rounded-md p-0.5 text-mist-500 transition hover:bg-white/10 hover:text-mist-100"
+          >
+            <Icon name="chevronRight" size={16} className={showInfo ? "-rotate-90" : "rotate-90"} />
+          </button>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-[15rem_1fr]">
-          <div className="max-h-[52vh] space-y-1 overflow-y-auto pr-1">
+          <div className="max-h-20 space-y-1 overflow-y-auto pr-1 sm:max-h-[52vh] [@media(max-height:520px)]:max-h-none">
             {list.sites.map((site) => {
               const active = list.active === site.name;
               const isCurrent = site.name === selected;
@@ -186,6 +203,9 @@ export function ServersDialog({ onClose, onChanged }: ServersDialogProps) {
               );
             })}
           </div>
+
+          {/* Mobile: the two blocks stack, so mark the split clearly. */}
+          <div className="my-1 h-px bg-mist-500/40 sm:hidden" />
 
           <div className="space-y-3">
             {form && profile ? (
@@ -259,6 +279,7 @@ export function ServersDialog({ onClose, onChanged }: ServersDialogProps) {
             )}
           </div>
         </div>
+        </>
       )}
     </Modal>
   );

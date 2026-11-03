@@ -78,6 +78,7 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
       title="Settings"
       subtitle="Stored on the console. Server port and web server changes apply after a restart."
       width="max-w-3xl"
+      panelClassName="min-h-[22rem] sm:min-h-0 [@media(max-height:520px)]:min-h-[30rem]"
       onClose={onClose}
       footer={
         <>
@@ -100,7 +101,7 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
       ) : !settings ? (
         <p className="py-10 text-center text-sm text-rose-400">{error ?? "No settings"}</p>
       ) : (
-        <div className="max-h-[58vh] space-y-5 overflow-y-auto pr-1">
+        <div className="max-h-[58vh] space-y-5 overflow-y-auto pr-1 [@media(max-height:520px)]:max-h-none">
           <Section title="General">
             <Field label="Language">
               <select value={settings.language} onChange={(event) => update("language", event.target.value)} className="input">

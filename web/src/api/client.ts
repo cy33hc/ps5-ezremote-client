@@ -132,6 +132,8 @@ export interface ServerProfile {
   defaultDirectory: string;
   enableRpi: boolean;
   enableDiskCache: boolean;
+  /** RemoteClient::SupportedActions() bitmask for this profile. */
+  supportedActions: number;
 }
 
 export interface ServerList {
@@ -267,14 +269,104 @@ export async function pkgInfo(item: string): Promise<PackageInfo> {
   return request<PackageInfo>("/__local__/pkg_info", { item });
 }
 
-/** Copies console-side files to the remote server (server-to-server transfer). */
-export async function remoteCopyFromLocal(site: string, items: string[], dest: string): Promise<void> {
-  await request("/__remote__/copy_from_local", { site, items, dest });
+export interface TransferState {
+  id: string;
+  name: string;
+  loaded: number;
+  total: number;
+  /** 0 running, 1 done, 2 failed */
+  state: number;
+  error: string;
 }
 
-/** Copies remote files onto the console filesystem. */
-export async function copyFromRemote(site: string, items: string[], dest: string): Promise<void> {
-  await request("/__local__/copy_from_remote", { site, items, dest });
+export interface CopyItem {
+  path: string;
+  is_dir: boolean;
+}
+
+export interface CopyStart {
+  /** Non-empty when the copy was not started. */
+  id: string;
+  /** Names that already exist at the destination. */
+  conflicts: string[];
+}
+
+async function startCopy(
+  url: string,
+  site: string,
+  items: CopyItem[],
+  dest: string,
+  overwrite: boolean,
+  skip: string[],
+): Promise<CopyStart> {
+  const data = await request<{ id?: string; conflicts?: string[] }>(url, { site, items, dest, overwrite, skip });
+  return { id: data.id ?? "", conflicts: data.conflicts ?? [] };
+}
+
+/** Starts a console-side copy to the remote server; returns the transfer id. */
+export async function remoteCopyFromLocal(site: string, items: CopyItem[], dest: string, overwrite: boolean, skip: string[] = []): Promise<CopyStart> {
+  return startCopy("/__remote__/copy_from_local", site, items, dest, overwrite, skip);
+}
+
+/** Starts a console-side copy from the remote server; returns the transfer id. */
+export async function copyFromRemote(site: string, items: CopyItem[], dest: string, overwrite: boolean, skip: string[] = []): Promise<CopyStart> {
+  return startCopy("/__local__/copy_from_remote", site, items, dest, overwrite, skip);
+}
+
+export interface BgDownload {
+  path: string;
+  loaded: number;
+  size: number;
+  /** 0 Pending, 1 Downloading, 2 Resumed, 3 Failed, 4 Success */
+  state: number;
+}
+
+export async function bgDownloads(): Promise<BgDownload[]> {
+  const data = await request<{ result: BgDownload[] }>("/__local__/bg_downloads");
+  return Array.isArray(data.result) ? data.result : [];
+}
+
+/** Empty string when the ezRemote server is not reachable. */
+export async function ezremoteVersion(): Promise<string> {
+  const data = await request<{ version?: string }>("/__local__/ezremote_server/version");
+  return typeof data.version === "string" ? data.version : "";
+}
+
+export async function ezremoteStop(): Promise<void> {
+  await request("/__local__/ezremote_server/stop", {});
+}
+
+export async function ezremoteRestart(): Promise<void> {
+  await request("/__local__/ezremote_server/restart", {});
+}
+
+export async function clearBgDownloads(): Promise<void> {
+  await request("/__local__/bg_downloads/clear", {});
+}
+
+export async function remoteCopy(site: string, items: string[], dest: string): Promise<void> {
+  await request("/__remote__/copy", { site, items, dest });
+}
+
+export async function remoteMove(site: string, items: string[], dest: string): Promise<void> {
+  await request("/__remote__/move", { site, items, dest });
+}
+
+export async function remoteNewFile(site: string, path: string): Promise<void> {
+  await request("/__remote__/newfile", { site, path });
+}
+
+export async function remoteGetContent(site: string, item: string): Promise<string> {
+  const data = await request<{ result: string }>("/__remote__/getContent", { site, item });
+  return typeof data.result === "string" ? data.result : "";
+}
+
+export async function remoteEdit(site: string, item: string, content: string): Promise<void> {
+  await request("/__remote__/edit", { site, item, content });
+}
+
+export async function transferStatus(id: string): Promise<TransferState> {
+  return request<TransferState>(`/__local__/transfer?id=${encodeURIComponent(id)}`);
 }
 
 export function downloadFileUrl(path: string): string {

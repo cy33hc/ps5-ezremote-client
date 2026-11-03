@@ -4,7 +4,6 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import * as api from "./api/client";
 import type { DirEntry } from "./api/client";
 import { EditorDialog } from "./components/EditorDialog";
-import { FavoritesDialog } from "./components/FavoritesDialog";
 import { FileTable } from "./components/FileTable";
 import type { Sort, SortKey } from "./components/FileTable";
 import { Icon } from "./components/Icon";
@@ -91,8 +90,28 @@ export default function App() {
   const [remoteFilter, setRemoteFilter] = useState("");
 
   const [activePane, setActivePane] = useState<Pane>("local");
+  const [localSelectMode, setLocalSelectMode] = useState(false);
+  const [remoteSelectMode, setRemoteSelectMode] = useState(false);
   const [remoteEnabled, setRemoteEnabled] = useState(true);
+  const [remoteClipboard, setRemoteClipboard] = useState<{ mode: "copy" | "cut"; items: string[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [transfer, setTransfer] = useState<api.TransferState | null>(null);
+  const [bgOpen, setBgOpen] = useState(false);
+  const [bgList, setBgList] = useState<api.BgDownload[]>([]);
+  const [ezremoteVersion, setEzremoteVersion] = useState<string | null>(null);
+  const [ezMenu, setEzMenu] = useState<{ x: number; y: number } | null>(null);
+  const [queuedNotice, setQueuedNotice] = useState<string | null>(null);
+  const knownBg = useRef<Set<string> | null>(null);
+  const noticeTimer = useRef<number | null>(null);
+  const [conflict, setConflict] = useState<{
+    toRemote: boolean;
+    items: api.CopyItem[];
+    conflicts: string[];
+    index: number;
+    skipped: string[];
+  } | null>(null);
+  const transferBusy = transfer !== null && transfer.state === 0;
+  const activeBg = bgList.filter((item) => item.state !== 3 && item.state !== 4).length;
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [clipboard, setClipboard] = useState<{ mode: "copy" | "cut"; items: string[] } | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -101,16 +120,14 @@ export default function App() {
   const [urlMode, setUrlMode] = useState<UrlMode | null>(null);
   const [urlPrefill, setUrlPrefill] = useState("");
   const [serversOpen, setServersOpen] = useState(false);
-  const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [editor, setEditor] = useState<{ path: string; name: string } | null>(null);
+  const [editor, setEditor] = useState<{ path: string; name: string; remote: boolean } | null>(null);
   const [properties, setProperties] = useState<DirEntry | null>(null);
   const [pkgView, setPkgView] = useState<{ path: string; name: string } | null>(null);
   const [viewer, setViewer] = useState<{ src: string; name: string } | null>(null);
   const [serverInfo, setServerInfo] = useState<api.ServerList | null>(null);
 
   const uploadRef = useRef<HTMLInputElement>(null);
-  const remoteUploadRef = useRef<HTMLInputElement>(null);
   const toastId = useRef(0);
 
   const notify = useCallback((message: string, tone: ToastTone = "info") => {
@@ -165,6 +182,56 @@ export default function App() {
   useEffect(() => {
     void loadServerInfo();
   }, [loadServerInfo]);
+
+  // Background downloads live in the ezRemote server; poll while the panel is
+  // open, and slowly otherwise so the header badge stays current.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      // The status button follows /version alone.
+      try {
+        const version = await api.ezremoteVersion();
+        if (!cancelled) setEzremoteVersion(version);
+      } catch {
+        if (!cancelled) setEzremoteVersion("");
+      }
+
+      // The queue listing is independent of the status probe.
+      try {
+        const list = await api.bgDownloads();
+        if (cancelled) return;
+        setBgList(list);
+
+        // A restart reports an empty queue; ignoring it keeps the baseline so
+        // the repopulated list is not mistaken for newly queued files.
+        if (list.length === 0) return;
+
+        const paths = new Set(list.map((item) => item.path));
+        if (knownBg.current === null) {
+          knownBg.current = paths;
+        } else {
+          const added = list.filter((item) => !knownBg.current!.has(item.path));
+          knownBg.current = paths;
+
+          if (added.length > 0) {
+            const name = added[0].path.substring(added[0].path.lastIndexOf("/") + 1);
+            setQueuedNotice(added.length === 1 ? `${name} queued` : `${added.length} files queued`);
+            if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
+            noticeTimer.current = window.setTimeout(() => setQueuedNotice(null), 6000);
+          }
+        }
+      } catch {
+        // Keep the last known list.
+      }
+    };
+
+    void load();
+    const timer = window.setInterval(load, bgOpen ? 1500 : 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [bgOpen]);
 
   // Connect the remote pane once a profile is known (and only once per failure).
   useEffect(() => {
@@ -266,22 +333,6 @@ export default function App() {
       }
     },
     [loadRemote, notify, remotePath],
-  );
-
-  const crossRun = useCallback(
-    async (label: string, action: () => Promise<void>) => {
-      setBusy(label);
-      try {
-        await action();
-        refresh();
-        await loadRemote(remotePath);
-      } catch (error) {
-        notify(error instanceof Error ? error.message : "Transfer failed", "error");
-      } finally {
-        setBusy(null);
-      }
-    },
-    [loadRemote, notify, refresh, remotePath],
   );
 
   /* ---------- local actions ---------- */
@@ -419,7 +470,7 @@ export default function App() {
       notify("Only text files can be opened in the editor", "error");
       return;
     }
-    setEditor({ path: joinPath(path, entry.name), name: entry.name });
+    setEditor({ path: joinPath(path, entry.name), name: entry.name, remote: false });
   };
 
   const openPackageInfo = () => {
@@ -442,14 +493,43 @@ export default function App() {
     notify(`Cut ${localSelected.length} item${localSelected.length > 1 ? "s" : ""}`, "info");
   };
 
+  // Windows-style copy name: "file.txt" -> "file (2).txt", "folder" -> "folder (2)".
+  const uniqueCopyName = (name: string, taken: Set<string>) => {
+    const dot = name.lastIndexOf(".");
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : "";
+    for (let index = 2; ; index += 1) {
+      const candidate = `${base} (${index})${ext}`;
+      if (!taken.has(candidate)) return candidate;
+    }
+  };
+
   const pasteClipboard = () => {
     if (!clipboard) return;
     const { mode, items } = clipboard;
+    const sameDirectory = items.every((item) => item.substring(0, item.lastIndexOf("/")) === path);
+
     void run(mode === "copy" ? "Copying…" : "Moving…", async () => {
-      if (mode === "copy") await api.copy(items, path);
-      else await api.move(items, path);
+      if (mode === "copy" && sameDirectory) {
+        // Copying beside the originals always collides; mimic Explorer and
+        // create "name (2)" rather than overwriting.
+        const taken = new Set(entries.map((entry) => entry.name));
+        for (const source of items) {
+          const name = source.substring(source.lastIndexOf("/") + 1);
+          // The original is always present here, so a copy must be renamed.
+          taken.add(name);
+          const target = uniqueCopyName(name, taken);
+          taken.add(target);
+          await api.copy([source], path, target);
+        }
+      } else if (mode === "copy") {
+        await api.copy(items, path);
+      } else {
+        await api.move(items, path);
+      }
       if (mode === "cut") setClipboard(null);
       notify(`Pasted ${items.length} item${items.length > 1 ? "s" : ""}`, "success");
+      refresh();
     });
   };
 
@@ -483,18 +563,6 @@ export default function App() {
   };
 
   /* ---------- remote actions ---------- */
-
-  const remoteDownload = () => {
-    if (!serverInfo) {
-      notify("Select a server profile first", "error");
-      return;
-    }
-    if (remoteSelected.length !== 1 || remoteSelected[0].type !== "file") {
-      notify("Select one file to download", "error");
-      return;
-    }
-    api.triggerDownload(api.remoteDownloadUrl(serverInfo.active, joinPath(remotePath, remoteSelected[0].name)));
-  };
 
   const remoteNewFolder = () => {
     if (!serverInfo) return;
@@ -551,37 +619,49 @@ export default function App() {
     });
   };
 
-  const uploadRemoteFiles = async (files: FileList) => {
-    if (!serverInfo) {
-      notify("Select a server profile first", "error");
+  const remoteNewFile = () => {
+    if (!serverInfo) return;
+    setPromptState({
+      title: "New remote file",
+      label: "File name",
+      initial: "",
+      confirmLabel: "Create",
+      onSubmit: (value) => {
+        const name = value.trim();
+        if (!name) return;
+        void runRemote("Creating file…", () => api.remoteNewFile(serverInfo.active, joinPath(remotePath, name)));
+      },
+    });
+  };
+
+  const remoteEditFile = () => {
+    if (remoteSelected.length !== 1 || remoteSelected[0].type === "dir") {
+      notify("Select one text file to edit", "error");
       return;
     }
-    const chunkSize = 4 * 1024 * 1024;
-    for (const file of Array.from(files)) {
-      setBusy(`Uploading ${file.name}…`);
-      try {
-        const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-        const chunks = Math.max(1, Math.ceil(file.size / chunkSize));
-        for (let index = 0; index < chunks; index += 1) {
-          const start = index * chunkSize;
-          const form = new FormData();
-          form.append("site", serverInfo.active);
-          form.append("path", remotePath);
-          form.append("_uploadId", uploadId);
-          form.append("_chunkSize", String(chunkSize));
-          form.append("_chunkNumber", String(index));
-          form.append("_totalSize", String(file.size));
-          form.append("file", file.slice(start, Math.min(start + chunkSize, file.size)), file.name);
-          await api.uploadRemoteChunk(form);
-        }
-        notify(`Uploaded ${file.name}`, "success");
-      } catch (error) {
-        notify(error instanceof Error ? error.message : "Upload failed", "error");
-      } finally {
-        setBusy(null);
-      }
+    const entry = remoteSelected[0];
+    if (!TEXT_FILE.test(entry.name)) {
+      notify("Only text files can be opened in the editor", "error");
+      return;
     }
-    await loadRemote(remotePath);
+    setEditor({ path: joinPath(remotePath, entry.name), name: entry.name, remote: true });
+  };
+
+  const copyRemoteItems = (mode: "copy" | "cut") => {
+    if (remoteSelected.length === 0) return;
+    setRemoteClipboard({ mode, items: remoteSelected.map((entry) => joinPath(remotePath, entry.name)) });
+    notify(`${mode === "copy" ? "Copied" : "Cut"} ${remoteSelected.length} item${remoteSelected.length > 1 ? "s" : ""}`, "info");
+  };
+
+  const pasteRemoteItems = () => {
+    if (!remoteClipboard || !serverInfo) return;
+    const { mode, items } = remoteClipboard;
+    void runRemote(mode === "copy" ? "Copying…" : "Moving…", async () => {
+      if (mode === "copy") await api.remoteCopy(serverInfo.active, items, remotePath);
+      else await api.remoteMove(serverInfo.active, items, remotePath);
+      setRemoteClipboard(null);
+      notify("Pasted", "success");
+    });
   };
 
   const disconnectRemote = async () => {
@@ -596,33 +676,141 @@ export default function App() {
     }
   };
 
-  /* ---------- cross-pane ---------- */
+  const followTransfer = useCallback(
+    async (id: string) => {
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        try {
+          const state = await api.transferStatus(id);
+          setTransfer(state);
 
-  const localToRemote = (move: boolean) => {
-    if (!serverInfo) {
-      notify("Select a server profile first", "error");
-      return;
-    }
-    const items = localSelected.map((entry) => joinPath(path, entry.name));
-    if (items.length === 0) return;
-    void crossRun(move ? "Moving to remote…" : "Copying to remote…", async () => {
-      await api.remoteCopyFromLocal(serverInfo.active, items, remotePath);
-      if (move) await api.remove(items);
-    });
-  };
+          if (state.state === 0) continue;
 
-  const remoteToLocal = (move: boolean) => {
-    if (!serverInfo) {
-      notify("Select a server profile first", "error");
-      return;
-    }
-    const items = remoteSelected.map((entry) => joinPath(remotePath, entry.name));
-    if (items.length === 0) return;
-    void crossRun(move ? "Moving to local…" : "Copying to local…", async () => {
-      await api.copyFromRemote(serverInfo.active, items, path);
-      if (move) await api.remoteRemove(serverInfo.active, items, []);
-    });
-  };
+          if (state.state === 1) {
+            notify("Copied", "success");
+          } else {
+            notify(state.error || "Transfer failed", "error");
+          }
+
+          refresh();
+          await loadRemote(remotePath);
+          window.setTimeout(() => setTransfer(null), 4000);
+          return;
+        } catch (error) {
+          notify(error instanceof Error ? error.message : "Transfer failed", "error");
+          setTransfer(null);
+          return;
+        }
+      }
+    },
+    [loadRemote, notify, refresh, remotePath],
+  );
+
+  const startCopy = useCallback(
+    async (toRemote: boolean, items: api.CopyItem[], overwrite: boolean, skip: string[] = []) => {
+      if (!serverInfo) return;
+
+      const result = toRemote
+        ? await api.remoteCopyFromLocal(serverInfo.active, items, remotePath, overwrite, skip)
+        : await api.copyFromRemote(serverInfo.active, items, path, overwrite, skip);
+
+      if (!result.id) {
+        notify("Could not start the transfer", "error");
+        return;
+      }
+
+      const source = toRemote ? path : remotePath;
+      setTransfer({
+        id: result.id,
+        name: items.length === 1 ? joinPath(source, items[0].path.substring(items[0].path.lastIndexOf("/") + 1)) : `${items.length} items`,
+        loaded: 0,
+        total: 0,
+        state: 0,
+        error: "",
+      });
+      void followTransfer(result.id);
+    },
+    [followTransfer, notify, path, remotePath, serverInfo],
+  );
+
+  const startCross = useCallback(
+    async (toRemote: boolean) => {
+      if (!serverInfo) {
+        notify("Select a server profile first", "error");
+        return;
+      }
+      if (transferBusy) {
+        notify("A transfer is already running — wait for it to finish", "error");
+        return;
+      }
+
+      const items: api.CopyItem[] = toRemote
+        ? localSelected.map((entry) => ({ path: joinPath(path, entry.name), is_dir: entry.type === "dir" }))
+        : remoteSelected.map((entry) => ({ path: joinPath(remotePath, entry.name), is_dir: entry.type === "dir" }));
+
+      if (items.length === 0) {
+        notify("Select something to transfer", "error");
+        return;
+      }
+
+      try {
+        // Probe first: the server reports which destinations already exist.
+        const probe = toRemote
+          ? await api.remoteCopyFromLocal(serverInfo.active, items, remotePath, false)
+          : await api.copyFromRemote(serverInfo.active, items, path, false);
+
+        if (probe.conflicts.length > 0) {
+          setConflict({ toRemote, items, conflicts: probe.conflicts, index: 0, skipped: [] });
+          return;
+        }
+
+        if (!probe.id) {
+          notify("Could not start the transfer", "error");
+          return;
+        }
+
+        const source = toRemote ? path : remotePath;
+        setTransfer({
+          id: probe.id,
+          name: items.length === 1 ? joinPath(source, items[0].path.substring(items[0].path.lastIndexOf("/") + 1)) : `${items.length} items`,
+          loaded: 0,
+          total: 0,
+          state: 0,
+          error: "",
+        });
+        void followTransfer(probe.id);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "Transfer failed", "error");
+      }
+    },
+    [followTransfer, localSelected, notify, path, remotePath, remoteSelected, serverInfo, transferBusy],
+  );
+
+  // Resolve one conflict; "always" covers the remaining files of this transfer only.
+  const resolveConflict = useCallback(
+    (choice: "skip" | "overwrite" | "always") => {
+      if (!conflict) return;
+
+      const { toRemote, items, conflicts, index, skipped } = conflict;
+      const nextSkipped = choice === "skip" ? [...skipped, conflicts[index]] : skipped;
+      const nextIndex = choice === "always" ? conflicts.length : index + 1;
+
+      if (nextIndex < conflicts.length) {
+        setConflict({ ...conflict, index: nextIndex, skipped: nextSkipped });
+        return;
+      }
+
+      setConflict(null);
+
+      void startCopy(toRemote, items, true, nextSkipped).catch((error: unknown) =>
+        notify(error instanceof Error ? error.message : "Transfer failed", "error"),
+      );
+    },
+    [conflict, notify, startCopy],
+  );
+
+  const localToRemote = () => void startCross(true);
+  const remoteToLocal = () => void startCross(false);
 
   /* ---------- menus ---------- */
 
@@ -653,8 +841,7 @@ export default function App() {
       }
       items.push({ label: "Compress to zip", icon: "package", onSelect: compressSelection });
       items.push({ separator: true });
-      items.push({ label: "Copy to remote", icon: "copy", onSelect: () => localToRemote(false), disabled: !serverInfo || !remotePath });
-      items.push({ label: "Move to remote", icon: "cut", onSelect: () => localToRemote(true), disabled: !serverInfo || !remotePath });
+      items.push({ label: "Copy to remote", icon: "copy", onSelect: localToRemote, disabled: !serverInfo || !remotePath || !canRemote(RA.UPLOAD) || transferBusy });
       items.push({ separator: true });
       items.push({ label: "Cut", icon: "cut", onSelect: cutSelection });
       items.push({ label: "Copy", icon: "copy", onSelect: copySelection });
@@ -673,16 +860,34 @@ export default function App() {
     items.push({ separator: true });
     items.push({ label: "Install from URL", icon: "link", onSelect: () => { setUrlPrefill(""); setUrlMode("install"); } });
     items.push({ label: "Download from URL", icon: "link", onSelect: () => { setUrlPrefill(""); setUrlMode("download"); } });
-    items.push({ label: "Favourites", icon: "star", onSelect: () => setFavoritesOpen(true) });
     return items;
   };
+
+  const RA = {
+    CUT: 1,
+    COPY: 2,
+    PASTE: 4,
+    DELETE: 8,
+    RENAME: 16,
+    NEW_FOLDER: 32,
+    DOWNLOAD: 64,
+    UPLOAD: 128,
+    INSTALL: 256,
+    EDIT: 512,
+    NEW_FILE: 1024,
+    EXTRACT: 2048,
+  } as const;
+
+  // Unknown capabilities (older backend) fall back to "all allowed".
+  const canRemote = (flag: number) => ((activeProfile?.supportedActions ?? 0x1fff) & flag) !== 0;
 
   const remoteMenu = (entry: DirEntry | null): MenuItem[] => {
     const items: MenuItem[] = [];
     if (entry) {
       if (entry.type === "dir") items.push({ label: "Open", icon: "folder", onSelect: () => void loadRemote(joinPath(remotePath, entry.name)) });
       else {
-        items.push({ label: "Download", icon: "download", onSelect: remoteDownload });
+        if (TEXT_FILE.test(entry.name))
+          items.push({ label: "Edit", icon: "text", onSelect: remoteEditFile, disabled: !canRemote(RA.EDIT) });
         if (IMAGE_FILE.test(entry.name) && serverInfo)
           items.push({
             label: "Preview image",
@@ -691,17 +896,23 @@ export default function App() {
           });
       }
       items.push({ separator: true });
-      items.push({ label: "Copy to local", icon: "copy", onSelect: () => remoteToLocal(false), disabled: !serverInfo });
-      items.push({ label: "Move to local", icon: "cut", onSelect: () => remoteToLocal(true), disabled: !serverInfo });
+      items.push({ label: "Copy to local", icon: "copy", onSelect: remoteToLocal, disabled: !serverInfo || !canRemote(RA.DOWNLOAD) || transferBusy });
       items.push({ separator: true });
-      items.push({ label: "Rename", icon: "rename", onSelect: remoteRename });
-      items.push({ label: "Delete", icon: "trash", danger: true, onSelect: remoteDelete });
+      items.push({ label: "Cut", icon: "cut", onSelect: () => copyRemoteItems("cut"), disabled: !canRemote(RA.CUT) || transferBusy });
+      items.push({ label: "Copy", icon: "copy", onSelect: () => copyRemoteItems("copy"), disabled: !canRemote(RA.COPY) || transferBusy });
+      if (remoteClipboard)
+        items.push({ label: "Paste", icon: "paste", onSelect: pasteRemoteItems, disabled: !canRemote(RA.PASTE) || transferBusy });
+      items.push({ separator: true });
+      items.push({ label: "Rename", icon: "rename", onSelect: remoteRename, disabled: !canRemote(RA.RENAME) || transferBusy });
+      items.push({ label: "Delete", icon: "trash", danger: true, onSelect: remoteDelete, disabled: !canRemote(RA.DELETE) || transferBusy });
       items.push({ label: "Properties", icon: "info", onSelect: () => setProperties(remoteSelected[0] ?? entry) });
       return items;
     }
 
-    items.push({ label: "New folder", icon: "folderPlus", onSelect: remoteNewFolder, disabled: !serverInfo });
-    items.push({ label: "Upload", icon: "upload", onSelect: () => remoteUploadRef.current?.click(), disabled: !serverInfo });
+    items.push({ label: "New folder", icon: "folderPlus", onSelect: remoteNewFolder, disabled: !serverInfo || !canRemote(RA.NEW_FOLDER) || transferBusy });
+    items.push({ label: "New file", icon: "file", onSelect: remoteNewFile, disabled: !serverInfo || !canRemote(RA.NEW_FILE) || transferBusy });
+    if (remoteClipboard)
+      items.push({ label: "Paste", icon: "paste", onSelect: pasteRemoteItems, disabled: !canRemote(RA.PASTE) || transferBusy });
     items.push({ label: "Refresh", icon: "refresh", onSelect: () => void loadRemote(remotePath), disabled: !serverInfo });
     items.push({ label: "Select all", icon: "selectAll", onSelect: toggleAll(setRemoteSelection, remoteVisible) });
     items.push({ separator: true });
@@ -712,13 +923,13 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       <header className="border-b border-abyss-600 bg-abyss-900">
-        <div className="flex items-center gap-3 px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:flex-nowrap">
           <div className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 text-abyss-950 shadow-lg shadow-accent-500/20">
-              <Icon name="home" size={16} />
+            <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 text-abyss-950 shadow-lg shadow-accent-500/20">
+              <Icon name="home" size={20} />
             </span>
             <div className="min-w-0 leading-tight">
-              <p className="text-sm font-semibold tracking-tight">ezRemote Client</p>
+              <p className="text-2xl font-semibold tracking-tight">ezRemote Client</p>
               <p className="max-w-[60vw] truncate text-[13px] font-medium text-mist-300" title={activeProfile?.server ?? ""}>
                 {serverInfo
                   ? `${serverInfo.active} · ${serverInfo.clientTypes[activeProfile?.type ?? -1] ?? "unset"}${
@@ -728,15 +939,42 @@ export default function App() {
               </p>
             </div>
           </div>
-          <div className="ml-auto flex items-center gap-1.5">
-            <HeaderButton icon="star" label="Favourites" onClick={() => setFavoritesOpen(true)} />
+          <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto">
+            <button
+              type="button"
+              onClick={(event) => setEzMenu({ x: event.clientX, y: event.clientY })}
+              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition hover:brightness-125 ${
+                ezremoteVersion === null
+                  ? "border-abyss-600 bg-abyss-800 text-mist-500"
+                  : ezremoteVersion
+                    ? "border-mint-400/25 bg-mint-400/10 text-mint-400"
+                    : "border-rose-400/25 bg-rose-400/10 text-rose-400"
+              }`}
+              title="ezRemote server state"
+            >
+              <span className={`size-1.5 rounded-full ${ezremoteVersion ? "bg-mint-400" : ezremoteVersion === "" ? "bg-rose-400" : "bg-mist-500"}`} />
+              <span className="hidden lg:inline">{ezremoteVersion ? `ezRemote Server v${ezremoteVersion}` : ezremoteVersion === "" ? "ezRemote Server offline" : "ezRemote Server …"}</span>
+              <Icon name="chevronRight" size={13} className="rotate-90 opacity-70" />
+            </button>
+            {queuedNotice ? (
+              <span className="max-w-[18rem] truncate rounded-full border border-accent-500/40 bg-accent-500/10 px-2.5 py-1 text-xs font-medium text-accent-200" title={queuedNotice}>
+                {queuedNotice}
+              </span>
+            ) : null}
+            <HeaderButton
+              icon="download"
+              label="Downloads"
+              onClick={() => setBgOpen(true)}
+              badge={activeBg}
+              busy={bgList.some((item) => item.state === 1 || item.state === 2)}
+            />
             <HeaderButton icon="server" label="Servers" onClick={() => setServersOpen(true)} />
             <HeaderButton icon="settings" label="Settings" onClick={() => setSettingsOpen(true)} />
           </div>
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 gap-2.5 p-2.5 lg:grid-cols-2">
+      <main className="grid min-h-0 flex-1 gap-2.5 overflow-y-auto p-2.5 lg:grid-cols-2 lg:overflow-visible">
         <Panel
           label="Local"
           path={path}
@@ -749,8 +987,10 @@ export default function App() {
           onActivate={() => setActivePane("local")}
           onFilter={setFilter}
           onSort={changeSort(setSort)}
-          onToggle={toggle(setSelection)}
+          onToggle={(name, additive) => toggle(setSelection)(name, additive || localSelectMode)}
           onToggleAll={toggleAll(setSelection, localVisible)}
+          selectMode={localSelectMode}
+          onToggleSelectMode={() => setLocalSelectMode((value) => !value)}
           onOpen={(entry) => (entry.type === "dir" ? setPath(joinPath(path, entry.name)) : undefined)}
           onContext={(entry, event) => openMenu("local", entry, event)}
           onNavigate={setPath}
@@ -769,8 +1009,10 @@ export default function App() {
           onActivate={() => setActivePane("remote")}
           onFilter={setRemoteFilter}
           onSort={changeSort(setRemoteSort)}
-          onToggle={toggle(setRemoteSelection)}
+          onToggle={(name, additive) => toggle(setRemoteSelection)(name, additive || remoteSelectMode)}
           onToggleAll={toggleAll(setRemoteSelection, remoteVisible)}
+          selectMode={remoteSelectMode}
+          onToggleSelectMode={() => setRemoteSelectMode((value) => !value)}
           onOpen={(entry) => (entry.type === "dir" ? void loadRemote(joinPath(remotePath, entry.name)) : undefined)}
           onContext={(entry, event) => openMenu("remote", entry, event)}
           onNavigate={(target) => void loadRemote(target)}
@@ -778,6 +1020,8 @@ export default function App() {
           onRetry={() => { setRemoteEnabled(true); void loadRemote(""); }}
         />
       </main>
+
+
 
       <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-abyss-600 px-4 py-1.5 text-[11px] text-mist-500">
         <span className="font-medium text-mist-300">{activePane === "local" ? "Local" : "Remote"}</span>
@@ -793,7 +1037,6 @@ export default function App() {
       </footer>
 
       <input ref={uploadRef} type="file" multiple hidden onChange={(event) => { if (event.target.files?.length) void uploadFiles(event.target.files); event.target.value = ""; }} />
-      <input ref={remoteUploadRef} type="file" multiple hidden onChange={(event) => { if (event.target.files?.length) void uploadRemoteFiles(event.target.files); event.target.value = ""; }} />
 
       {menu ? (
         <ContextMenu
@@ -829,8 +1072,87 @@ export default function App() {
           }}
         />
       ) : null}
-      {editor ? <EditorDialog item={editor.path} name={editor.name} onClose={() => setEditor(null)} onSaved={refresh} /> : null}
+      {editor ? (
+        <EditorDialog
+          item={editor.path}
+          name={editor.name}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            refresh();
+            if (editor.remote) void loadRemote(remotePath);
+          }}
+          load={editor.remote && serverInfo ? (item) => api.remoteGetContent(serverInfo.active, item) : undefined}
+          save={editor.remote && serverInfo ? (item, content) => api.remoteEdit(serverInfo.active, item, content) : undefined}
+        />
+      ) : null}
       {properties ? <PropertiesDialog entry={properties} path={activePane === "local" ? path : remotePath} onClose={() => setProperties(null)} /> : null}
+      {ezMenu ? (
+        <>
+          <div className="fixed inset-0 z-40" onMouseDown={() => setEzMenu(null)} />
+          <div
+            className="fixed z-50 w-56 rounded-xl border border-abyss-600 bg-abyss-900/95 p-1 shadow-2xl backdrop-blur"
+            style={{ left: Math.max(8, ezMenu.x - 190), top: ezMenu.y + 10 }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setEzMenu(null);
+                void api
+                  .ezremoteRestart()
+                  .then(() => notify("Restarting the ezRemote server", "info"))
+                  .catch((error: unknown) => notify(error instanceof Error ? error.message : "Restart failed", "error"));
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-mist-300 hover:bg-white/5 hover:text-mist-100"
+            >
+              <Icon name="refresh" size={14} />
+              Restart ezRemote server
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEzMenu(null);
+                void api
+                  .ezremoteStop()
+                  .then(() => notify("ezRemote server stopped", "info"))
+                  .catch((error: unknown) => notify(error instanceof Error ? error.message : "Stop failed", "error"));
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-rose-400 hover:bg-rose-400/10"
+            >
+              <Icon name="close" size={14} />
+              Stop ezRemote server
+            </button>
+          </div>
+        </>
+      ) : null}
+      {transfer ? <TransferDialog transfer={transfer} onClose={() => setTransfer(null)} /> : null}
+      {bgOpen ? (
+        <BackgroundDownloadsDialog
+          downloads={bgList}
+          onClose={() => setBgOpen(false)}
+          onClear={() =>
+            void (async () => {
+              try {
+                await api.clearBgDownloads();
+                setBgList(await api.bgDownloads());
+                notify("Download history cleared", "success");
+              } catch (error) {
+                notify(error instanceof Error ? error.message : "Could not clear history", "error");
+              }
+            })()
+          }
+        />
+      ) : null}
+      {conflict ? (
+        <ConflictDialog
+          name={conflict.conflicts[conflict.index]}
+          index={conflict.index}
+          total={conflict.conflicts.length}
+          onClose={() => setConflict(null)}
+          onSkip={() => resolveConflict("skip")}
+          onOverwrite={() => resolveConflict("overwrite")}
+          onAlways={() => resolveConflict("always")}
+        />
+      ) : null}
       {pkgView ? (
         <PackageInfoDialog
           item={pkgView.path}
@@ -847,13 +1169,6 @@ export default function App() {
         />
       ) : null}
       {viewer ? <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} /> : null}
-      {favoritesOpen ? (
-        <FavoritesDialog
-          onClose={() => setFavoritesOpen(false)}
-          onInstall={(url) => { setUrlPrefill(url); setUrlMode("install"); setFavoritesOpen(false); }}
-          onDownload={(url) => { setUrlPrefill(url); setUrlMode("download"); setFavoritesOpen(false); }}
-        />
-      ) : null}
       {settingsOpen ? <SettingsDialog onClose={() => setSettingsOpen(false)} onSaved={() => void loadServerInfo()} /> : null}
       {serversOpen ? (
         <ServersDialog
@@ -882,15 +1197,32 @@ export default function App() {
   );
 }
 
-function HeaderButton({ icon, label, onClick }: { icon: IconName; label: string; onClick: () => void }) {
+function HeaderButton({
+  icon,
+  label,
+  onClick,
+  badge,
+  busy,
+}: {
+  icon: IconName;
+  label: string;
+  onClick: () => void;
+  badge?: number;
+  busy?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1.5 rounded-lg border border-abyss-600 px-2.5 py-1.5 text-xs font-medium text-mist-300 transition hover:border-white/20 hover:bg-white/5 hover:text-mist-100"
+      className="relative flex items-center gap-1.5 rounded-lg border border-abyss-600 px-2.5 py-1.5 text-sm font-medium text-mist-300 transition hover:border-white/20 hover:bg-white/5 hover:text-mist-100"
     >
-      <Icon name={icon} size={15} />
-      <span className="hidden sm:inline">{label}</span>
+      <Icon name={icon} size={18} className={busy ? "animate-pulse text-accent-200" : undefined} />
+      <span className="hidden lg:inline">{label}</span>
+      {badge ? (
+        <span className="absolute -top-1.5 -right-1.5 min-w-4 rounded-full bg-accent-500 px-1 text-[10px] font-semibold leading-4 text-white">
+          {badge}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -914,6 +1246,8 @@ function Panel({
   onContext,
   onNavigate,
   onRefresh,
+  selectMode,
+  onToggleSelectMode,
   onRetry,
 }: {
   label: string;
@@ -934,6 +1268,8 @@ function Panel({
   onContext: (entry: DirEntry | null, event: ReactMouseEvent) => void;
   onNavigate: (path: string) => void;
   onRefresh: () => void;
+  selectMode?: boolean;
+  onToggleSelectMode?: () => void;
   onRetry?: () => void;
 }) {
   const crumbs = breadcrumbs(path);
@@ -941,7 +1277,7 @@ function Panel({
   return (
     <section
       onMouseDown={onActivate}
-      className={`flex min-h-0 flex-col gap-2 rounded-2xl border p-2.5 transition ${
+      className={`flex min-h-[18rem] flex-col gap-2 rounded-2xl border p-2.5 transition lg:min-h-0 ${
         active ? "border-accent-500 bg-abyss-900" : "border-abyss-600 bg-abyss-900"
       }`}
     >
@@ -971,6 +1307,19 @@ function Panel({
           ))}
         </nav>
         <span className="text-[11px] text-mist-500">{entries.length}</span>
+        {onToggleSelectMode ? (
+          <button
+            type="button"
+            onClick={onToggleSelectMode}
+            title={selectMode ? "Stop selecting" : "Select multiple items"}
+            aria-pressed={selectMode}
+            className={`rounded-md p-1 transition ${
+              selectMode ? "bg-accent-500/20 text-accent-200" : "text-mist-500 hover:bg-white/10 hover:text-mist-100"
+            }`}
+          >
+            <Icon name="selectAll" size={14} />
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onRefresh}
@@ -1013,6 +1362,176 @@ function Panel({
         onContext={onContext}
       />
     </section>
+  );
+}
+
+function BackgroundDownloadsDialog({
+  downloads,
+  onClose,
+  onClear,
+}: {
+  downloads: api.BgDownload[];
+  onClose: () => void;
+  onClear: () => void;
+}) {
+  const labels = ["Pending", "Downloading", "Resumed", "Failed", "Success"];
+
+  return (
+    <Modal
+      title="Background downloads"
+      subtitle={downloads.length > 0 ? `${downloads.length} item${downloads.length > 1 ? "s" : ""}` : undefined}
+      width="max-w-3xl"
+      panelClassName="min-h-[20rem] sm:min-h-0 [@media(max-height:520px)]:min-h-[30rem]"
+      onClose={onClose}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClear}
+            className="mr-auto rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-mist-200 transition hover:bg-white/5"
+          >
+            Clear history
+          </button>
+          <button type="button" onClick={onClose} className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-accent-600">
+            Close
+          </button>
+        </>
+      }
+    >
+      {downloads.length === 0 ? (
+        <p className="py-6 text-center text-sm text-mist-500">No background downloads.</p>
+      ) : (
+        <ul className="max-h-[60vh] space-y-3 overflow-y-auto [@media(max-height:520px)]:max-h-none">
+          {downloads.map((item, index) => {
+            const pct = item.size > 0 ? Math.min(100, Math.round((item.loaded / item.size) * 100)) : 0;
+            const failed = item.state === 3;
+            const done = item.state === 4;
+            return (
+              <li key={`${item.path}-${index}`} className="rounded-lg border border-abyss-600 bg-abyss-800 p-3">
+                <div className="flex items-center gap-3">
+                  <span className="min-w-0 flex-1 break-all font-mono text-sm text-mist-100">
+                    {item.path.substring(item.path.lastIndexOf("/") + 1)}
+                  </span>
+                  <span className={`shrink-0 text-xs ${failed ? "text-rose-400" : done ? "text-mint-400" : "text-mist-500"}`}>
+                    {labels[item.state] ?? "Unknown"}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  <span className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-abyss-700">
+                    <span
+                      className={`block h-full rounded-full ${failed ? "bg-rose-400" : done ? "bg-mint-400" : "bg-accent-500"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </span>
+                  <span className="shrink-0 font-mono text-xs text-mist-300">
+                    {pct}% · {formatSize(String(item.loaded))}
+                    {item.size > 0 ? ` / ${formatSize(String(item.size))}` : ""}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Modal>
+  );
+}
+
+function TransferDialog({ transfer, onClose }: { transfer: api.TransferState; onClose: () => void }) {
+  const running = transfer.state === 0;
+  const failed = transfer.state === 2;
+  const pct = transfer.total > 0 ? Math.min(100, Math.round((transfer.loaded / transfer.total) * 100)) : 0;
+
+  return (
+    <Modal
+      title={running ? "Copying" : failed ? "Transfer failed" : "Transfer complete"}
+      subtitle={running ? `${pct}% · ${formatSize(String(transfer.loaded))}${transfer.total > 0 ? ` / ${formatSize(String(transfer.total))}` : ""}` : undefined}
+      dismissible={!running}
+      onClose={onClose}
+      footer={
+        running ? undefined : (
+          <button type="button" onClick={onClose} className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-accent-600">
+            Close
+          </button>
+        )
+      }
+    >
+      <p className="break-all font-mono text-sm text-mist-100">{transfer.name || "Preparing…"}</p>
+      <span className="mt-3 block h-3 overflow-hidden rounded-full bg-abyss-700">
+        <span
+          className={`block h-full rounded-full transition-[width] duration-200 ${
+            failed ? "bg-rose-400" : running ? "bg-accent-500" : "bg-mint-400"
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </span>
+      {running ? (
+        <p className="mt-3 text-xs leading-relaxed text-mist-500">
+          Browsing and other actions are paused until this transfer finishes.
+        </p>
+      ) : null}
+      {failed && transfer.error ? <p className="mt-3 break-all text-sm text-rose-400">{transfer.error}</p> : null}
+    </Modal>
+  );
+}
+
+function ConflictDialog({
+  name,
+  index,
+  total,
+  onClose,
+  onSkip,
+  onOverwrite,
+  onAlways,
+}: {
+  name: string;
+  index: number;
+  total: number;
+  onClose: () => void;
+  onSkip: () => void;
+  onOverwrite: () => void;
+  onAlways: () => void;
+}) {
+  return (
+    <Modal
+      title="File already exists"
+      subtitle={total > 1 ? `File ${index + 1} of ${total} conflicts` : undefined}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm font-medium text-mist-300 hover:bg-white/5">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSkip}
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-mist-200 hover:bg-white/5"
+          >
+            Skip
+          </button>
+          <button
+            type="button"
+            onClick={onOverwrite}
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-mist-200 hover:bg-white/5"
+          >
+            Overwrite
+          </button>
+          <button
+            type="button"
+            onClick={onAlways}
+            className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-accent-600"
+          >
+            Always overwrite
+          </button>
+        </>
+      }
+    >
+      <p className="mb-2 text-sm text-mist-500">This file already exists at the destination:</p>
+      <p className="break-all rounded-lg border border-abyss-600 bg-abyss-800 p-2.5 font-mono text-sm text-mist-100">{name}</p>
+      <p className="mt-2.5 text-xs leading-relaxed text-mist-500">
+        “Always overwrite” applies to the remaining files of this transfer only — the next transfer asks again.
+      </p>
+    </Modal>
   );
 }
 

@@ -1304,6 +1304,10 @@ bool FtpClient::FileExists(const std::string &path)
 
 int FtpClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
 {
+	uint64_t transfer_total = 0;
+	if (Size(path, &transfer_total))
+		SetTotalBytes(transfer_total);
+	ResetTransferredBytes();
 	mp_ftphandle->offset = offset;
 	if (offset == 0)
 		return FtpXfer(outputfile, path, mp_ftphandle, FtpClient::fileread, FtpClient::transfermode::image);
@@ -1400,6 +1404,10 @@ int FtpClient::GetRange(const std::string &path, void *buffer, uint64_t size, ui
 
 int FtpClient::Put(const std::string &inputfile, const std::string &path, uint64_t offset)
 {
+	int64_t transfer_total = FS::GetSize(inputfile);
+	if (transfer_total > 0)
+		SetTotalBytes((uint64_t) transfer_total);
+	ResetTransferredBytes();
 	mp_ftphandle->offset = offset;
 	if (offset == 0)
 		return FtpXfer(inputfile, path, mp_ftphandle, FtpClient::filewrite, FtpClient::transfermode::image);

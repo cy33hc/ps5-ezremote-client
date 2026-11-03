@@ -225,7 +225,7 @@ bool GithubClient::ParseReleases()
     if (!releases_parsed)
     {
         std::string encoded_url = this->host_url + this->base_path + "?per_page=100&page=1";
-        client->SetProgressFnCallback(&bytes_transfered, DownloadProgressCallback);
+        client->SetProgressFnCallback(this, DownloadProgressCallback);
         if (client->Get(encoded_url, headers, res))
         {
             if (HTTP_SUCCESS(res.iCode))

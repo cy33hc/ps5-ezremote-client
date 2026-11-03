@@ -8,6 +8,7 @@
 #include "fs.h"
 #include "config.h"
 #include "gui.h"
+#include <sys/stat.h>
 #include "actions.h"
 #include "util.h"
 #include "lang.h"
@@ -1389,7 +1390,16 @@ namespace Windows
         }
     }
 
-    void ShowPropertiesDialog(DirEntry item)
+    static int RightsToMode(const char *rights)
+    {
+        int mode = 0;
+        for (int i = 0; i < 9; i++)
+            if (rights[i] == 'r' || rights[i] == 'w' || rights[i] == 'x')
+                mode |= 1 << (8 - i);
+        return mode;
+    }
+
+    void ShowPropertiesDialog(DirEntry item, bool editable)
     {
         ImGuiIO &io = ImGui::GetIO();
         (void)io;
@@ -1399,7 +1409,7 @@ namespace Windows
         ImGui::OpenPopup(lang_strings[STR_PROPERTIES]);
 
         ImGui::SetNextWindowPos(ImVec2(610, 400));
-        ImGui::SetNextWindowSizeConstraints(ImVec2(700, 80), ImVec2(700, 250), NULL, NULL);
+        ImGui::SetNextWindowSizeConstraints(ImVec2(700, 120), ImVec2(700, 360), NULL, NULL);
         if (ImGui::BeginPopupModal(lang_strings[STR_PROPERTIES], NULL, ImGuiWindowFlags_AlwaysAutoResize))
         {
             ImGui::TextColored(colors[ImGuiCol_ButtonHovered], "%s:", lang_strings[STR_TYPE]);
@@ -1427,12 +1437,89 @@ namespace Windows
                         item.modified.hours, item.modified.minutes, item.modified.seconds);
             ImGui::Separator();
 
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 300);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+            static bool perms[9];
+            if (editable)
+            {
+                if (ImGui::IsWindowAppearing())
+                {
+                    for (int i = 0; i < 9; i++)
+                        perms[i] = item.rights[i] == 'r' || item.rights[i] == 'w' || item.rights[i] == 'x';
+                }
+
+                ImGui::TextColored(colors[ImGuiCol_ButtonHovered], "%s:", "Permissions");
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(150);
+
+                const char *who[3] = {"User", "Group", "Others"};
+                const char *action[3] = {"r", "w", "x"};
+
+                // Start every row's checkboxes after the widest label.
+                float label_width = 0.0f;
+                for (int i = 0; i < 3; i++)
+                {
+                    float current = ImGui::CalcTextSize(who[i]).x;
+                    if (current > label_width)
+                        label_width = current;
+                }
+                float column_x = 150.0f + label_width + 20.0f;
+
+                for (int row = 0; row < 3; row++)
+                {
+                    if (row > 0)
+                        ImGui::SetCursorPosX(150);
+                    ImGui::Text("%s", who[row]);
+                    for (int col = 0; col < 3; col++)
+                    {
+                        int index = row * 3 + col;
+                        char cid[32];
+                        sprintf(cid, "%s##perm%d", action[col], index);
+                        if (col == 0)
+                            ImGui::SameLine(column_x);
+                        else
+                            ImGui::SameLine(0, 30);
+                        ImGui::Checkbox(cid, &perms[index]);
+                    }
+                }
+                ImGui::Separator();
+            }
 
             char id[128];
+            float buttons_width = editable ? 210.0f : 100.0f;
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - buttons_width) * 0.5f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+
+            if (editable)
+            {
+                if (ImGui::Button("Apply##apply_perms", ImVec2(100, 0)))
+                {
+                    char rights[10];
+                    for (int i = 0; i < 9; i++)
+                        rights[i] = perms[i] ? "rwx"[i % 3] : '-';
+                    rights[9] = '\0';
+
+                    if (chmod(item.path, RightsToMode(rights)) != 0)
+                        sprintf(status_message, "Could not change permissions for %s", item.name);
+                    else
+                        sprintf(status_message, "Permissions set to %s", rights);
+
+                    selected_action = ACTION_REFRESH_LOCAL_FILES;
+                }
+                ImGui::SameLine(0, 10);
+            }
+
             sprintf(id, "%s##prodialog", lang_strings[STR_CLOSE]);
             if (ImGui::Button(id, ImVec2(100, 0)))
+            {
+                SetModalMode(false);
+                selected_action = ACTION_NONE;
+                ImGui::CloseCurrentPopup();
+            }
+
+            // Close is the default action when the popup opens.
+            if (ImGui::IsWindowAppearing())
+                ImGui::SetItemDefaultFocus();
+
+            if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
             {
                 SetModalMode(false);
                 selected_action = ACTION_NONE;
@@ -2491,10 +2578,10 @@ namespace Windows
             }
             break;
         case ACTION_SHOW_LOCAL_PROPERTIES:
-            ShowPropertiesDialog(selected_local_file);
+            ShowPropertiesDialog(selected_local_file, true);
             break;
         case ACTION_SHOW_REMOTE_PROPERTIES:
-            ShowPropertiesDialog(selected_remote_file);
+            ShowPropertiesDialog(selected_remote_file, false);
             break;
         case ACTION_LOCAL_SELECT_ALL:
             Actions::SelectAllLocalFiles();

@@ -1675,6 +1675,81 @@ namespace HttpServer
             res.set_content(result_str, strlen(result_str), "application/json");
         });
 
+        svr->Post("/__remote__/pkg_info", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+
+            const char *path = nullptr;
+            std::string site = ResolveSite(nullptr);
+            if (jobj != nullptr)
+            {
+                path = json_object_get_string(json_object_object_get(jobj, "path"));
+                site = ResolveSite(json_object_get_string(json_object_object_get(jobj, "site")));
+            }
+
+            if (path == nullptr)
+            {
+                bad_request(res, "Required path parameter missing");
+                return;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(remote_session_mutex);
+                std::string error;
+                RemoteClient *client = GetRemoteSession(site, error);
+                if (client == nullptr)
+                {
+                    failed(res, 200, error);
+                    return;
+                }
+
+                if (!INSTALLER::ExtractRemotePkg(client, path, TMP_SFO_PATH, TMP_PARAM_JSON_PATH, TMP_ICON_PATH))
+                {
+                    failed(res, 200, "Cannot read this package");
+                    return;
+                }
+            }
+
+            std::map<std::string, std::string> params;
+            if (FS::FileExists(TMP_SFO_PATH))
+            {
+                std::vector<char> sfo = FS::Load(TMP_SFO_PATH);
+                if (!sfo.empty())
+                    params = SFO::GetParams(sfo.data(), sfo.size());
+            }
+            else if (FS::FileExists(TMP_PARAM_JSON_PATH))
+            {
+                std::vector<char> sfo = FS::Load(TMP_PARAM_JSON_PATH);
+                if (!sfo.empty())
+                    params = SFO::GetParamsFromParamJson(sfo.data(), sfo.size());
+            }
+
+            json_object *attributes = json_object_new_object();
+            for (std::map<std::string, std::string>::iterator it = params.begin(); it != params.end(); ++it)
+                json_object_object_add(attributes, it->first.c_str(), json_object_new_string(it->second.c_str()));
+
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "params", attributes);
+            json_object_object_add(result, "hasIcon", json_object_new_boolean(FS::FileExists(TMP_ICON_PATH)));
+
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
+
+        svr->Get("/__remote__/pkg_icon", [&](const Request &req, Response &res)
+        {
+            std::vector<char> icon = FS::Load(TMP_ICON_PATH);
+            if (icon.empty())
+            {
+                res.status = 404;
+                return;
+            }
+            res.set_content(icon.data(), icon.size(), "image/png");
+        });
+
         svr->Get("/__local__/pkg_icon", [&](const Request &req, Response &res)
         {
             std::vector<char> icon = FS::Load(TMP_ICON_PATH);
@@ -3101,17 +3176,21 @@ namespace HttpServer
             res.set_content_provider(
                 size, "application/octet-stream",
                 [in](size_t offset, size_t length, DataSink &sink) {
-                    size_t size_to_read = std::min(static_cast<size_t>(length), (size_t)1048576);
-                    char buff[size_to_read];
-                    size_t read_len;
-                    FS::Seek(in, offset);
-                    read_len = FS::Read(in, buff, size_to_read);
-                    sink.write(buff, read_len);
-                    return read_len == size_to_read;
+                    // One reusable heap buffer instead of a 1 MB stack VLA per
+                    // call, and read sequentially rather than seeking each time.
+                    static thread_local std::vector<char> buffer(4 * 1024 * 1024);
+                    size_t size_to_read = std::min(static_cast<size_t>(length), buffer.size());
+
+                    size_t read_len = FS::Read(in, buffer.data(), size_to_read);
+                    if (read_len == 0)
+                        return false;
+
+                    return sink.write(buffer.data(), read_len);
                 },
                 [in](bool success) {
                     FS::Close(in);
-                }); });
+                });
+        });
 
         svr->Get("/google_auth", [](const Request &req, Response &res)
         {

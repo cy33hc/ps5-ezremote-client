@@ -621,22 +621,22 @@ namespace INSTALLER
 		return true;
 	}
 
-	bool ExtractRemotePkg(const std::string &path, const std::string sfo_path, const std::string param_json_path, const std::string icon_path)
+	bool ExtractRemotePkg(RemoteClient *client, const std::string &path, const std::string sfo_path, const std::string param_json_path, const std::string icon_path)
 	{
 		pkg_header cnt_hdr;
 		fih_header fih_hdr;
 		uint64_t pkg_entry_base = 0;
 
-		if (!remoteclient->Head(path, &cnt_hdr, sizeof(pkg_header)))
+		if (!client->Head(path, &cnt_hdr, sizeof(pkg_header)))
 			return false;
 
 		if (BE32(cnt_hdr.pkg_magic) != PKG_CNT_MAGIC)
 		{
-			remoteclient->Head(path, &fih_hdr, sizeof(fih_header));
+			client->Head(path, &fih_hdr, sizeof(fih_header));
 			if (BE32(fih_hdr.magic) != PKG_FIH_MAGIC)
 				return false;
 
-			remoteclient->GetRange(path, &cnt_hdr, sizeof(pkg_header), fih_hdr.embedded_cnt_offset);
+			client->GetRange(path, &cnt_hdr, sizeof(pkg_header), fih_hdr.embedded_cnt_offset);
 			pkg_entry_base = fih_hdr.embedded_cnt_offset;
 		}
 
@@ -645,7 +645,7 @@ namespace INSTALLER
 		uint32_t entry_table_size = entry_count * sizeof(pkg_table_entry);
 		void *entry_table_data = malloc(entry_table_size);
 
-		if (!remoteclient->GetRange(path, entry_table_data, entry_table_size, entry_table_offset))
+		if (!client->GetRange(path, entry_table_data, entry_table_size, entry_table_offset))
 		{
 			free(entry_table_data);
 			return false;
@@ -696,7 +696,7 @@ namespace INSTALLER
 		{
 			param_sfo_data = malloc(param_sfo_size);
 			FILE *out = FS::Create(sfo_path);
-			if (!remoteclient->GetRange(path, param_sfo_data, param_sfo_size, param_sfo_offset))
+			if (!client->GetRange(path, param_sfo_data, param_sfo_size, param_sfo_offset))
 			{
 				FS::Close(out);
 				free(param_sfo_data);
@@ -711,7 +711,7 @@ namespace INSTALLER
 		{
 			icon0_png_data = malloc(icon0_png_size);
 			FILE *out = FS::Create(icon_path);
-			if (!remoteclient->GetRange(path, icon0_png_data, icon0_png_size, icon0_png_offset))
+			if (!client->GetRange(path, icon0_png_data, icon0_png_size, icon0_png_offset))
 			{
 				FS::Close(out);
 				free(icon0_png_data);
@@ -726,7 +726,7 @@ namespace INSTALLER
 		{
 			param_json_data = malloc(param_json_size);
 			FILE *out = FS::Create(param_json_path);
-			if (!remoteclient->GetRange(path, param_json_data, param_json_size, param_json_offset))
+			if (!client->GetRange(path, param_json_data, param_json_size, param_json_offset))
 			{
 				FS::Close(out);
 				free(param_json_data);
@@ -744,6 +744,11 @@ namespace INSTALLER
 	{
 		auto it = archive_pkg_install_data_list.find(hash);
 		return it != archive_pkg_install_data_list.end() ? it->second : nullptr;
+	}
+
+	bool ExtractRemotePkg(const std::string &path, const std::string sfo_path, const std::string param_json_path, const std::string icon_path)
+	{
+		return ExtractRemotePkg(remoteclient, path, sfo_path, param_json_path, icon_path);
 	}
 
 	void AddArchivePkgInstallData(const std::string &hash, ArchivePkgInstallData *pkg_data)

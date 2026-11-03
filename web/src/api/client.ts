@@ -340,6 +340,15 @@ export async function ezremoteRestart(): Promise<void> {
   await request("/__local__/ezremote_server/restart", {});
 }
 
+export interface RemotePkgInfo {
+  params: Record<string, string>;
+  hasIcon: boolean;
+}
+
+export async function remotePkgInfo(site: string, path: string): Promise<RemotePkgInfo> {
+  return request<RemotePkgInfo>("/__remote__/pkg_info", { site, path });
+}
+
 export async function installRemotePackage(site: string, path: string, size: number): Promise<void> {
   await request("/__local__/install_bg", { site, path, size });
 }

@@ -97,6 +97,7 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [transfer, setTransfer] = useState<api.TransferState | null>(null);
   const [bgOpen, setBgOpen] = useState(false);
+  const [remotePkgView, setRemotePkgView] = useState<DirEntry | null>(null);
   const [bgList, setBgList] = useState<api.BgDownload[]>([]);
   const [ezremoteVersion, setEzremoteVersion] = useState<string | null>(null);
   const [ezMenu, setEzMenu] = useState<{ x: number; y: number } | null>(null);
@@ -839,13 +840,21 @@ export default function App() {
   const localMenu = (entry: DirEntry | null): MenuItem[] => {
     const items: MenuItem[] = [];
     if (entry) {
-      if (entry.type === "dir") items.push({ label: "Open", icon: "folder", onSelect: () => setPath(joinPath(path, entry.name)) });
-      else {
+      if (entry.type === "dir") {
+        items.push({ label: "Open", icon: "folder", onSelect: () => setPath(joinPath(path, entry.name)) });
+        items.push({ label: "Upload", icon: "upload", onSelect: () => uploadRef.current?.click() });
+        items.push({ label: "Install from URL", icon: "link", onSelect: () => { setUrlPrefill(""); setUrlMode("install"); } });
+        items.push({ label: "Download from URL", icon: "link", onSelect: () => { setUrlPrefill(""); setUrlMode("download"); } });
+      } else {
         items.push({ label: "Download", icon: "download", onSelect: downloadSelection });
+        items.push({ label: "Upload", icon: "upload", onSelect: () => uploadRef.current?.click() });
+        items.push({ label: "Install from URL", icon: "link", onSelect: () => { setUrlPrefill(""); setUrlMode("install"); } });
+        items.push({ label: "Download from URL", icon: "link", onSelect: () => { setUrlPrefill(""); setUrlMode("download"); } });
+        items.push({ separator: true });
         if (IMAGE_FILE.test(entry.name))
           items.push({ label: "Preview image", icon: "image", onSelect: () => setViewer({ src: api.downloadFileUrl(joinPath(path, entry.name)), name: entry.name }) });
         if (isPackage(entry.name)) {
-          items.push({ label: "Install", icon: "install", onSelect: installSelection });
+          items.push({ label: "Install Package", icon: "install", onSelect: installSelection });
           items.push({ label: "Package info", icon: "package", onSelect: openPackageInfo });
         }
         if (isArchive(entry.name)) items.push({ label: "Extract", icon: "archive", onSelect: extractSelection });
@@ -860,6 +869,8 @@ export default function App() {
       items.push({ separator: true });
       items.push({ label: "Rename", icon: "rename", onSelect: renameSelection });
       items.push({ label: "Delete", icon: "trash", danger: true, onSelect: deleteSelection });
+      items.push({ label: "New folder", icon: "folderPlus", onSelect: newFolder });
+      items.push({ separator: true });
       items.push({ label: "Properties", icon: "info", onSelect: () => setProperties(localSelected[0] ?? entry) });
       return items;
     }
@@ -893,6 +904,10 @@ export default function App() {
   // Unknown capabilities (older backend) fall back to "all allowed".
   const canRemote = (flag: number) => ((activeProfile?.supportedActions ?? 0x1fff) & flag) !== 0;
 
+  const openRemotePkgInfo = (entry: DirEntry) => {
+    setRemotePkgView(entry);
+  };
+
   const installRemotePackages = (entries: DirEntry[]) => {
     if (!serverInfo) return;
     const packageCount = entries.length;
@@ -906,8 +921,10 @@ export default function App() {
           notify(error instanceof Error ? `${entry.name}: ${error.message}` : `${entry.name} failed`, "error");
         }
       }
-      if (failed === 0)
+      if (failed === 0) {
+        setRemotePkgView(null);
         notify(`${packageCount} package${packageCount > 1 ? "s" : ""} installing`, "success");
+      }
       else if (failed < packageCount)
         notify(`${packageCount - failed} of ${packageCount} packages installing`, "info");
     });
@@ -930,6 +947,8 @@ export default function App() {
             onSelect: () => installRemotePackages(packages),
             disabled: !canRemote(RA.INSTALL) || transferBusy,
           });
+        if (entry.name.toLowerCase().endsWith(".pkg"))
+          items.push({ label: "Package info", icon: "info", onSelect: () => openRemotePkgInfo(entry), disabled: !serverInfo });
         if (IMAGE_FILE.test(entry.name) && serverInfo)
           items.push({
             label: "Preview image",
@@ -1168,6 +1187,15 @@ export default function App() {
         </>
       ) : null}
       {transfer ? <TransferDialog transfer={transfer} onClose={() => setTransfer(null)} /> : null}
+      {remotePkgView && serverInfo ? (
+        <PackageInfoDialog
+          item={joinPath(remotePath, remotePkgView.name)}
+          name={remotePkgView.name}
+          remote={{ site: serverInfo.active }}
+          onInstall={() => installRemotePackages([remotePkgView])}
+          onClose={() => setRemotePkgView(null)}
+        />
+      ) : null}
       {bgOpen ? (
         <BackgroundDownloadsDialog
           downloads={bgList}
@@ -1203,9 +1231,9 @@ export default function App() {
           onClose={() => setPkgView(null)}
           onInstall={() => {
             const target = pkgView.path;
-            setPkgView(null);
             void run("Installing package…", async () => {
               await api.install([target]);
+              setPkgView(null);
               notify("Install finished", "success");
             });
           }}

@@ -9,19 +9,23 @@ interface PackageInfoDialogProps {
   name: string;
   onClose: () => void;
   onInstall: () => void;
+  /** When set, the package is read over the remote session instead of locally. */
+  remote?: { site: string };
 }
 
-export function PackageInfoDialog({ item, name, onClose, onInstall }: PackageInfoDialogProps) {
+export function PackageInfoDialog({ item, name, onClose, onInstall, remote }: PackageInfoDialogProps) {
   const [params, setParams] = useState<Record<string, string> | null>(null);
   const [hasIcon, setHasIcon] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const iconUrl = useMemo(() => `/__local__/pkg_icon?t=${Date.now()}`, []);
+  const iconUrl = useMemo(
+    () => (remote ? `/__remote__/pkg_icon?t=${Date.now()}` : `/__local__/pkg_icon?t=${Date.now()}`),
+    [remote],
+  );
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .pkgInfo(item)
+    (remote ? api.remotePkgInfo(remote.site, item) : api.pkgInfo(item))
       .then((info) => {
         if (cancelled) return;
         setParams(info.params);
@@ -36,7 +40,7 @@ export function PackageInfoDialog({ item, name, onClose, onInstall }: PackageInf
     return () => {
       cancelled = true;
     };
-  }, [item]);
+  }, [item, remote]);
 
   return (
     <Modal

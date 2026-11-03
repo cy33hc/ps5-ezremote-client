@@ -98,6 +98,7 @@ export default function App() {
   const [transfer, setTransfer] = useState<api.TransferState | null>(null);
   const [bgOpen, setBgOpen] = useState(false);
   const [remotePkgView, setRemotePkgView] = useState<DirEntry | null>(null);
+  const [auth, setAuth] = useState<api.AuthStatus | null>(null);
   const [bgList, setBgList] = useState<api.BgDownload[]>([]);
   const [ezremoteVersion, setEzremoteVersion] = useState<string | null>(null);
   const [ezMenu, setEzMenu] = useState<{ x: number; y: number } | null>(null);
@@ -153,7 +154,7 @@ export default function App() {
   const loadRemote = useCallback(
     async (target: string, siteOverride?: string) => {
       const activeSite = siteOverride ?? serverInfo?.active;
-      if (!activeSite) return;
+      if (!activeSite) return false;
       setRemoteLoading(true);
       setRemoteError(null);
       try {
@@ -162,9 +163,11 @@ export default function App() {
         setRemotePath(data.path);
         setRemoteSite(activeSite);
         setRemoteSelection(new Set());
+        return true;
       } catch (error) {
         setRemoteEntries([]);
         setRemoteError(error instanceof Error ? error.message : "Cannot reach this server");
+        return false;
       } finally {
         setRemoteLoading(false);
       }
@@ -183,6 +186,14 @@ export default function App() {
   useEffect(() => {
     void loadServerInfo();
   }, [loadServerInfo]);
+
+  // Password protection: ask before any other API call is made.
+  useEffect(() => {
+    void api
+      .authStatus()
+      .then(setAuth)
+      .catch(() => setAuth({ required: false, authenticated: true }));
+  }, []);
 
   // Background downloads live in the ezRemote server; poll while the panel is
   // open, and slowly otherwise so the header badge stays current.
@@ -345,11 +356,17 @@ export default function App() {
       initial: "",
       confirmLabel: "Create",
       onSubmit: (value) => {
-        const name = value.trim();
-        if (!name) return;
+        const raw = value.trim();
+        if (!raw) return;
+
+        // Never collide: "New Folder" -> "New Folder (2)".
+        const taken = new Set(entries.map((entry) => entry.name.toLowerCase()));
+        const name = taken.has(raw.toLowerCase()) ? uniqueCopyName(raw, taken) : raw;
+
         void run("Creating folder…", async () => {
           await api.createFolder(joinPath(path, name));
           notify(`Created ${name}`, "success");
+          refresh();
         });
       },
     });
@@ -436,25 +453,96 @@ export default function App() {
     });
   };
 
+  const newLocalFile = () => {
+    setPromptState({
+      title: "New file",
+      label: "File name",
+      initial: "",
+      confirmLabel: "Create",
+      onSubmit: (value) => {
+        const raw = value.trim();
+        if (!raw) return;
+
+        // Never overwrite: "notes.txt" -> "notes (2).txt".
+        const taken = new Set(entries.map((entry) => entry.name.toLowerCase()));
+        const name = taken.has(raw.toLowerCase()) ? uniqueCopyName(raw, taken) : raw;
+
+        void run("Creating file…", async () => {
+          await api.createLocalFile(joinPath(path, name));
+          notify(`Created ${name}`, "success");
+          refresh();
+        });
+      },
+    });
+  };
+
   const compressSelection = () => {
     if (localSelected.length === 0) {
       notify("Select something to compress", "error");
       return;
     }
-    setPromptState({
-      title: "Create archive",
-      label: "Archive name",
-      initial: "archive.zip",
-      confirmLabel: "Compress",
-      onSubmit: (value) => {
-        const name = value.trim();
-        if (!name) return;
-        void run("Compressing…", async () => {
-          await api.compress(localSelected.map((entry) => joinPath(path, entry.name)), path, name);
-          notify(`Created ${name}`, "success");
-        });
-      },
-    });
+
+    // One file -> "name.zip", one folder -> "folder.zip", several -> "archive.zip".
+    const archiveName =
+      localSelected.length > 1
+        ? "archive.zip"
+        : localSelected[0].type === "dir"
+          ? `${localSelected[0].name}.zip`
+          : (() => {
+              const dot = localSelected[0].name.lastIndexOf(".");
+              const base = dot > 0 ? localSelected[0].name.slice(0, dot) : localSelected[0].name;
+              return `${base}.zip`;
+            })();
+
+    // /data and the USB mounts keep the archive beside the source.
+    const inData =
+      path === "/data" || path.startsWith("/data/") || /^\/mnt\/usb\d+(?:\/|$)/.test(path);
+
+    void (async () => {
+      let folder = path;
+      if (!inData) {
+        try {
+          folder = (await api.getSettings()).compressedFilePath || path;
+        } catch {
+          folder = path;
+        }
+      }
+
+      // Never propose a name that already exists in the destination folder.
+      const taken = new Set<string>();
+      if (inData) {
+        entries.forEach((entry) => taken.add(entry.name.toLowerCase()));
+      } else {
+        try {
+          (await api.list(folder)).forEach((entry) => taken.add(entry.name.toLowerCase()));
+        } catch {
+          // Folder may not exist yet; the backend creates it.
+        }
+      }
+      const uniqueName = taken.has(archiveName.toLowerCase()) ? uniqueCopyName(archiveName, taken) : archiveName;
+
+      setPromptState({
+        title: "Create archive",
+        label: "Save as (full path)",
+        initial: joinPath(folder, uniqueName),
+        confirmLabel: "Compress",
+        onSubmit: (value) => {
+          const target = value.trim();
+          const slash = target.lastIndexOf("/");
+          const dir = slash > 0 ? target.slice(0, slash) : slash === 0 ? "/" : "";
+          const file = slash >= 0 ? target.slice(slash + 1) : target;
+          if (!file) {
+            notify("Enter a file name", "error");
+            return;
+          }
+          void run("Compressing…", async () => {
+            await api.compress(localSelected.map((entry) => joinPath(path, entry.name)), dir, file);
+            notify(`Created ${file}`, "success");
+            refresh();
+          });
+        },
+      });
+    })();
   };
 
   const editSelection = () => {
@@ -501,7 +589,8 @@ export default function App() {
     const ext = dot > 0 ? name.slice(dot) : "";
     for (let index = 2; ; index += 1) {
       const candidate = `${base} (${index})${ext}`;
-      if (!taken.has(candidate)) return candidate;
+      // PS5 filesystems are case-insensitive, so compare lowercased.
+      if (!taken.has(candidate.toLowerCase())) return candidate;
     }
   };
 
@@ -514,13 +603,13 @@ export default function App() {
       if (mode === "copy" && sameDirectory) {
         // Copying beside the originals always collides; mimic Explorer and
         // create "name (2)" rather than overwriting.
-        const taken = new Set(entries.map((entry) => entry.name));
+        const taken = new Set(entries.map((entry) => entry.name.toLowerCase()));
         for (const source of items) {
           const name = source.substring(source.lastIndexOf("/") + 1);
           // The original is always present here, so a copy must be renamed.
-          taken.add(name);
+          taken.add(name.toLowerCase());
           const target = uniqueCopyName(name, taken);
-          taken.add(target);
+          taken.add(target.toLowerCase());
           await api.copy([source], path, target);
         }
       } else if (mode === "copy") {
@@ -669,7 +758,11 @@ export default function App() {
     if (!window.confirm("Stop the ezRemote Client HTTP server? The web UI will disconnect.")) return;
     void (async () => {
       try {
-        await fetch("/stop");
+        const response = await fetch("/stop");
+        if (!response.ok) {
+          notify("Could not stop the client (HTTP " + response.status + ")", "error");
+          return;
+        }
       } catch {
         // The listener is torn down mid-response; a network error means it worked.
       }
@@ -870,12 +963,14 @@ export default function App() {
       items.push({ label: "Rename", icon: "rename", onSelect: renameSelection });
       items.push({ label: "Delete", icon: "trash", danger: true, onSelect: deleteSelection });
       items.push({ label: "New folder", icon: "folderPlus", onSelect: newFolder });
+      items.push({ label: "New file", icon: "file", onSelect: newLocalFile });
       items.push({ separator: true });
       items.push({ label: "Properties", icon: "info", onSelect: () => setProperties(localSelected[0] ?? entry) });
       return items;
     }
 
     items.push({ label: "New folder", icon: "folderPlus", onSelect: newFolder });
+    items.push({ label: "New file", icon: "file", onSelect: newLocalFile });
     items.push({ label: "Upload", icon: "upload", onSelect: () => uploadRef.current?.click() });
     if (clipboard) items.push({ label: "Paste", icon: "paste", onSelect: pasteClipboard });
     items.push({ label: "Refresh", icon: "refresh", onSelect: refresh });
@@ -981,6 +1076,23 @@ export default function App() {
     return items;
   };
 
+  if (auth === null) {
+    return <div className="grid h-full place-items-center bg-abyss-950 text-sm text-mist-500">Loading…</div>;
+  }
+
+  if (auth.required && !auth.authenticated) {
+    return (
+      <LoginScreen
+        onSuccess={() => {
+          setAuth({ required: true, authenticated: true });
+          // The first loads ran before authentication and failed; redo them.
+          void loadServerInfo();
+          refresh();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col">
       <header className="border-b border-abyss-600 bg-abyss-900">
@@ -991,13 +1103,16 @@ export default function App() {
             </span>
             <div className="min-w-0 leading-tight">
               <p className="text-2xl font-semibold tracking-tight">ezRemote Client</p>
-              <p className="max-w-[60vw] truncate text-[13px] font-medium text-mist-300" title={activeProfile?.server ?? ""}>
-                {serverInfo
-                  ? `${serverInfo.active} · ${serverInfo.clientTypes[activeProfile?.type ?? -1] ?? "unset"}${
-                      activeProfile?.server ? ` · ${activeProfile.server}` : ""
-                    }`
-                  : "no profile"}
-              </p>
+              <div className="flex min-w-0 items-center gap-2">
+                <HeaderButton icon="server" label="Servers" onClick={() => setServersOpen(true)} />
+                <p className="min-w-0 max-w-[60vw] truncate text-[13px] font-medium text-mist-300" title={activeProfile?.server ?? ""}>
+                  {serverInfo
+                    ? `${serverInfo.active} · ${serverInfo.clientTypes[activeProfile?.type ?? -1] ?? "unset"}${
+                        activeProfile?.server ? ` · ${activeProfile.server}` : ""
+                      }`
+                    : "no profile"}
+                </p>
+              </div>
             </div>
           </div>
           <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto">
@@ -1029,7 +1144,6 @@ export default function App() {
               badge={activeBg}
               busy={bgList.some((item) => item.state === 1 || item.state === 2)}
             />
-            <HeaderButton icon="server" label="Servers" onClick={() => setServersOpen(true)} />
             <HeaderButton icon="settings" label="Settings" onClick={() => setSettingsOpen(true)} />
             <HeaderButton icon="power" label="Stop" onClick={stopHttpServer} />
           </div>
@@ -1249,16 +1363,23 @@ export default function App() {
               const updated = await loadServerInfo();
               if (!updated) return;
               setRemoteEnabled(true);
-              // Drop the cached session so the new URL/credentials are used.
+
+              // Editing the site in use invalidates its session: drop it so the
+              // next request connects with the values that were just saved.
               try {
                 await api.disconnectRemote(updated.active);
               } catch {
                 // Not connected yet: nothing to drop.
               }
+
               setRemoteEntries([]);
               setRemoteSelection(new Set());
-              // Empty path -> the site's defaultDirectory, then list it.
+              setRemoteError(null);
+
+              // Always start at the site's defaultDirectory: probing the old
+              // folder can crash some clients when the path is not valid.
               await loadRemote("", updated.active);
+              notify(`Reconnected to ${updated.active}`, "info");
             })()
           }
         />
@@ -1655,9 +1776,61 @@ function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: Me
   );
 }
 
+function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!password || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.login(password);
+      onSuccess();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Cannot sign in");
+      setPassword("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid h-full place-items-center bg-abyss-950 p-6">
+      <div className="w-full max-w-sm rounded-2xl border border-abyss-600 bg-abyss-900 p-6 shadow-2xl shadow-black/40">
+        <h1 className="text-xl font-semibold tracking-tight text-mist-100">ezRemote Client</h1>
+        <p className="mt-1 text-sm text-mist-500">This console is password protected.</p>
+        <input
+          autoFocus
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void submit();
+          }}
+          placeholder="Password"
+          className="input mt-4"
+        />
+        {error ? <p className="mt-2 text-xs text-rose-400">{error}</p> : null}
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={!password || busy}
+          className="mt-4 w-full rounded-lg bg-accent-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-accent-600 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-accent-500"
+        >
+          {busy ? "Signing in…" : "Sign in"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PromptDialog({ state, onClose }: { state: PromptState; onClose: () => void }) {
   const [value, setValue] = useState(state.initial);
+  const canSubmit = value.trim().length > 0;
   const submit = () => {
+    if (!canSubmit) return;
     onClose();
     state.onSubmit(value);
   };
@@ -1671,7 +1844,12 @@ function PromptDialog({ state, onClose }: { state: PromptState; onClose: () => v
           <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs font-medium text-mist-300 hover:bg-white/5">
             Cancel
           </button>
-          <button type="button" onClick={submit} className="rounded-lg bg-accent-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-600">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!canSubmit}
+            className="rounded-lg bg-accent-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-600 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-accent-500"
+          >
             {state.confirmLabel}
           </button>
         </>
@@ -1728,6 +1906,23 @@ interface UrlValues {
   rpi: boolean;
 }
 
+const URL_OPTIONS_KEY = "ezremote.urlOptions";
+
+function loadUrlOptions(): { alldebrid: boolean; realdebrid: boolean; rpi: boolean } {
+  try {
+    const raw = window.localStorage.getItem(URL_OPTIONS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<{ alldebrid: boolean; realdebrid: boolean; rpi: boolean }>;
+      const alldebrid = parsed.alldebrid === true;
+      const realdebrid = !alldebrid && parsed.realdebrid === true;
+      return { alldebrid, realdebrid, rpi: parsed.rpi === true };
+    }
+  } catch {
+    // Ignore unreadable or malformed values.
+  }
+  return { alldebrid: false, realdebrid: false, rpi: false };
+}
+
 function UrlDialog({
   mode,
   initialUrl,
@@ -1743,20 +1938,27 @@ function UrlDialog({
 }) {
   const [url, setUrl] = useState(initialUrl);
   const [dest, setDest] = useState(defaultDest);
-  const [alldebrid, setAlldebrid] = useState(false);
-  const [realdebrid, setRealdebrid] = useState(false);
-  const [diskCache, setDiskCache] = useState(false);
-  const [rpi, setRpi] = useState(false);
+  const [alldebrid, setAlldebrid] = useState(() => loadUrlOptions().alldebrid);
+  const [realdebrid, setRealdebrid] = useState(() => loadUrlOptions().realdebrid);
+  const [rpi, setRpi] = useState(() => loadUrlOptions().rpi);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isInstall = mode === "install";
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(URL_OPTIONS_KEY, JSON.stringify({ alldebrid, realdebrid, rpi }));
+    } catch {
+      // Storage can be unavailable in private modes.
+    }
+  }, [alldebrid, realdebrid, rpi]);
 
   const submit = async () => {
     if (!url.trim() || working) return;
     setWorking(true);
     setError(null);
     try {
-      await onSubmit({ url: url.trim(), dest: dest.trim(), alldebrid, realdebrid, diskCache, rpi });
+      await onSubmit({ url: url.trim(), dest: dest.trim(), alldebrid, realdebrid, diskCache: false, rpi });
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Request failed");
@@ -1798,9 +2000,22 @@ function UrlDialog({
           </div>
         ) : null}
         <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1">
-          <Checkbox label="AllDebrid" checked={alldebrid} onChange={setAlldebrid} />
-          <Checkbox label="RealDebrid" checked={realdebrid} onChange={setRealdebrid} />
-          {isInstall ? <Checkbox label="Disk cache" checked={diskCache} onChange={setDiskCache} /> : null}
+          <Checkbox
+            label="AllDebrid"
+            checked={alldebrid}
+            onChange={(value) => {
+              setAlldebrid(value);
+              if (value) setRealdebrid(false);
+            }}
+          />
+          <Checkbox
+            label="RealDebrid"
+            checked={realdebrid}
+            onChange={(value) => {
+              setRealdebrid(value);
+              if (value) setAlldebrid(false);
+            }}
+          />
           {isInstall ? <Checkbox label="RPI" checked={rpi} onChange={setRpi} /> : null}
         </div>
         {error ? (

@@ -20,6 +20,8 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
   const [minSizeMb, setMinSizeMb] = useState("0");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [webPassword, setWebPassword] = useState("");
+  const [removeWebPassword, setRemoveWebPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,6 +53,8 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
     setSaving(true);
     setError(null);
     try {
+      const changedPassword = removeWebPassword || webPassword.length > 0;
+
       await api.saveSettings({
         language: settings.language,
         autoDeleteTmpPkg: settings.autoDeleteTmpPkg,
@@ -63,9 +67,14 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
         compressedFilePath: settings.compressedFilePath,
         alldebridApiKey: allDebrid ? allDebrid : undefined,
         realdebridApiKey: realDebrid ? realDebrid : undefined,
+        webPassword: removeWebPassword ? "" : webPassword ? webPassword : undefined,
       });
       onSaved();
       onClose();
+      if (changedPassword) {
+        // The change invalidates every session, including this one.
+        window.location.reload();
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Cannot save settings");
     } finally {
@@ -166,6 +175,15 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
                   className="input font-mono"
                 />
               </Field>
+              <Field label={`Web UI password${settings.hasWebPassword ? " (stored)" : ""}`}>
+                <input
+                  type="password"
+                  value={webPassword}
+                  onChange={(event) => setWebPassword(event.target.value)}
+                  placeholder={settings.hasWebPassword ? "Leave blank to keep" : "No password set"}
+                  className="input"
+                />
+              </Field>
               <Field label="Compressed files folder">
                 <input
                   value={settings.compressedFilePath}
@@ -174,6 +192,13 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
                 />
               </Field>
             </div>
+            {settings.hasWebPassword ? (
+              <Check
+                label="Remove the web UI password"
+                checked={removeWebPassword}
+                onChange={setRemoveWebPassword}
+              />
+            ) : null}
           </Section>
 
           {error ? (

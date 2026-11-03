@@ -18,3 +18,6 @@ web/.npm-cache
 web/.npm-logs
 web/dist
 web/*.tsbuildinfo
+
+# Headless screenshot scratch space (seeded bundle + throwaway Firefox profile)
+.shot/

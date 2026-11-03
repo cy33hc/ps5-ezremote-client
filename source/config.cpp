@@ -26,6 +26,7 @@ char remote_directory[255];
 char app_ver[6];
 char last_site[32];
 char web_last_site[32];
+char web_password[256];
 
 // Serialises the ini writers: the HTTP worker threads and the native render
 // thread both call CONFIG::Save*() and the ini layer is not re-entrant.
@@ -281,6 +282,18 @@ namespace CONFIG
         sprintf(remote_directory, "%s", remote_settings->default_directory);
 
         // The web UI selects a site independently of the native UI's last_site.
+        char stored_web_password[512];
+        sprintf(stored_web_password, "%s", ReadString(CONFIG_GLOBAL, CONFIG_WEB_PASSWORD, ""));
+        web_password[0] = '\0';
+        if (strlen(stored_web_password) > 0)
+        {
+            std::string decrypted_password;
+            if (Decrypt(stored_web_password, decrypted_password) == 0)
+                sprintf(web_password, "%s", stored_web_password);
+            else
+                sprintf(web_password, "%s", decrypted_password.c_str());
+        }
+        
         sprintf(web_last_site, "%s", ReadString(CONFIG_GLOBAL, CONFIG_WEB_LAST_SITE, last_site));
         if (site_settings.find(std::string(web_last_site)) == site_settings.end())
             sprintf(web_last_site, "%s", last_site);
@@ -369,6 +382,13 @@ namespace CONFIG
         else
             encrypted_api_key = std::string(realdebrid_api_key);
         WriteString(CONFIG_GLOBAL, CONFIG_REALDEBRID_API_KEY, encrypted_api_key.c_str());
+
+        std::string encrypted_web_password;
+        if (strlen(web_password) > 0)
+            Encrypt(web_password, encrypted_web_password);
+        else
+            encrypted_web_password = std::string(web_password);
+        WriteString(CONFIG_GLOBAL, CONFIG_WEB_PASSWORD, encrypted_web_password.c_str());
 
         WriteString(CONFIG_GLOBAL, CONFIG_TMP_FOLDER_PATH, temp_folder);
         WriteBool(CONFIG_GLOBAL, CONFIG_AUTO_DELETE_TMP_PKG, auto_delete_tmp_pkg);

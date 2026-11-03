@@ -780,6 +780,46 @@ namespace HttpServer
         return nullptr;
     }
 
+    static std::mutex web_auth_mutex;
+    static std::map<std::string, uint64_t> web_sessions;
+
+    static bool WebAuthRequired()
+    {
+        return strlen(web_password) > 0;
+    }
+
+    static std::string WebSessionToken(const Request &req)
+    {
+        std::string cookies = req.get_header_value("Cookie");
+        const std::string key = "ezremote_session=";
+        size_t pos = cookies.find(key);
+        if (pos == std::string::npos)
+            return "";
+
+        size_t start = pos + key.size();
+        size_t end = cookies.find(';', start);
+        return cookies.substr(start, end == std::string::npos ? std::string::npos : end - start);
+    }
+
+    static bool WebSessionValid(const Request &req)
+    {
+        if (!WebAuthRequired())
+            return true;
+
+        std::string token = WebSessionToken(req);
+        if (token.empty())
+            return false;
+
+        std::lock_guard<std::mutex> lock(web_auth_mutex);
+        return web_sessions.find(token) != web_sessions.end();
+    }
+
+    static void WebClearSessions()
+    {
+        std::lock_guard<std::mutex> lock(web_auth_mutex);
+        web_sessions.clear();
+    }
+
     void *ServerThread(void *argp)
     {
         svr->Get("/", [&](const Request &req, Response &res)
@@ -2306,6 +2346,56 @@ namespace HttpServer
             res.set_content(result_str, strlen(result_str), "application/json");
         });
 
+        svr->Get("/__local__/auth", [&](const Request &req, Response &res)
+        {
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "required", json_object_new_boolean(WebAuthRequired()));
+            json_object_object_add(result, "authenticated", json_object_new_boolean(WebSessionValid(req)));
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
+
+        svr->Post("/__local__/login", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+
+            const char *password = nullptr;
+            if (jobj != nullptr)
+                password = json_object_get_string(json_object_object_get(jobj, "password"));
+
+            if (password == nullptr || strcmp(password, web_password) != 0)
+            {
+                failed(res, 200, "Invalid password");
+                return;
+            }
+
+            char token[64];
+            snprintf(token, sizeof(token), "%016llx%08x", (unsigned long long) Util::GetTick(), (unsigned) rand());
+            {
+                std::lock_guard<std::mutex> lock(web_auth_mutex);
+                web_sessions[token] = Util::GetTick();
+            }
+
+            // Session cookie: no Max-Age, so the browser drops it on close.
+            res.set_header("Set-Cookie", std::string("ezremote_session=") + token + "; Path=/; HttpOnly; SameSite=Strict");
+            success(res);
+        });
+
+        svr->Post("/__local__/logout", [&](const Request &req, Response &res)
+        {
+            std::string token = WebSessionToken(req);
+            if (!token.empty())
+            {
+                std::lock_guard<std::mutex> lock(web_auth_mutex);
+                web_sessions.erase(token);
+            }
+            res.set_header("Set-Cookie", "ezremote_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0");
+            success(res);
+        });
+
         svr->Get("/__local__/settings", [&](const Request &req, Response &res)
                  {
             json_object *result = json_object_new_object();
@@ -2321,6 +2411,7 @@ namespace HttpServer
             json_object_object_add(result, "showHiddenFiles", json_object_new_boolean(show_hidden_files));
             json_object_object_add(result, "tempFolder", json_object_new_string(temp_folder));
             json_object_object_add(result, "enableBackgroundDownload", json_object_new_boolean(enable_background_download));
+            json_object_object_add(result, "hasWebPassword", json_object_new_boolean(strlen(web_password) > 0));
             json_object_object_add(result, "minimumBackgroundFileSize", json_object_new_int64((int64_t)minimum_backgrond_file_size));
             json_object_object_add(result, "webServerEnabled", json_object_new_boolean(web_server_enabled));
             json_object_object_add(result, "httpServerPort", json_object_new_int(http_server_port));
@@ -2365,6 +2456,16 @@ namespace HttpServer
             key_obj = json_object_object_get(jobj, "realdebridApiKey");
             if (key_obj != nullptr)
                 snprintf(realdebrid_api_key, sizeof(realdebrid_api_key), "%s", json_object_get_string(key_obj) == nullptr ? "" : json_object_get_string(key_obj));
+
+            key_obj = json_object_object_get(jobj, "webPassword");
+            if (key_obj != nullptr)
+            {
+                const char *plain = json_object_get_string(key_obj);
+                // Plaintext lives in memory; SaveGlobalConfig encrypts it.
+                snprintf(web_password, sizeof(web_password), "%s", plain == nullptr ? "" : plain);
+                // Changing the password invalidates every open session.
+                WebClearSessions();
+            }
 
             json_object *bool_obj = json_object_object_get(jobj, "autoDeleteTmpPkg");
             if (bool_obj != nullptr)
@@ -2907,6 +3008,32 @@ namespace HttpServer
             success(res);
         });
 
+        svr->Post("/__local__/newfile", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+
+            const char *path = nullptr;
+            if (jobj != nullptr)
+                path = json_object_get_string(json_object_object_get(jobj, "path"));
+
+            if (path == nullptr)
+            {
+                bad_request(res, "Required path parameter missing");
+                return;
+            }
+
+            FILE *file = FS::Create(path);
+            if (file == nullptr)
+            {
+                failed(res, 200, "Cannot create this file");
+                return;
+            }
+            FS::Close(file);
+
+            success(res);
+        });
+
         svr->Post("/__local__/compress", [&](const Request &req, Response &res)
         {
             if (activity_inprogess)
@@ -2939,9 +3066,12 @@ namespace HttpServer
                 return;
             }
 
-            if (!FS::FolderExists(compressed_file_path))
-                FS::MkDirs(compressed_file_path);
-            std::string zip_file = std::string(compressed_file_path) + "/" + compressedFilename;
+            // The client picks the folder; fall back to the configured one.
+            std::string destination_dir = (strlen(destination) > 0) ? std::string(destination) : std::string(compressed_file_path);
+            if (!FS::FolderExists(destination_dir))
+                FS::MkDirs(destination_dir);
+            std::string zip_file = destination_dir +
+                (FS::hasEndSlash(destination_dir.c_str()) ? "" : "/") + compressedFilename;
             zipFile zf = zipOpen64(zip_file.c_str(), APPEND_STATUS_CREATE);
             if (zf != NULL)
             {
@@ -3692,6 +3822,28 @@ namespace HttpServer
        
         svr->set_payload_max_length(1024 * 1024 * 12);
         svr->set_tcp_nodelay(true);
+
+        // Everything under the API needs a session once a password is set; the
+        // static UI and the auth endpoints stay open so the form can render.
+        svr->set_pre_routing_handler([](const Request &req, Response &res) {
+            if (!WebAuthRequired())
+                return Server::HandlerResponse::Unhandled;
+
+            const std::string path = req.path;
+            if (path == "/__local__/auth" || path == "/__local__/login")
+                return Server::HandlerResponse::Unhandled;
+
+            // /stop shuts the client down, so it needs a session as well.
+            if (path.rfind("/__local__/", 0) != 0 && path.rfind("/__remote__", 0) != 0 && path != "/stop")
+                return Server::HandlerResponse::Unhandled;
+
+            if (WebSessionValid(req))
+                return Server::HandlerResponse::Unhandled;
+
+            res.status = 401;
+            res.set_content("{\"success\":false,\"error\":\"Authentication required\"}", "application/json");
+            return Server::HandlerResponse::Handled;
+        });
         svr->set_mount_point("/", "/");
 
         if (web_server_enabled)

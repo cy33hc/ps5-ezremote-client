@@ -100,6 +100,10 @@ export async function extract(item: string, destination: string, folderName: str
   await request("/__local__/extract", { item, destination, folderName });
 }
 
+export async function createLocalFile(path: string): Promise<void> {
+  await request("/__local__/newfile", { path });
+}
+
 export async function compress(items: string[], destination: string, compressedFilename: string): Promise<void> {
   await request("/__local__/compress", { items, destination, compressedFilename });
 }
@@ -243,13 +247,35 @@ export interface Settings {
   httpServerPort: number;
   compressedFilePath: string;
   hasAllDebridKey: boolean;
+  hasWebPassword: boolean;
   hasRealDebridKey: boolean;
 }
 
-export type SettingsPatch = Partial<Omit<Settings, "languages" | "hasAllDebridKey" | "hasRealDebridKey">> & {
+export type SettingsPatch = Partial<
+  Omit<Settings, "languages" | "hasAllDebridKey" | "hasRealDebridKey" | "hasWebPassword">
+> & {
   alldebridApiKey?: string;
   realdebridApiKey?: string;
+  /** Empty string removes the password; omit to keep the stored one. */
+  webPassword?: string;
 };
+
+export interface AuthStatus {
+  required: boolean;
+  authenticated: boolean;
+}
+
+export async function authStatus(): Promise<AuthStatus> {
+  return request<AuthStatus>("/__local__/auth");
+}
+
+export async function login(password: string): Promise<void> {
+  await request("/__local__/login", { password });
+}
+
+export async function logout(): Promise<void> {
+  await request("/__local__/logout", {});
+}
 
 export async function getSettings(): Promise<Settings> {
   return request<Settings>("/__local__/settings");

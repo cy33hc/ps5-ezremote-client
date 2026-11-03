@@ -2027,6 +2027,45 @@ namespace Windows
                 }
                 ImGui::Separator();
 
+                field_size = ImGui::CalcTextSize("Session timeout");
+                width = field_size.x + 45;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
+                ImGui::Text("Session timeout");
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(width);
+                if (ImGui::Button("-##session_timeout_dec", ImVec2(45, 0)))
+                    web_session_timeout = web_session_timeout > 5 ? web_session_timeout - 5 : 5;
+                ImGui::SameLine();
+                sprintf(id, "%d min##session_timeout", web_session_timeout);
+                ImGui::Button(id, ImVec2(180, 0));
+                ImGui::SameLine();
+                if (ImGui::Button("+##session_timeout_inc", ImVec2(45, 0)))
+                    web_session_timeout = web_session_timeout < 1435 ? web_session_timeout + 5 : 1440;
+                ImGui::Separator();
+
+                field_size = ImGui::CalcTextSize("Web UI password");
+                width = field_size.x + 45;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
+                ImGui::Text("Web UI password");
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(width);
+                ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 1.0f));
+                if (strlen(web_password) > 0)
+                    sprintf(id, "%s", "*********************************************##web_password");
+                else
+                    sprintf(id, "%s", "##web_password");
+                if (ImGui::Button(id, ImVec2(835-width, 0)))
+                {
+                    ResetImeCallbacks();
+                    ime_single_field = web_password;
+                    ime_field_size = 255;
+                    ime_callback = SingleValueImeCallback;
+                    Dialog::initImeDialog("Web UI password", web_password, 255, SCE_IME_TYPE_DEFAULT, 1050, 80);
+                    gui_mode = GUI_MODE_IME;
+                }
+                ImGui::PopStyleVar();
+                ImGui::Separator();
+
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
                 ImGui::Text("%s", lang_strings[STR_COMPRESSED_FILE_PATH]);
                 ImGui::SameLine();

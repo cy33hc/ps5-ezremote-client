@@ -1609,6 +1609,7 @@ namespace Actions
             if (stop_activity)
                 break;
 
+            snprintf(activity_message, 1024, "%s %s", lang_strings[STR_MOVING], it->path);
             if (strcmp(it->directory, local_directory) == 0)
                 continue;
 
@@ -1684,8 +1685,7 @@ namespace Actions
             if (stop_activity)
                 break;
 
-            bool same_directory = strcmp(it->directory, local_directory) == 0;
-
+            snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], it->path);
             if (it->isDir)
             {
                 if (strncmp(local_directory, it->path, strlen(it->path)) == 0)
@@ -1693,20 +1693,17 @@ namespace Actions
                     sprintf(status_message, "%s", lang_strings[STR_CANT_COPY_TO_SUBDIR_MSG]);
                     continue;
                 }
-                std::string name = same_directory ? UniqueLocalName(local_directory, it->name) : std::string(it->name);
+                // UniqueLocalName returns the original name when nothing collides.
+                std::string name = UniqueLocalName(local_directory, it->name);
                 char new_dir[512];
                 sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", name.c_str());
                 CopyOrMove(*it, new_dir, true);
             }
-            else if (same_directory)
+            else
             {
                 std::string target = std::string(local_directory) +
                     (FS::hasEndSlash(local_directory) ? "" : "/") + UniqueLocalName(local_directory, it->name);
                 CopyOrMoveLocalFile(it->path, target.c_str(), true);
-            }
-            else
-            {
-                CopyOrMove(*it, local_directory, true);
             }
         }
         activity_inprogess = false;
@@ -1894,6 +1891,7 @@ namespace Actions
             if (stop_activity)
                 break;
 
+            snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], it->path);
             if (strcmp(it->directory, remote_directory) == 0)
                 continue;
 
@@ -2016,6 +2014,26 @@ namespace Actions
         tmp_client.SetTimeout(1);
 
         tmp_client.Get("http://localhost:" + std::to_string(http_int_server_port) + "/stop", headers, res);
+    }
+
+    int ClearDownloadHistory()
+    {
+        CHTTPClient::HttpResponse res;
+        CHTTPClient::HeadersMap headers;
+        CHTTPClient tmp_client([](const std::string& log){});
+        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+        tmp_client.SetCertificateFile(CACERT_FILE);
+        tmp_client.SetTimeout(2);
+        headers["Content-Type"] = "application/json";
+
+        std::string url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/clear_download_history";
+        if (tmp_client.Post(url, headers, "{}", res) && HTTP_SUCCESS(res.iCode))
+        {
+            bg_download_progress.clear();
+            return 1;
+        }
+
+        return 0;
     }
 
     void GetBackgroundDownloadProgress()

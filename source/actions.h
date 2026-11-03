@@ -128,6 +128,7 @@ namespace Actions
     void RestartServer();
     void StopServer();
     void GetBackgroundDownloadProgress();
+    int ClearDownloadHistory();
 }
 
 #endif

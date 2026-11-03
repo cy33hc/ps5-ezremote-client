@@ -1477,8 +1477,23 @@ namespace Windows
                     cur_tick = Util::GetTick();
                     tick_delta = (cur_tick - prev_tick) * 1.0f / 1000000.0f;
 
-                    uint64_t moved = remoteclient != nullptr ? remoteclient->TransferredBytes() : 0;
-                    uint64_t total = remoteclient != nullptr ? remoteclient->TotalBytes() : 0;
+                    uint64_t moved = 0;
+                    uint64_t total = 0;
+
+                    // Remote transfers report through the connection's counters.
+                    if (remoteclient != nullptr)
+                    {
+                        moved = remoteclient->TransferredBytes();
+                        total = remoteclient->TotalBytes();
+                    }
+
+                    // Local copies, zips and installs still report through the
+                    // globals (fs.cpp / installer.cpp).
+                    if (total == 0)
+                    {
+                        moved = bytes_transfered;
+                        total = bytes_to_download;
+                    }
                     progress = total > 0 ? moved * 1.0f / (float)total : 0.0f;
                     transfer_speed = (moved * 1.0f / tick_delta) / 1048576.0f;
 
@@ -1832,10 +1847,17 @@ namespace Windows
                 }
                 ImGui::Columns(1);
 
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 485);
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 335);
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
 
                 char id[128];
+                if (ImGui::Button("Clear history##bg_dl_clear", ImVec2(150, 0)))
+                {
+                    Actions::ClearDownloadHistory();
+                }
+
+                ImGui::SameLine();
+
                 sprintf(id, "%s##bg_dl_progress", lang_strings[STR_CLOSE]);
                 if (ImGui::Button(id, ImVec2(150, 0)))
                 {

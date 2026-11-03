@@ -592,18 +592,6 @@ export default function App() {
     notify(`Cut ${localSelected.length} item${localSelected.length > 1 ? "s" : ""}`, "info");
   };
 
-  // Windows-style copy name: "file.txt" -> "file (2).txt", "folder" -> "folder (2)".
-  const uniqueCopyName = (name: string, taken: Set<string>) => {
-    const dot = name.lastIndexOf(".");
-    const base = dot > 0 ? name.slice(0, dot) : name;
-    const ext = dot > 0 ? name.slice(dot) : "";
-    for (let index = 2; ; index += 1) {
-      const candidate = `${base} (${index})${ext}`;
-      // PS5 filesystems are case-insensitive, so compare lowercased.
-      if (!taken.has(candidate.toLowerCase())) return candidate;
-    }
-  };
-
   const pasteClipboard = () => {
     if (!clipboard) return;
     const { mode, items } = clipboard;
@@ -1993,6 +1981,36 @@ interface UrlValues {
   rpi: boolean;
 }
 
+// Windows-style copy name: "file.txt" -> "file (2).txt", "folder" -> "folder (2)".
+function uniqueCopyName(name: string, taken: Set<string>): string {
+  const dot = name.lastIndexOf(".");
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  for (let index = 2; ; index += 1) {
+    const candidate = `${base} (${index})${ext}`;
+    // PS5 filesystems are case-insensitive, so compare lowercased.
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+}
+
+// Best-effort filename from a URL: last path segment, query/hash stripped.
+function urlFileName(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const segment = parsed.pathname.split("/").filter(Boolean).pop() ?? "";
+    let name = segment;
+    try {
+      name = decodeURIComponent(segment);
+    } catch {
+      // Keep the raw segment when it is not valid percent-encoding.
+    }
+    if (name && name !== "." && name !== ".." && !name.includes("/")) return name;
+  } catch {
+    // Not a parseable URL; fall through to a generated name.
+  }
+  return `download-${Date.now()}`;
+}
+
 const URL_OPTIONS_KEY = "ezremote.urlOptions";
 
 function loadUrlOptions(): { alldebrid: boolean; realdebrid: boolean; rpi: boolean } {
@@ -2025,12 +2043,19 @@ function UrlDialog({
 }) {
   const [url, setUrl] = useState(initialUrl);
   const [dest, setDest] = useState(defaultDest);
+  const [fileName, setFileName] = useState(() => urlFileName(initialUrl));
+  const [fileNameEdited, setFileNameEdited] = useState(false);
   const [alldebrid, setAlldebrid] = useState(() => loadUrlOptions().alldebrid);
   const [realdebrid, setRealdebrid] = useState(() => loadUrlOptions().realdebrid);
   const [rpi, setRpi] = useState(() => loadUrlOptions().rpi);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isInstall = mode === "install";
+
+  // Keep the suggested name in step with the URL until the user edits it.
+  useEffect(() => {
+    if (!fileNameEdited) setFileName(urlFileName(url));
+  }, [url, fileNameEdited]);
 
   useEffect(() => {
     try {
@@ -2040,12 +2065,29 @@ function UrlDialog({
     }
   }, [alldebrid, realdebrid, rpi]);
 
+  const canSubmit = Boolean(url.trim()) && (isInstall || Boolean(fileName.trim()));
+
   const submit = async () => {
-    if (!url.trim() || working) return;
+    if (!canSubmit || working) return;
     setWorking(true);
     setError(null);
     try {
-      await onSubmit({ url: url.trim(), dest: dest.trim(), alldebrid, realdebrid, diskCache: false, rpi });
+      let target = dest.trim();
+      if (!isInstall) {
+        const folder = dest.trim() || defaultDest;
+        let name = fileName.trim();
+        try {
+          // Rename rather than overwrite when the folder already has the name.
+          const listing = await api.list(folder);
+          const taken = new Set(listing.map((entry) => entry.name.toLowerCase()));
+          if (taken.has(name.toLowerCase())) name = uniqueCopyName(name, taken);
+        } catch {
+          // Folder may not exist yet; nothing to collide with.
+        }
+        target = joinPath(folder, name);
+      }
+
+      await onSubmit({ url: url.trim(), dest: target, alldebrid, realdebrid, diskCache: false, rpi });
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Request failed");
@@ -2067,7 +2109,7 @@ function UrlDialog({
           <button
             type="button"
             onClick={() => void submit()}
-            disabled={!url.trim() || working}
+            disabled={!canSubmit || working}
             className="rounded-lg bg-accent-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-600 disabled:opacity-40"
           >
             {working ? "Working…" : isInstall ? "Install" : "Download"}
@@ -2081,9 +2123,22 @@ function UrlDialog({
           <input autoFocus value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" className="input mt-1.5" />
         </div>
         {!isInstall ? (
-          <div>
-            <label className="block text-xs font-medium text-mist-500">Destination folder</label>
-            <input value={dest} onChange={(event) => setDest(event.target.value)} className="input mt-1.5 font-mono text-xs" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-mist-500">Destination folder</label>
+              <input value={dest} onChange={(event) => setDest(event.target.value)} className="input mt-1.5 font-mono text-xs" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-mist-500">File name</label>
+              <input
+                value={fileName}
+                onChange={(event) => {
+                  setFileName(event.target.value);
+                  setFileNameEdited(true);
+                }}
+                className="input mt-1.5 font-mono text-xs"
+              />
+            </div>
           </div>
         ) : null}
         <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1">

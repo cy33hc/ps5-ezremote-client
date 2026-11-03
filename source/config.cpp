@@ -7,6 +7,7 @@
 #include <mutex>
 #include <regex>
 #include <stdlib.h>
+#include "httpclient/HTTPClient.h"
 #include "server/http_server.h"
 #include "config.h"
 #include "fs.h"
@@ -27,6 +28,7 @@ char app_ver[6];
 char last_site[32];
 char web_last_site[32];
 char web_password[256];
+int web_session_timeout = 60;
 
 // Serialises the ini writers: the HTTP worker threads and the native render
 // thread both call CONFIG::Save*() and the ini layer is not re-entrant.
@@ -293,7 +295,11 @@ namespace CONFIG
             else
                 sprintf(web_password, "%s", decrypted_password.c_str());
         }
-        
+
+        web_session_timeout = ReadInt(CONFIG_GLOBAL, CONFIG_WEB_SESSION_TIMEOUT, 60);
+        if (web_session_timeout < 1)
+            web_session_timeout = 60;
+
         sprintf(web_last_site, "%s", ReadString(CONFIG_GLOBAL, CONFIG_WEB_LAST_SITE, last_site));
         if (site_settings.find(std::string(web_last_site)) == site_settings.end())
             sprintf(web_last_site, "%s", last_site);
@@ -383,6 +389,8 @@ namespace CONFIG
             encrypted_api_key = std::string(realdebrid_api_key);
         WriteString(CONFIG_GLOBAL, CONFIG_REALDEBRID_API_KEY, encrypted_api_key.c_str());
 
+        WriteInt(CONFIG_GLOBAL, CONFIG_WEB_SESSION_TIMEOUT, web_session_timeout);
+
         std::string encrypted_web_password;
         if (strlen(web_password) > 0)
             Encrypt(web_password, encrypted_web_password);
@@ -412,6 +420,15 @@ namespace CONFIG
         {
             FS::MkDirs(compressed_file_path);
         }
+
+        CHTTPClient tmp_client([](const std::string& log){});
+        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+        tmp_client.SetTimeout(1);
+        CHTTPClient::HeadersMap headers;
+        CHTTPClient::HttpResponse res;
+        std::string url = "http://127.0.0.1:6701/change_ezremote_client_port";
+
+        tmp_client.Post(url, headers, std::to_string(http_server_port), res);
     }
 
     void SaveLocalDirecotry(const std::string &path)

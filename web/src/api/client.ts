@@ -42,6 +42,13 @@ async function request<T>(url: string, body?: unknown): Promise<T> {
     throw new ApiError("Cannot reach the console");
   }
 
+  if (response.status === 401) {
+    // Session expired or revoked: let the app show the login form. Reloading
+    // here would loop, because mounted effects retry on every load.
+    window.dispatchEvent(new Event("ezremote:unauthorized"));
+    throw new ApiError("Session expired");
+  }
+
   if (!response.ok) {
     throw new ApiError(`Request failed (HTTP ${response.status})`);
   }
@@ -248,6 +255,7 @@ export interface Settings {
   compressedFilePath: string;
   hasAllDebridKey: boolean;
   hasWebPassword: boolean;
+  webSessionTimeout: number;
   hasRealDebridKey: boolean;
 }
 

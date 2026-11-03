@@ -801,6 +801,14 @@ namespace HttpServer
         return cookies.substr(start, end == std::string::npos ? std::string::npos : end - start);
     }
 
+    // Sessions expire after `web_session_timeout` minutes without a request.
+    // Util::GetTick() is microseconds, not milliseconds.
+    static uint64_t WebSessionTimeoutUs()
+    {
+        int minutes = web_session_timeout > 0 ? web_session_timeout : 60;
+        return (uint64_t) minutes * 60ull * 1000000ull;
+    }
+
     static bool WebSessionValid(const Request &req)
     {
         if (!WebAuthRequired())
@@ -810,8 +818,22 @@ namespace HttpServer
         if (token.empty())
             return false;
 
+        const uint64_t now = Util::GetTick();
+
         std::lock_guard<std::mutex> lock(web_auth_mutex);
-        return web_sessions.find(token) != web_sessions.end();
+        std::map<std::string, uint64_t>::iterator session = web_sessions.find(token);
+        if (session == web_sessions.end())
+            return false;
+
+        if (now - session->second > WebSessionTimeoutUs())
+        {
+            web_sessions.erase(session);
+            return false;
+        }
+
+        // Sliding window: activity extends the session.
+        session->second = now;
+        return true;
     }
 
     static void WebClearSessions()
@@ -2412,6 +2434,7 @@ namespace HttpServer
             json_object_object_add(result, "tempFolder", json_object_new_string(temp_folder));
             json_object_object_add(result, "enableBackgroundDownload", json_object_new_boolean(enable_background_download));
             json_object_object_add(result, "hasWebPassword", json_object_new_boolean(strlen(web_password) > 0));
+            json_object_object_add(result, "webSessionTimeout", json_object_new_int(web_session_timeout));
             json_object_object_add(result, "minimumBackgroundFileSize", json_object_new_int64((int64_t)minimum_backgrond_file_size));
             json_object_object_add(result, "webServerEnabled", json_object_new_boolean(web_server_enabled));
             json_object_object_add(result, "httpServerPort", json_object_new_int(http_server_port));
@@ -2465,6 +2488,13 @@ namespace HttpServer
                 snprintf(web_password, sizeof(web_password), "%s", plain == nullptr ? "" : plain);
                 // Changing the password invalidates every open session.
                 WebClearSessions();
+            }
+
+            json_object *timeout_obj = json_object_object_get(jobj, "webSessionTimeout");
+            if (timeout_obj != nullptr)
+            {
+                int minutes = json_object_get_int(timeout_obj);
+                web_session_timeout = minutes < 1 ? 60 : (minutes > 1440 ? 1440 : minutes);
             }
 
             json_object *bool_obj = json_object_object_get(jobj, "autoDeleteTmpPkg");

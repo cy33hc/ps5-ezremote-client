@@ -99,9 +99,11 @@ export default function App() {
   const [bgOpen, setBgOpen] = useState(false);
   const [remotePkgView, setRemotePkgView] = useState<DirEntry | null>(null);
   const [auth, setAuth] = useState<api.AuthStatus | null>(null);
+  const authed = auth !== null && auth.authenticated;
   const [bgList, setBgList] = useState<api.BgDownload[]>([]);
   const [ezremoteVersion, setEzremoteVersion] = useState<string | null>(null);
   const [ezMenu, setEzMenu] = useState<{ x: number; y: number } | null>(null);
+  const [powerMenu, setPowerMenu] = useState<{ x: number; y: number } | null>(null);
   const [queuedNotice, setQueuedNotice] = useState<string | null>(null);
   const knownBg = useRef<Set<string> | null>(null);
   const noticeTimer = useRef<number | null>(null);
@@ -184,8 +186,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!authed) return;
     void loadServerInfo();
-  }, [loadServerInfo]);
+  }, [loadServerInfo, authed]);
 
   // Password protection: ask before any other API call is made.
   useEffect(() => {
@@ -195,9 +198,16 @@ export default function App() {
       .catch(() => setAuth({ required: false, authenticated: true }));
   }, []);
 
+  useEffect(() => {
+    const onUnauthorized = () => setAuth({ required: true, authenticated: false });
+    window.addEventListener("ezremote:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("ezremote:unauthorized", onUnauthorized);
+  }, []);
+
   // Background downloads live in the ezRemote server; poll while the panel is
   // open, and slowly otherwise so the header badge stays current.
   useEffect(() => {
+    if (!authed) return;
     let cancelled = false;
     const load = async () => {
       // The status button follows /version alone.
@@ -243,7 +253,7 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [bgOpen]);
+  }, [bgOpen, authed]);
 
   // Connect the remote pane once a profile is known (and only once per failure).
   useEffect(() => {
@@ -770,6 +780,35 @@ export default function App() {
     })();
   };
 
+  const restartClient = () => {
+    if (!window.confirm("Restart ezRemote Client?")) return;
+    void (async () => {
+      try {
+        await fetch("/stop");
+      } catch {
+        // Expected: the listener is torn down mid-response.
+      }
+
+      // The launcher lives on the ezRemote server; it relaunches the client and
+      // redirects back to its web UI.
+      const host = window.location.hostname;
+      window.setTimeout(() => {
+        window.location.href = `http://${host}:6701/start_client`;
+      }, 2500);
+    })();
+  };
+
+  const logout = () => {
+    void (async () => {
+      try {
+        await api.logout();
+      } catch {
+        // Reloading below clears the dead session either way.
+      }
+      window.location.reload();
+    })();
+  };
+
   const disconnectRemote = async () => {
     if (!serverInfo) return;
     try {
@@ -1098,9 +1137,11 @@ export default function App() {
       <header className="border-b border-abyss-600 bg-abyss-900">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:flex-nowrap">
           <div className="flex items-center gap-2">
-            <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 text-abyss-950 shadow-lg shadow-accent-500/20">
-              <Icon name="home" size={20} />
-            </span>
+            <img
+              src="/data/homebrew/ezremote-client/assets/images/icon0.png"
+              alt="ezRemote Client"
+              className="size-10 shrink-0 rounded-xl shadow-lg shadow-black/30"
+            />
             <div className="min-w-0 leading-tight">
               <p className="text-2xl font-semibold tracking-tight">ezRemote Client</p>
               <div className="flex min-w-0 items-center gap-2">
@@ -1145,7 +1186,10 @@ export default function App() {
               busy={bgList.some((item) => item.state === 1 || item.state === 2)}
             />
             <HeaderButton icon="settings" label="Settings" onClick={() => setSettingsOpen(true)} />
-            <HeaderButton icon="power" label="Stop" onClick={stopHttpServer} />
+            <HeaderButton
+              icon="logout"
+              onClick={(event) => setPowerMenu({ x: event.clientX, y: event.clientY })}
+            />
           </div>
         </div>
       </header>
@@ -1262,6 +1306,49 @@ export default function App() {
         />
       ) : null}
       {properties ? <PropertiesDialog entry={properties} path={activePane === "local" ? path : remotePath} onClose={() => setProperties(null)} /> : null}
+      {powerMenu ? (
+        <>
+          <div className="fixed inset-0 z-40" onMouseDown={() => setPowerMenu(null)} />
+          <div
+            className="fixed z-50 w-56 rounded-xl border border-abyss-600 bg-abyss-900/95 p-1 shadow-2xl backdrop-blur"
+            style={{ left: Math.max(8, powerMenu.x - 190), top: powerMenu.y + 10 }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setPowerMenu(null);
+                logout();
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-mist-300 hover:bg-white/5 hover:text-mist-100"
+            >
+              <Icon name="logout" size={14} />
+              Logout
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPowerMenu(null);
+                restartClient();
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-mist-300 hover:bg-white/5 hover:text-mist-100"
+            >
+              <Icon name="refresh" size={14} />
+              Restart ezRemote Client
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPowerMenu(null);
+                stopHttpServer();
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-rose-400 hover:bg-rose-400/10"
+            >
+              <Icon name="power" size={14} />
+              Stop ezRemote Client
+            </button>
+          </div>
+        </>
+      ) : null}
       {ezMenu ? (
         <>
           <div className="fixed inset-0 z-40" onMouseDown={() => setEzMenu(null)} />
@@ -1397,8 +1484,8 @@ function HeaderButton({
   busy,
 }: {
   icon: IconName;
-  label: string;
-  onClick: () => void;
+  label?: string;
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   badge?: number;
   busy?: boolean;
 }) {
@@ -1409,7 +1496,7 @@ function HeaderButton({
       className="relative flex items-center gap-1.5 rounded-lg border border-abyss-600 px-2.5 py-1.5 text-sm font-medium text-mist-300 transition hover:border-white/20 hover:bg-white/5 hover:text-mist-100"
     >
       <Icon name={icon} size={18} className={busy ? "animate-pulse text-accent-200" : undefined} />
-      <span className="hidden lg:inline">{label}</span>
+      {label ? <span className="hidden lg:inline">{label}</span> : null}
       {badge ? (
         <span className="absolute -top-1.5 -right-1.5 min-w-4 rounded-full bg-accent-500 px-1 text-[10px] font-semibold leading-4 text-white">
           {badge}

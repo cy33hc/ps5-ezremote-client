@@ -60,6 +60,7 @@
 #define CONFIG_LAST_SITE "last_site"
 #define CONFIG_WEB_LAST_SITE "web_last_site"
 #define CONFIG_WEB_PASSWORD "web_password"
+#define CONFIG_WEB_SESSION_TIMEOUT "web_session_timeout"
 #define CONFIG_AUTO_DELETE_TMP_PKG "auto_delete_tmp_pkg"
 
 #define CONFIG_LOCAL_DIRECTORY "local_directory"
@@ -123,6 +124,8 @@ extern char last_site[32];
 extern char web_last_site[32];
 // Decrypted web UI password; persisted encrypted, empty = no protection.
 extern char web_password[256];
+// Minutes of inactivity before a web session expires.
+extern int web_session_timeout;
 extern char display_site[32];
 extern std::vector<std::string> langs;
 extern char language[128];

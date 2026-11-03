@@ -65,6 +65,7 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
         webServerEnabled: settings.webServerEnabled,
         httpServerPort: settings.httpServerPort,
         compressedFilePath: settings.compressedFilePath,
+        webSessionTimeout: Math.max(1, Number(settings.webSessionTimeout) || 60),
         alldebridApiKey: allDebrid ? allDebrid : undefined,
         realdebridApiKey: realDebrid ? realDebrid : undefined,
         webPassword: removeWebPassword ? "" : webPassword ? webPassword : undefined,
@@ -171,6 +172,14 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
                 <input
                   value={String(settings.httpServerPort)}
                   onChange={(event) => update("httpServerPort", Number(event.target.value.replace(/\D/g, "")) || 0)}
+                  inputMode="numeric"
+                  className="input font-mono"
+                />
+              </Field>
+              <Field label="Session timeout (minutes)">
+                <input
+                  value={String(settings.webSessionTimeout)}
+                  onChange={(event) => update("webSessionTimeout", Number(event.target.value.replace(/\D/g, "")) || 0)}
                   inputMode="numeric"
                   className="input font-mono"
                 />

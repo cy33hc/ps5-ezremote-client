@@ -5,66 +5,139 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>File Download Status Tracker</title>
     <style>
+        :root {
+            --bg: #1b1b1c;
+            --panel: #252526;
+            --panel-alt: #2d2d30;
+            --line: #333337;
+            --line-strong: #4e4e4e;
+            --text: #e4e4e4;
+            --muted: #979797;
+            --bright: #fff;
+            --accent: #1d97ec;
+            --accent-soft: #9ad4f6;
+            --mint: #57a64a;
+            --amber: #d7ba7d;
+            --rose: #f14c4c;
+        }
         body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            background-color: #f4f6f9;
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            margin: 32px;
+            background-color: var(--bg);
+            color: var(--text);
         }
         h2 {
-            color: #333;
+            color: var(--bright);
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin: 0 0 4px;
         }
         .refresh-indicator {
-            font-size: 0.9rem;
-            color: #666;
-            margin-bottom: 15px;
+            font-size: 0.8rem;
+            color: var(--muted);
+            margin-bottom: 20px;
         }
         table {
             width: 100%;
-            border-collapse: collapse;
-            background-color: #fff;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border-radius: 8px;
+            border-collapse: separate;
+            border-spacing: 0;
+            background-color: var(--panel);
+            border: 1px solid var(--line-strong);
+            border-radius: 12px;
             overflow: hidden;
         }
         th, td {
-            padding: 12px 15px;
+            padding: 12px 16px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--line);
         }
         th {
-            background-color: #007bff;
-            color: white;
+            background-color: var(--panel-alt);
+            color: var(--muted);
             text-transform: uppercase;
-            font-size: 0.85rem;
-            letter-spacing: 0.5px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
         }
-        tr:hover {
-            background-color: #f1f5f9;
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+        tr:hover td {
+            background-color: rgba(255, 255, 255, 0.03);
+        }
+        td {
+            font-size: 0.875rem;
+        }
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.8rem;
+            color: var(--accent-soft);
         }
         .status-badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 0.8rem;
+            padding: 3px 8px;
+            border-radius: 999px;
+            border: 1px solid transparent;
+            font-weight: 600;
+            font-size: 0.72rem;
             display: inline-block;
         }
-        .queued { background-color: #e2e3e5; color: #383d41; }
-        .in-progress { background-color: #fff3cd; color: #856404; }
-        .resumed { background-color: #d1ecf1; color: #0c5460; }
-        .failed { background-color: #f8d7da; color: #721c24; }
-        .completed { background-color: #d4edda; color: #155724; }
-        .unknown { background-color: #eee; color: #333; }
-        
+        .queued { background-color: var(--panel-alt); border-color: var(--line); color: var(--muted); }
+        .in-progress { background-color: rgba(29, 151, 236, 0.15); border-color: rgba(29, 151, 236, 0.35); color: var(--accent-soft); }
+        .resumed { background-color: rgba(215, 186, 125, 0.15); border-color: rgba(215, 186, 125, 0.35); color: var(--amber); }
+        .failed { background-color: rgba(241, 76, 76, 0.15); border-color: rgba(241, 76, 76, 0.35); color: var(--rose); }
+        .completed { background-color: rgba(87, 166, 74, 0.15); border-color: rgba(87, 166, 74, 0.35); color: var(--mint); }
+        .unknown { background-color: var(--panel-alt); border-color: var(--line); color: var(--muted); }
+
         .error-message {
-            color: #dc3545;
-            font-weight: bold;
+            color: var(--rose);
+            font-weight: 600;
+        }
+        .page-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .clear-button {
+            flex-shrink: 0;
+            border: 1px solid rgba(29, 151, 236, 0.4);
+            background-color: rgba(29, 151, 236, 0.15);
+            color: var(--accent-soft);
+            font: inherit;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+        .clear-button:hover:not(:disabled) {
+            background-color: rgba(29, 151, 236, 0.28);
+            border-color: rgba(29, 151, 236, 0.7);
+            color: var(--bright);
+        }
+        .clear-button:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+        .empty {
+            text-align: center;
+            color: var(--muted);
         }
     </style>
 </head>
 <body>
 
-    <h2>Live File Download Dashboard</h2>
-    <div class="refresh-indicator" id="refresh-text">Connecting to server...</div>
+    <div class="page-header">
+        <div>
+            <h2>Live File Download Dashboard</h2>
+            <div class="refresh-indicator" id="refresh-text">Connecting to server...</div>
+        </div>
+        <button class="clear-button" id="clear-button" type="button">Clear history</button>
+    </div>
 
     <table>
         <thead>
@@ -79,13 +152,15 @@
         </thead>
         <tbody id="table-body">
             <tr>
-                <td colspan="6" style="text-align: center; color: #888;">Waiting for data array...</td>
+                <td colspan="6" class="empty">Waiting for data array...</td>
             </tr>
         </tbody>
     </table>
 
     <script>
-        const API_URL = "http://localhost:6701/get_download_state";
+        const API_BASE = "http://localhost:6701";
+        const STATE_URL = API_BASE + "/get_download_state";
+        const CLEAR_URL = API_BASE + "/clear_download_history";
 
         const STATE_MAP = {
             0: { text: "Queued", cssClass: "queued" },
@@ -126,7 +201,7 @@
             const refreshText = document.getElementById("refresh-text");
 
             try {
-                const response = await fetch(API_URL);
+                const response = await fetch(STATE_URL);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -141,7 +216,7 @@
                 tbody.innerHTML = ""; 
 
                 if (dataArray.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #888;">No active downloads found.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="6" class="empty">No active downloads found.</td></tr>`;
                 } else {
                     dataArray.forEach(data => {
                         const row = document.createElement("tr");
@@ -178,6 +253,26 @@
                 refreshText.innerHTML = `<span class="error-message">Connection failed (${error.message}). Retrying...</span>`;
             }
         }
+
+        async function clearHistory() {
+            const button = document.getElementById("clear-button");
+            const refreshText = document.getElementById("refresh-text");
+            button.disabled = true;
+            try {
+                const response = await fetch(CLEAR_URL, { method: "POST" });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                await fetchTableData();
+            } catch (error) {
+                console.error("Clear failure:", error);
+                refreshText.innerHTML = `<span class="error-message">Clear failed (${error.message}).</span>`;
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        document.getElementById("clear-button").addEventListener("click", clearHistory);
 
         fetchTableData();
         setInterval(fetchTableData, 2000);

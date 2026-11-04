@@ -149,8 +149,18 @@ std::vector<DirEntry> WebDAVClient::ListDir(const std::string &path)
             p_char = strchr(modified_date, ' ');
             if (p_char)
             {
-                char month[5];
-                sscanf(p_char, "%d %s %d %d:%d:%d", &entry.modified.day, month, &entry.modified.year, &entry.modified.hours, &entry.modified.minutes, &entry.modified.seconds);
+                char month[5] = {0};
+                int day = 0, year = 0, hours = 0, minutes = 0, seconds = 0;
+                // Parse into ints: the DateTime fields are 8/16-bit, and %d
+                // writes 4 bytes, which overwrote the neighbouring members.
+                if (sscanf(p_char, "%d %4s %d %d:%d:%d", &day, month, &year, &hours, &minutes, &seconds) == 6)
+                {
+                    entry.modified.day = (uint8_t) day;
+                    entry.modified.year = (uint16_t) year;
+                    entry.modified.hours = (uint8_t) hours;
+                    entry.modified.minutes = (uint8_t) minutes;
+                    entry.modified.seconds = (uint8_t) seconds;
+                }
                 for (int k = 0; k < 12; k++)
                 {
                     if (strcmp(month, months[k]) == 0)
@@ -175,10 +185,11 @@ std::vector<DirEntry> WebDAVClient::ListDir(const std::string &path)
 int WebDAVClient::Put(const std::string &inputfile, const std::string &path, uint64_t offset)
 {
     size_t bytes_remaining = FS::GetSize(inputfile);
-    bytes_transfered = 0;
+    SetTotalBytes((uint64_t) bytes_remaining);
+    ResetTransferredBytes();
     prev_tick = Util::GetTick();
 
-    client->SetProgressFnCallback(&bytes_transfered, UploadProgressCallback);
+    client->SetProgressFnCallback(this, UploadProgressCallback);
     std::string encode_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
     long status;
 

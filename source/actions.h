@@ -73,6 +73,9 @@ static pthread_t ftp_keep_alive_thid;
 namespace Actions
 {
 
+    // Creates the client that matches a site's URL scheme, without connecting.
+    RemoteClient *CreateRemoteClient(RemoteSettings *settings);
+
     void RefreshLocalFiles(bool apply_filter);
     void RefreshRemoteFiles(bool apply_filter);
     void HandleChangeLocalDirectory(const DirEntry entry);
@@ -125,6 +128,7 @@ namespace Actions
     void RestartServer();
     void StopServer();
     void GetBackgroundDownloadProgress();
+    int ClearDownloadHistory();
 }
 
 #endif

@@ -43,6 +43,10 @@ public:
     uint32_t SupportedActions();
 
 protected:
+    // SCP upload path. Returns 1 on success, 0 on failure, -1 when the server
+    // does not accept SCP so the caller can fall back to SFTP.
+    int PutScp(const std::string &inputfile, const std::string &path, uint64_t total);
+
     LIBSSH2_SESSION *session;
     LIBSSH2_SFTP *sftp_session;
     int sock;

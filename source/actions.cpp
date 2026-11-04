@@ -38,7 +38,10 @@ namespace Actions
 {
     static int FtpCallback(int64_t xfered, void *arg)
     {
-        bytes_transfered = xfered;
+        // The owning client is passed as the callback argument so progress stays
+        // per-connection instead of going through the shared global.
+        if (arg != nullptr)
+            static_cast<FtpClient *>(arg)->SetTransferredBytes((uint64_t) xfered);
         return 1;
     }
 
@@ -1340,54 +1343,60 @@ namespace Actions
         }
     }
 
-    void Connect()
+    RemoteClient *CreateRemoteClient(RemoteSettings *settings)
     {
-        CONFIG::SaveConfig();
+        if (strncmp(settings->server, "https://", 8) == 0 || strncmp(settings->server, "http://", 7) == 0)
+        {
+            if (strcmp(settings->http_server_type, HTTP_SERVER_APACHE) == 0)
+                return new ApacheClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_MS_IIS) == 0)
+                return new IISClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_NGINX) == 0)
+                return new NginxClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_NPX_SERVE) == 0)
+                return new NpxServeClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_RCLONE) == 0)
+                return new RCloneClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_ARCHIVEORG) == 0)
+                return new ArchiveOrgClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_MYRIENT) == 0)
+                return new MyrientClient();
+            if (strcmp(settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
+                return new GithubClient();
+            return nullptr;
+        }
 
-        if (strncmp(remote_settings->server, "https://", 8) == 0 || strncmp(remote_settings->server, "http://", 7) == 0)
-        {
-            if (strcmp(remote_settings->http_server_type, HTTP_SERVER_APACHE) == 0)
-                remoteclient = new ApacheClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MS_IIS) == 0)
-                remoteclient = new IISClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_NGINX) == 0)
-                remoteclient = new NginxClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_NPX_SERVE) == 0)
-                remoteclient = new NpxServeClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_RCLONE) == 0)
-                remoteclient = new RCloneClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_ARCHIVEORG) == 0)
-                remoteclient = new ArchiveOrgClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_MYRIENT) == 0)
-                remoteclient = new MyrientClient();
-            else if (strcmp(remote_settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
-                remoteclient = new GithubClient();
-        }
-        else if (strncmp(remote_settings->server, "webdavs://", 10) == 0 || strncmp(remote_settings->server, "webdav://", 9) == 0)
-        {
-            remoteclient = new WebDAVClient();
-        }
-        else if (strncmp(remote_settings->server, "smb://", 6) == 0)
-        {
-            remoteclient = new SmbClient();
-        }
-        else if (strncmp(remote_settings->server, "ftp://", 6) == 0)
+        if (strncmp(settings->server, "webdavs://", 10) == 0 || strncmp(settings->server, "webdav://", 9) == 0)
+            return new WebDAVClient();
+
+        if (strncmp(settings->server, "smb://", 6) == 0)
+            return new SmbClient();
+
+        if (strncmp(settings->server, "ftp://", 6) == 0)
         {
             FtpClient *client = new FtpClient();
             client->SetConnmode(FtpClient::pasv);
             client->SetCallbackBytes(1);
             client->SetCallbackXferFunction(FtpCallback);
-            remoteclient = client;
+            client->SetCallbackArg(client);
+            return client;
         }
-        else if (strncmp(remote_settings->server, "sftp://", 7) == 0)
-        {
-            remoteclient = new SFTPClient();
-        }
-        else if (strncmp(remote_settings->server, "nfs://", 6) == 0)
-        {
-            remoteclient = new NfsClient();
-        }
-        else
+
+        if (strncmp(settings->server, "sftp://", 7) == 0)
+            return new SFTPClient();
+
+        if (strncmp(settings->server, "nfs://", 6) == 0)
+            return new NfsClient();
+
+        return nullptr;
+    }
+
+    void Connect()
+    {
+        CONFIG::SaveConfig();
+
+        remoteclient = CreateRemoteClient(remote_settings);
+        if (remoteclient == nullptr)
         {
             sprintf(status_message, "%s", lang_strings[STR_PROTOCOL_NOT_SUPPORTED]);
             selected_action = ACTION_NONE;
@@ -1600,6 +1609,7 @@ namespace Actions
             if (stop_activity)
                 break;
 
+            snprintf(activity_message, 1024, "%s %s", lang_strings[STR_MOVING], it->path);
             if (strcmp(it->directory, local_directory) == 0)
                 continue;
 
@@ -1640,6 +1650,33 @@ namespace Actions
         }
     }
 
+    static bool LocalPathExists(const std::string &path)
+    {
+        return FS::FileExists(path.c_str()) || FS::IsFolder(path.c_str()) == 1;
+    }
+
+    // "name" -> "name (2)", "file.txt" -> "file (2).txt"
+    static std::string UniqueLocalName(const std::string &dir, const std::string &name)
+    {
+        std::string sep = FS::hasEndSlash(dir.c_str()) ? "" : "/";
+        if (!LocalPathExists(dir + sep + name))
+            return name;
+
+        size_t dot = name.find_last_of('.');
+        std::string base = (dot == std::string::npos || dot == 0) ? name : name.substr(0, dot);
+        std::string ext = (dot == std::string::npos || dot == 0) ? "" : name.substr(dot);
+
+        for (int index = 2; index < 10000; index++)
+        {
+            char candidate[512];
+            snprintf(candidate, sizeof(candidate), "%s (%d)%s", base.c_str(), index, ext.c_str());
+            if (!LocalPathExists(dir + sep + candidate))
+                return std::string(candidate);
+        }
+
+        return name;
+    }
+
     void *CopyLocalFilesThread(void *argp)
     {
         file_transfering = true;
@@ -1648,9 +1685,7 @@ namespace Actions
             if (stop_activity)
                 break;
 
-            if (strcmp(it->directory, local_directory) == 0)
-                continue;
-
+            snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], it->path);
             if (it->isDir)
             {
                 if (strncmp(local_directory, it->path, strlen(it->path)) == 0)
@@ -1658,13 +1693,17 @@ namespace Actions
                     sprintf(status_message, "%s", lang_strings[STR_CANT_COPY_TO_SUBDIR_MSG]);
                     continue;
                 }
+                // UniqueLocalName returns the original name when nothing collides.
+                std::string name = UniqueLocalName(local_directory, it->name);
                 char new_dir[512];
-                sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", it->name);
+                sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", name.c_str());
                 CopyOrMove(*it, new_dir, true);
             }
             else
             {
-                CopyOrMove(*it, local_directory, true);
+                std::string target = std::string(local_directory) +
+                    (FS::hasEndSlash(local_directory) ? "" : "/") + UniqueLocalName(local_directory, it->name);
+                CopyOrMoveLocalFile(it->path, target.c_str(), true);
             }
         }
         activity_inprogess = false;
@@ -1852,6 +1891,7 @@ namespace Actions
             if (stop_activity)
                 break;
 
+            snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], it->path);
             if (strcmp(it->directory, remote_directory) == 0)
                 continue;
 
@@ -1974,6 +2014,26 @@ namespace Actions
         tmp_client.SetTimeout(1);
 
         tmp_client.Get("http://localhost:" + std::to_string(http_int_server_port) + "/stop", headers, res);
+    }
+
+    int ClearDownloadHistory()
+    {
+        CHTTPClient::HttpResponse res;
+        CHTTPClient::HeadersMap headers;
+        CHTTPClient tmp_client([](const std::string& log){});
+        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+        tmp_client.SetCertificateFile(CACERT_FILE);
+        tmp_client.SetTimeout(2);
+        headers["Content-Type"] = "application/json";
+
+        std::string url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/clear_download_history";
+        if (tmp_client.Post(url, headers, "{}", res) && HTTP_SUCCESS(res.iCode))
+        {
+            bg_download_progress.clear();
+            return 1;
+        }
+
+        return 0;
     }
 
     void GetBackgroundDownloadProgress()

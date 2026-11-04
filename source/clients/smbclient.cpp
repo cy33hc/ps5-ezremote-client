@@ -200,11 +200,13 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 {
 	std::string path = std::string(ppath);
 	path = Util::Trim(path, "/");
-	if (!Size(path.c_str(), &bytes_to_download))
+	uint64_t transfer_total = 0;
+	if (!Size(path.c_str(), &transfer_total))
 	{
 		snprintf(response, sizeof(response), "%s", smb2_get_error(smb2));
 		return 0;
 	}
+	SetTotalBytes(transfer_total);
 
 	struct smb2fh* in = smb2_open(smb2, path.c_str(), O_RDONLY);
 	if (in == NULL)
@@ -230,7 +232,7 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 		return 0;
 	}
 	int count = 0;
-	bytes_transfered = 0;
+	ResetTransferredBytes();
 	prev_tick = Util::GetTick();
 	while ((count = smb2_read(smb2, in, buff, max_read_size)) != 0)
 	{
@@ -243,7 +245,7 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 			return 0;
 		}
 		FS::Write(out, buff, count);
-		bytes_transfered += count;
+		AddTransferredBytes(count);
 	}
 	FS::Close(out);
 	smb2_close(smb2, in);
@@ -433,12 +435,13 @@ int SmbClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 	std::string path = std::string(ppath);
 	path = Util::Trim(path, "/");
 
-	bytes_to_download = FS::GetSize(inputfile);
-	if (bytes_to_download < 0)
+	int64_t transfer_total = FS::GetSize(inputfile);
+	if (transfer_total < 0)
 	{
 		sprintf(response, "%s", lang_strings[STR_FAILED]);
 		return 0;
 	}
+	SetTotalBytes((uint64_t) transfer_total);
 
 	FILE* in = FS::OpenRead(inputfile);
 	if (in == NULL)
@@ -464,7 +467,7 @@ int SmbClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 		return 0;
 	}
 	int count = 0;
-	bytes_transfered = 0;
+	ResetTransferredBytes();
 	prev_tick = Util::GetTick();
 	while ((count = FS::Read(in, buff, max_write_size)) > 0)
 	{
@@ -484,7 +487,7 @@ int SmbClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 			free(buff);
 			return 0;
 		}
-		bytes_transfered += count;
+		AddTransferredBytes(count);
 	}
 	FS::Close(in);
 	smb2_close(smb2, out);
@@ -621,7 +624,8 @@ int SmbClient::Head(const std::string &ppath, void *buffer, uint64_t len)
 {
 	std::string path = std::string(ppath);
 	path = Util::Trim(path, "/");
-	if (!Size(path.c_str(), &bytes_to_download))
+	uint64_t ignored_total = 0;
+	if (!Size(path.c_str(), &ignored_total))
 	{
 		return 0;
 	}

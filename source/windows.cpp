@@ -8,6 +8,7 @@
 #include "fs.h"
 #include "config.h"
 #include "gui.h"
+#include <sys/stat.h>
 #include "actions.h"
 #include "util.h"
 #include "lang.h"
@@ -1389,7 +1390,16 @@ namespace Windows
         }
     }
 
-    void ShowPropertiesDialog(DirEntry item)
+    static int RightsToMode(const char *rights)
+    {
+        int mode = 0;
+        for (int i = 0; i < 9; i++)
+            if (rights[i] == 'r' || rights[i] == 'w' || rights[i] == 'x')
+                mode |= 1 << (8 - i);
+        return mode;
+    }
+
+    void ShowPropertiesDialog(DirEntry item, bool editable)
     {
         ImGuiIO &io = ImGui::GetIO();
         (void)io;
@@ -1399,7 +1409,7 @@ namespace Windows
         ImGui::OpenPopup(lang_strings[STR_PROPERTIES]);
 
         ImGui::SetNextWindowPos(ImVec2(610, 400));
-        ImGui::SetNextWindowSizeConstraints(ImVec2(700, 80), ImVec2(700, 250), NULL, NULL);
+        ImGui::SetNextWindowSizeConstraints(ImVec2(700, 120), ImVec2(700, 360), NULL, NULL);
         if (ImGui::BeginPopupModal(lang_strings[STR_PROPERTIES], NULL, ImGuiWindowFlags_AlwaysAutoResize))
         {
             ImGui::TextColored(colors[ImGuiCol_ButtonHovered], "%s:", lang_strings[STR_TYPE]);
@@ -1427,12 +1437,91 @@ namespace Windows
                         item.modified.hours, item.modified.minutes, item.modified.seconds);
             ImGui::Separator();
 
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 300);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+            static bool perms[9];
+            if (editable)
+            {
+                if (ImGui::IsWindowAppearing())
+                {
+                    for (int i = 0; i < 9; i++)
+                        perms[i] = item.rights[i] == 'r' || item.rights[i] == 'w' || item.rights[i] == 'x';
+                }
+
+                ImGui::TextColored(colors[ImGuiCol_ButtonHovered], "%s:", "Permissions");
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(150);
+
+                const char *who[3] = {"User", "Group", "Others"};
+                const char *action[3] = {"r", "w", "x"};
+
+                // Start every row's checkboxes after the widest label.
+                float label_width = 0.0f;
+                for (int i = 0; i < 3; i++)
+                {
+                    float current = ImGui::CalcTextSize(who[i]).x;
+                    if (current > label_width)
+                        label_width = current;
+                }
+                float column_x = 150.0f + label_width + 20.0f;
+
+                for (int row = 0; row < 3; row++)
+                {
+                    if (row > 0)
+                        ImGui::SetCursorPosX(150);
+                    ImGui::Text("%s", who[row]);
+                    for (int col = 0; col < 3; col++)
+                    {
+                        int index = row * 3 + col;
+                        char cid[32];
+                        sprintf(cid, "%s##perm%d", action[col], index);
+                        if (col == 0)
+                            ImGui::SameLine(column_x);
+                        else
+                            ImGui::SameLine(0, 30);
+                        ImGui::Checkbox(cid, &perms[index]);
+                    }
+                }
+                ImGui::Separator();
+            }
 
             char id[128];
+            float buttons_width = editable ? 210.0f : 100.0f;
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - buttons_width) * 0.5f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+
+            if (editable)
+            {
+                if (ImGui::Button("Apply##apply_perms", ImVec2(100, 0)))
+                {
+                    char rights[10];
+                    for (int i = 0; i < 9; i++)
+                        rights[i] = perms[i] ? "rwx"[i % 3] : '-';
+                    rights[9] = '\0';
+
+                    if (chmod(item.path, RightsToMode(rights)) != 0)
+                        sprintf(status_message, "Could not change permissions for %s", item.name);
+                    else
+                        sprintf(status_message, "Permissions set to %s", rights);
+
+                    selected_action = ACTION_REFRESH_LOCAL_FILES;
+                    SetModalMode(false);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine(0, 10);
+            }
+
             sprintf(id, "%s##prodialog", lang_strings[STR_CLOSE]);
             if (ImGui::Button(id, ImVec2(100, 0)))
+            {
+                SetModalMode(false);
+                selected_action = ACTION_NONE;
+                ImGui::CloseCurrentPopup();
+            }
+
+            // Close is the default action when the popup opens.
+            if (ImGui::IsWindowAppearing())
+                ImGui::SetItemDefaultFocus();
+
+            if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
             {
                 SetModalMode(false);
                 selected_action = ACTION_NONE;
@@ -1477,8 +1566,25 @@ namespace Windows
                     cur_tick = Util::GetTick();
                     tick_delta = (cur_tick - prev_tick) * 1.0f / 1000000.0f;
 
-                    progress = bytes_transfered * 1.0f / (float)bytes_to_download;
-                    transfer_speed = (bytes_transfered * 1.0f / tick_delta) / 1048576.0f;
+                    uint64_t moved = 0;
+                    uint64_t total = 0;
+
+                    // Remote transfers report through the connection's counters.
+                    if (remoteclient != nullptr)
+                    {
+                        moved = remoteclient->TransferredBytes();
+                        total = remoteclient->TotalBytes();
+                    }
+
+                    // Local copies, zips and installs still report through the
+                    // globals (fs.cpp / installer.cpp).
+                    if (total == 0)
+                    {
+                        moved = bytes_transfered;
+                        total = bytes_to_download;
+                    }
+                    progress = total > 0 ? moved * 1.0f / (float)total : 0.0f;
+                    transfer_speed = (moved * 1.0f / tick_delta) / 1048576.0f;
 
                     sprintf(progress_text, "%.2f MB/s", transfer_speed);
                     ImGui::ProgressBar(progress, ImVec2(625, 0), progress_text);
@@ -1830,10 +1936,17 @@ namespace Windows
                 }
                 ImGui::Columns(1);
 
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 485);
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 335);
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
 
                 char id[128];
+                if (ImGui::Button("Clear history##bg_dl_clear", ImVec2(150, 0)))
+                {
+                    Actions::ClearDownloadHistory();
+                }
+
+                ImGui::SameLine();
+
                 sprintf(id, "%s##bg_dl_progress", lang_strings[STR_CLOSE]);
                 if (ImGui::Button(id, ImVec2(150, 0)))
                 {
@@ -2001,6 +2114,45 @@ namespace Windows
                     Dialog::initImeDialog(lang_strings[STR_PORT], txt_http_server_port, 5, SCE_IME_TYPE_NUMBER, 1050, 80);
                     gui_mode = GUI_MODE_IME;
                 }
+                ImGui::Separator();
+
+                field_size = ImGui::CalcTextSize("Session timeout");
+                width = field_size.x + 45;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
+                ImGui::Text("Session timeout");
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(width);
+                if (ImGui::Button("-##session_timeout_dec", ImVec2(45, 0)))
+                    web_session_timeout = web_session_timeout > 5 ? web_session_timeout - 5 : 5;
+                ImGui::SameLine();
+                sprintf(id, "%d min##session_timeout", web_session_timeout);
+                ImGui::Button(id, ImVec2(180, 0));
+                ImGui::SameLine();
+                if (ImGui::Button("+##session_timeout_inc", ImVec2(45, 0)))
+                    web_session_timeout = web_session_timeout < 1435 ? web_session_timeout + 5 : 1440;
+                ImGui::Separator();
+
+                field_size = ImGui::CalcTextSize("Web UI password");
+                width = field_size.x + 45;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
+                ImGui::Text("Web UI password");
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(width);
+                ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 1.0f));
+                if (strlen(web_password) > 0)
+                    sprintf(id, "%s", "*********************************************##web_password");
+                else
+                    sprintf(id, "%s", "##web_password");
+                if (ImGui::Button(id, ImVec2(835-width, 0)))
+                {
+                    ResetImeCallbacks();
+                    ime_single_field = web_password;
+                    ime_field_size = 255;
+                    ime_callback = SingleValueImeCallback;
+                    Dialog::initImeDialog("Web UI password", web_password, 255, SCE_IME_TYPE_DEFAULT, 1050, 80);
+                    gui_mode = GUI_MODE_IME;
+                }
+                ImGui::PopStyleVar();
                 ImGui::Separator();
 
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
@@ -2428,10 +2580,10 @@ namespace Windows
             }
             break;
         case ACTION_SHOW_LOCAL_PROPERTIES:
-            ShowPropertiesDialog(selected_local_file);
+            ShowPropertiesDialog(selected_local_file, true);
             break;
         case ACTION_SHOW_REMOTE_PROPERTIES:
-            ShowPropertiesDialog(selected_remote_file);
+            ShowPropertiesDialog(selected_remote_file, false);
             break;
         case ACTION_LOCAL_SELECT_ALL:
             Actions::SelectAllLocalFiles();
@@ -2461,6 +2613,8 @@ namespace Windows
             Actions::Disconnect();
             HttpServer::Stop();
             done = true;
+            // If teardown or a blocked action wedges, leave anyway.
+            ArmExitWatchdog();
             break;
         case ACTION_INSTALL_REMOTE_PKG:
             if (INSTALLER::EzRemoteServerVersion().empty())

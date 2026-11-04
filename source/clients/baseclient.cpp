@@ -40,16 +40,14 @@ int BaseClient::NothingCallback(void* ptr, double dTotalToDownload, double dNowD
 int BaseClient::DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     CHTTPClient::ProgressFnStruct *progress_data = (CHTTPClient::ProgressFnStruct*) ptr;
-    int64_t *bytes_transfered = (int64_t *) progress_data->pOwner;
-	*bytes_transfered = dNowDownloaded;
+    static_cast<BaseClient *>(progress_data->pOwner)->SetTransferredBytes((uint64_t) dNowDownloaded);
     return 0;
 }
 
 int BaseClient::UploadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     CHTTPClient::ProgressFnStruct *progress_data = (CHTTPClient::ProgressFnStruct*) ptr;
-    int64_t *bytes_transfered = (int64_t *) progress_data->pOwner;
-    *bytes_transfered = dNowUploaded;
+    static_cast<BaseClient *>(progress_data->pOwner)->SetTransferredBytes((uint64_t) dNowUploaded);
     return 0;
 }
 
@@ -182,17 +180,19 @@ int BaseClient::Size(const std::string &path, uint64_t *size)
 int BaseClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
 {
     long status;
-    bytes_transfered = 0;
+    ResetTransferredBytes();
     prev_tick = Util::GetTick();
     CHTTPClient::HeadersMap headers;
 
-    if (!Size(path, &bytes_to_download))
+    uint64_t transfer_total = 0;
+    if (!Size(path, &transfer_total))
     {
         sprintf(this->response, "%s", lang_strings[STR_FAIL_DOWNLOAD_MSG]);
         return 0;
     }
+    SetTotalBytes(transfer_total);
 
-    client->SetProgressFnCallback(&bytes_transfered, DownloadProgressCallback);
+    client->SetProgressFnCallback(this, DownloadProgressCallback);
     std::string encoded_url = BuildUrl(path);
     if (client->DownloadFile(outputfile, encoded_url, status))
     {

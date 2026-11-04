@@ -4,8 +4,10 @@
 #include <cstring>
 #include <map>
 #include <vector>
+#include <mutex>
 #include <regex>
 #include <stdlib.h>
+#include "httpclient/HTTPClient.h"
 #include "server/http_server.h"
 #include "config.h"
 #include "fs.h"
@@ -24,6 +26,13 @@ char local_directory[255];
 char remote_directory[255];
 char app_ver[6];
 char last_site[32];
+char web_last_site[32];
+char web_password[256];
+int web_session_timeout = 60;
+
+// Serialises the ini writers: the HTTP worker threads and the native render
+// thread both call CONFIG::Save*() and the ini layer is not re-entrant.
+static std::mutex config_write_mutex;
 char display_site[32];
 std::vector<std::string> langs;
 char language[128];
@@ -274,6 +283,28 @@ namespace CONFIG
         remote_settings = &site_settings[std::string(last_site)];
         sprintf(remote_directory, "%s", remote_settings->default_directory);
 
+        // The web UI selects a site independently of the native UI's last_site.
+        char stored_web_password[512];
+        sprintf(stored_web_password, "%s", ReadString(CONFIG_GLOBAL, CONFIG_WEB_PASSWORD, ""));
+        web_password[0] = '\0';
+        if (strlen(stored_web_password) > 0)
+        {
+            std::string decrypted_password;
+            if (Decrypt(stored_web_password, decrypted_password) == 0)
+                sprintf(web_password, "%s", stored_web_password);
+            else
+                sprintf(web_password, "%s", decrypted_password.c_str());
+        }
+
+        web_session_timeout = ReadInt(CONFIG_GLOBAL, CONFIG_WEB_SESSION_TIMEOUT, 60);
+        if (web_session_timeout < 1)
+            web_session_timeout = 60;
+
+        sprintf(web_last_site, "%s", ReadString(CONFIG_GLOBAL, CONFIG_WEB_LAST_SITE, last_site));
+        if (site_settings.find(std::string(web_last_site)) == site_settings.end())
+            sprintf(web_last_site, "%s", last_site);
+        WriteString(CONFIG_GLOBAL, CONFIG_WEB_LAST_SITE, web_last_site);
+
         for (int i = 0; i < MAX_FAVORITE_URLS; i++)
         {
             const char *index = std::to_string(i).c_str();
@@ -286,6 +317,7 @@ namespace CONFIG
 
     void SaveConfig()
     {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
         OpenIniFile(CONFIG_INI_FILE);
 
         std::string encrypted_text;
@@ -306,8 +338,42 @@ namespace CONFIG
         CloseIniFile();
     }
 
+    // Persists one server profile. SaveConfig() only writes the currently
+    // selected site, which is not enough when the web UI edits any of them.
+    void SaveSiteConfig(const std::string &site)
+    {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
+
+        std::map<std::string, RemoteSettings>::iterator it = site_settings.find(site);
+        if (it == site_settings.end())
+        {
+            return;
+        }
+
+        RemoteSettings *setting = &it->second;
+        OpenIniFile(CONFIG_INI_FILE);
+
+        std::string encrypted_text;
+        if (strlen(setting->password) > 0)
+            Encrypt(setting->password, encrypted_text);
+        else
+            encrypted_text = std::string(setting->password);
+
+        WriteString(site.c_str(), CONFIG_REMOTE_SERVER_URL, setting->server);
+        WriteString(site.c_str(), CONFIG_REMOTE_SERVER_USER, setting->username);
+        WriteString(site.c_str(), CONFIG_REMOTE_SERVER_PASSWORD, encrypted_text.c_str());
+        WriteBool(site.c_str(), CONFIG_ENABLE_RPI, setting->enable_rpi);
+        WriteBool(site.c_str(), CONFIG_REMOTE_ENABLE_DISK_CACHE, setting->enable_disk_cache);
+        WriteString(site.c_str(), CONFIG_REMOTE_HTTP_SERVER_TYPE, setting->http_server_type);
+        WriteString(site.c_str(), CONFIG_REMOTE_DEFAULT_DIRECTORY, setting->default_directory);
+
+        WriteIniFile(CONFIG_INI_FILE);
+        CloseIniFile();
+    }
+
     void SaveGlobalConfig()
     {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
         OpenIniFile(CONFIG_INI_FILE);
 
         std::string encrypted_api_key;
@@ -322,6 +388,15 @@ namespace CONFIG
         else
             encrypted_api_key = std::string(realdebrid_api_key);
         WriteString(CONFIG_GLOBAL, CONFIG_REALDEBRID_API_KEY, encrypted_api_key.c_str());
+
+        WriteInt(CONFIG_GLOBAL, CONFIG_WEB_SESSION_TIMEOUT, web_session_timeout);
+
+        std::string encrypted_web_password;
+        if (strlen(web_password) > 0)
+            Encrypt(web_password, encrypted_web_password);
+        else
+            encrypted_web_password = std::string(web_password);
+        WriteString(CONFIG_GLOBAL, CONFIG_WEB_PASSWORD, encrypted_web_password.c_str());
 
         WriteString(CONFIG_GLOBAL, CONFIG_TMP_FOLDER_PATH, temp_folder);
         WriteBool(CONFIG_GLOBAL, CONFIG_AUTO_DELETE_TMP_PKG, auto_delete_tmp_pkg);
@@ -345,18 +420,39 @@ namespace CONFIG
         {
             FS::MkDirs(compressed_file_path);
         }
+
+        CHTTPClient tmp_client([](const std::string& log){});
+        tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+        tmp_client.SetTimeout(1);
+        CHTTPClient::HeadersMap headers;
+        CHTTPClient::HttpResponse res;
+        std::string url = "http://127.0.0.1:6701/change_ezremote_client_port";
+
+        tmp_client.Post(url, headers, std::to_string(http_server_port), res);
     }
 
     void SaveLocalDirecotry(const std::string &path)
     {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
         OpenIniFile(CONFIG_INI_FILE);
         WriteString(CONFIG_GLOBAL, CONFIG_LOCAL_DIRECTORY, path.c_str());
         WriteIniFile(CONFIG_INI_FILE);
         CloseIniFile();
     }
 
+    void SaveWebSite(const std::string &site)
+    {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
+
+        OpenIniFile(CONFIG_INI_FILE);
+        WriteString(CONFIG_GLOBAL, CONFIG_WEB_LAST_SITE, site.c_str());
+        WriteIniFile(CONFIG_INI_FILE);
+        CloseIniFile();
+    }
+
     void SaveFavoriteUrl(int index, char *url)
     {
+        std::lock_guard<std::mutex> lock(config_write_mutex);
         OpenIniFile(CONFIG_INI_FILE);
         const char *idx = std::to_string(index).c_str();
         WriteString(CONFIG_FAVORITE_URLS, idx, url);

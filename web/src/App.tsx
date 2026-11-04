@@ -1148,7 +1148,7 @@ export default function App() {
             <button
               type="button"
               onClick={(event) => setEzMenu({ x: event.clientX, y: event.clientY })}
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-sm font-medium transition hover:brightness-125 ${
+              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-medium transition hover:brightness-125 ${
                 ezremoteVersion === null
                   ? "border-abyss-600 bg-abyss-800 text-mist-500"
                   : ezremoteVersion
@@ -1231,7 +1231,7 @@ export default function App() {
 
 
 
-      <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-abyss-600 px-4 py-1.5 text-[11px] text-mist-500">
+      <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-abyss-600 px-4 py-2 text-xs text-mist-500">
         <span className="font-medium text-mist-300">{activePane === "local" ? "Local" : "Remote"}</span>
         <span>{activePane === "local" ? localSelected.length : remoteSelected.length} selected</span>
         <span>{formatSize(String(activePane === "local" ? localBytes : remoteBytes))}</span>
@@ -1487,7 +1487,7 @@ function HeaderButton({
     <button
       type="button"
       onClick={onClick}
-      className="relative flex items-center gap-1.5 rounded-lg border border-abyss-600 px-2.5 py-1.5 text-sm font-medium text-mist-300 transition hover:border-white/20 hover:bg-white/5 hover:text-mist-100"
+      className="relative flex items-center gap-1.5 rounded-lg border border-abyss-600 px-2.5 py-1.5 text-xs font-medium text-mist-300 transition hover:border-white/20 hover:bg-white/5 hover:text-mist-100"
     >
       <Icon name={icon} size={18} className={busy ? "animate-pulse text-accent-200" : undefined} />
       {label ? <span className="hidden lg:inline">{label}</span> : null}

@@ -1503,6 +1503,8 @@ namespace Windows
                         sprintf(status_message, "Permissions set to %s", rights);
 
                     selected_action = ACTION_REFRESH_LOCAL_FILES;
+                    SetModalMode(false);
+                    ImGui::CloseCurrentPopup();
                 }
                 ImGui::SameLine(0, 10);
             }

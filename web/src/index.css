@@ -90,3 +90,47 @@ body {
   outline: none;
   border-color: var(--color-accent-300);
 }
+
+/* Phones keep the current type scale; larger viewports scale every text-*
+   utility up a step so the UI reads comfortably on a desktop monitor. */
+@media (min-width: 640px) {
+  :root {
+    --text-xs: 0.8125rem;
+    --text-xs--line-height: 1.25rem;
+    --text-sm: 0.9375rem;
+    --text-sm--line-height: 1.5rem;
+    --text-base: 1.0625rem;
+    --text-base--line-height: 1.75rem;
+    --text-lg: 1.1875rem;
+    --text-lg--line-height: 1.75rem;
+    --text-xl: 1.375rem;
+    --text-xl--line-height: 2rem;
+    --text-2xl: 1.75rem;
+    --text-2xl--line-height: 2.25rem;
+  }
+
+  .input {
+    font-size: 0.9375rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --text-xs: 0.875rem;
+    --text-xs--line-height: 1.375rem;
+    --text-sm: 1rem;
+    --text-sm--line-height: 1.625rem;
+    --text-base: 1.125rem;
+    --text-base--line-height: 1.875rem;
+    --text-lg: 1.3125rem;
+    --text-lg--line-height: 1.875rem;
+    --text-xl: 1.5rem;
+    --text-xl--line-height: 2.125rem;
+    --text-2xl: 1.875rem;
+    --text-2xl--line-height: 2.375rem;
+  }
+
+  .input {
+    font-size: 1rem;
+  }
+}

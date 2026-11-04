@@ -99,6 +99,9 @@ export default function App() {
   const [bgOpen, setBgOpen] = useState(false);
   const [remotePkgView, setRemotePkgView] = useState<DirEntry | null>(null);
   const [auth, setAuth] = useState<api.AuthStatus | null>(null);
+  // Touch devices use long-press for the context menu; a draggable row
+  // swallows that gesture, so only enable dragging for precise pointers.
+  const [dragEnabled, setDragEnabled] = useState(false);
   const authed = auth !== null && auth.authenticated;
   const [bgList, setBgList] = useState<api.BgDownload[]>([]);
   const [ezremoteVersion, setEzremoteVersion] = useState<string | null>(null);
@@ -191,6 +194,17 @@ export default function App() {
   }, [loadServerInfo, authed]);
 
   // Password protection: ask before any other API call is made.
+  useEffect(() => {
+    const query = window.matchMedia("(pointer: fine)");
+    setDragEnabled(query.matches);
+
+    const onChange = (event: MediaQueryListEvent) => setDragEnabled(event.matches);
+    if (query.addEventListener) query.addEventListener("change", onChange);
+    return () => {
+      if (query.removeEventListener) query.removeEventListener("change", onChange);
+    };
+  }, []);
+
   useEffect(() => {
     void api
       .authStatus()
@@ -1202,7 +1216,7 @@ export default function App() {
           onToggleSelectMode={() => setLocalSelectMode((value) => !value)}
           onOpen={(entry) => (entry.type === "dir" ? setPath(joinPath(path, entry.name)) : undefined)}
           onContext={(entry, event) => openMenu("local", entry, event)}
-          onRowDragStart={(entry, event) => {
+          onRowDragStart={dragEnabled ? (entry, event) => {
             const dragged =
               selection.has(entry.name) && selection.size > 1
                 ? localVisible.filter((item) => selection.has(item.name))
@@ -1212,7 +1226,7 @@ export default function App() {
               "application/x-ezremote",
               JSON.stringify({ pane: "local", names: dragged.map((item) => item.name) }),
             );
-          }}
+          } : undefined}
           onNavigate={setPath}
           onRefresh={refresh}
           onDropItems={(event) => {
@@ -1248,7 +1262,7 @@ export default function App() {
           onToggleSelectMode={() => setRemoteSelectMode((value) => !value)}
           onOpen={(entry) => (entry.type === "dir" ? void loadRemote(joinPath(remotePath, entry.name)) : undefined)}
           onContext={(entry, event) => openMenu("remote", entry, event)}
-          onRowDragStart={(entry, event) => {
+          onRowDragStart={dragEnabled ? (entry, event) => {
             // Drag the selection when the grabbed row is part of it.
             const dragged =
               remoteSelection.has(entry.name) && remoteSelection.size > 1
@@ -1259,7 +1273,7 @@ export default function App() {
               "application/x-ezremote",
               JSON.stringify({ pane: "remote", names: dragged.map((item) => item.name) }),
             );
-          }}
+          } : undefined}
           onNavigate={(target) => void loadRemote(target)}
           onDropItems={(event) => {
             event.preventDefault();

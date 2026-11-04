@@ -21,6 +21,8 @@ interface FileTableProps {
   onToggleAll: () => void;
   onOpen: (entry: DirEntry) => void;
   onContext?: (entry: DirEntry | null, event: React.MouseEvent) => void;
+  /** When set, rows become draggable and call this on drag start. */
+  onRowDragStart?: (entry: DirEntry, event: React.DragEvent) => void;
 }
 
 function entryIcon(entry: DirEntry): IconName {
@@ -56,7 +58,8 @@ function SortButton({
   );
 }
 
-export function FileTable({ entries, selected, loading, sort, onSort, onToggle, onToggleAll, onOpen, onContext }: FileTableProps) {
+export function FileTable({
+  onRowDragStart, entries, selected, loading, sort, onSort, onToggle, onToggleAll, onOpen, onContext }: FileTableProps) {
   const allSelected = entries.length > 0 && entries.every((entry) => selected.has(entry.name));
 
   return (
@@ -110,6 +113,8 @@ export function FileTable({ entries, selected, loading, sort, onSort, onToggle, 
                   event.stopPropagation();
                   onContext(entry, event);
                 }}
+                draggable={Boolean(onRowDragStart)}
+                onDragStart={(event) => onRowDragStart?.(entry, event)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") onOpen(entry);
                   if (event.key === " ") {

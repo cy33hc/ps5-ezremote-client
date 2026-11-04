@@ -867,7 +867,7 @@ export default function App() {
   );
 
   const startCross = useCallback(
-    async (toRemote: boolean) => {
+    async (toRemote: boolean, source?: DirEntry[]) => {
       if (!serverInfo) {
         notify("Select a server profile first", "error");
         return;
@@ -877,9 +877,10 @@ export default function App() {
         return;
       }
 
+      const chosen = source ?? (toRemote ? localSelected : remoteSelected);
       const items: api.CopyItem[] = toRemote
-        ? localSelected.map((entry) => ({ path: joinPath(path, entry.name), is_dir: entry.type === "dir" }))
-        : remoteSelected.map((entry) => ({ path: joinPath(remotePath, entry.name), is_dir: entry.type === "dir" }));
+        ? chosen.map((entry) => ({ path: joinPath(path, entry.name), is_dir: entry.type === "dir" }))
+        : chosen.map((entry) => ({ path: joinPath(remotePath, entry.name), is_dir: entry.type === "dir" }));
 
       if (items.length === 0) {
         notify("Select something to transfer", "error");
@@ -943,7 +944,7 @@ export default function App() {
   );
 
   const localToRemote = () => void startCross(true);
-  const remoteToLocal = () => void startCross(false);
+  const remoteToLocal = (entries?: DirEntry[]) => void startCross(false, entries);
 
   /* ---------- menus ---------- */
 
@@ -1201,8 +1202,32 @@ export default function App() {
           onToggleSelectMode={() => setLocalSelectMode((value) => !value)}
           onOpen={(entry) => (entry.type === "dir" ? setPath(joinPath(path, entry.name)) : undefined)}
           onContext={(entry, event) => openMenu("local", entry, event)}
+          onRowDragStart={(entry, event) => {
+            const dragged =
+              selection.has(entry.name) && selection.size > 1
+                ? localVisible.filter((item) => selection.has(item.name))
+                : [entry];
+            event.dataTransfer.effectAllowed = "copy";
+            event.dataTransfer.setData(
+              "application/x-ezremote",
+              JSON.stringify({ pane: "local", names: dragged.map((item) => item.name) }),
+            );
+          }}
           onNavigate={setPath}
           onRefresh={refresh}
+          onDropItems={(event) => {
+            event.preventDefault();
+            const raw = event.dataTransfer.getData("application/x-ezremote");
+            if (!raw) return;
+            try {
+              const payload = JSON.parse(raw) as { pane?: string; names?: string[] };
+              if (payload.pane !== "remote" || !payload.names?.length) return;
+              const dropped = remoteEntries.filter((entry) => payload.names!.includes(entry.name));
+              if (dropped.length > 0) void startCross(false, dropped);
+            } catch {
+              // Ignore foreign drag payloads.
+            }
+          }}
         />
         <Panel
           label="Remote"
@@ -1223,7 +1248,36 @@ export default function App() {
           onToggleSelectMode={() => setRemoteSelectMode((value) => !value)}
           onOpen={(entry) => (entry.type === "dir" ? void loadRemote(joinPath(remotePath, entry.name)) : undefined)}
           onContext={(entry, event) => openMenu("remote", entry, event)}
+          onRowDragStart={(entry, event) => {
+            // Drag the selection when the grabbed row is part of it.
+            const dragged =
+              remoteSelection.has(entry.name) && remoteSelection.size > 1
+                ? remoteEntries.filter((item) => remoteSelection.has(item.name))
+                : [entry];
+            event.dataTransfer.effectAllowed = "copy";
+            event.dataTransfer.setData(
+              "application/x-ezremote",
+              JSON.stringify({ pane: "remote", names: dragged.map((item) => item.name) }),
+            );
+          }}
           onNavigate={(target) => void loadRemote(target)}
+          onDropItems={(event) => {
+            event.preventDefault();
+            const raw = event.dataTransfer.getData("application/x-ezremote");
+            if (!raw) return;
+            try {
+              const payload = JSON.parse(raw) as { pane?: string; names?: string[] };
+              if (payload.pane !== "local" || !payload.names?.length) return;
+              if (!serverInfo || !remotePath) {
+                notify("Connect to a remote server first", "error");
+                return;
+              }
+              const dropped = localVisible.filter((entry) => payload.names!.includes(entry.name));
+              if (dropped.length > 0) void startCross(true, dropped);
+            } catch {
+              // Ignore foreign drag payloads.
+            }
+          }}
           onRefresh={() => { setRemoteEnabled(true); void loadRemote(remotePath); }}
           onRetry={() => { setRemoteEnabled(true); void loadRemote(""); }}
         />
@@ -1517,6 +1571,8 @@ function Panel({
   onToggleAll,
   onOpen,
   onContext,
+  onRowDragStart,
+  onDropItems,
   onNavigate,
   onRefresh,
   selectMode,
@@ -1536,6 +1592,8 @@ function Panel({
   onFilter: (value: string) => void;
   onSort: (key: SortKey) => void;
   onToggle: (name: string, additive: boolean) => void;
+  onRowDragStart?: (entry: DirEntry, event: React.DragEvent) => void;
+  onDropItems?: (event: React.DragEvent) => void;
   onToggleAll: () => void;
   onOpen: (entry: DirEntry) => void;
   onContext: (entry: DirEntry | null, event: ReactMouseEvent) => void;
@@ -1550,6 +1608,10 @@ function Panel({
   return (
     <section
       onMouseDown={onActivate}
+      onDragOver={(event) => {
+        if (onDropItems) event.preventDefault();
+      }}
+      onDrop={(event) => onDropItems?.(event)}
       className={`flex min-h-[18rem] flex-col gap-2 rounded-2xl border p-2.5 transition lg:min-h-0 ${
         active ? "border-accent-500 bg-abyss-900" : "border-abyss-600 bg-abyss-900"
       }`}
@@ -1633,6 +1695,7 @@ function Panel({
         onToggleAll={onToggleAll}
         onOpen={onOpen}
         onContext={onContext}
+        onRowDragStart={onRowDragStart}
       />
     </section>
   );

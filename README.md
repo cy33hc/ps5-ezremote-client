@@ -2,6 +2,12 @@
 
 ezRemote Client is an application that allows you to connect the PS5 to remote FTP/SFTP, SMB(Windows Share), NFS, WebDAV, HTTP servers to transfer files. The interface is inspired by Filezilla client which provides a commander like GUI.
 
+**NEW: As of version 2.19. The Web UI has almoust the same functions as the native ui**
+ - Whats missing in the webui
+   - extracting compress files from remote
+   - install pkgs in compress files
+   - install pkgs using disk cache
+
 **NEW: As of version 2.16. There is new payload called ezRemote-Loader.elf. Add this to Payload Manager to auto install/update and launch ezRemote Client.**
 
 **NEW: As of version 2.12. You can install PS5 fpkgs.**
@@ -33,7 +39,7 @@ ezRemote Client is an application that allows you to connect the PS5 to remote F
 3. Install Ps5_ezRemote_Client_4.00.pkg (This create a shortcut on the dashboard to launch the app directly via elfldr http endpoint)
 
 ## Updating the app
-1. Download the latest version from Releases and extract the **ezremote_client.zip** in to the **/data/homebrew** folder on the PS5 replacing everything. This will not overwrite any of your configs.
+1. <s>Download the latest version from Releases and extract the **ezremote_client.zip** in to the **/data/homebrew** folder on the PS5 replacing everything. This will not overwrite any of your configs.</s> As of 2.17, app is automatically updated when a new version is released.
    
 ## Know Issues
 <s>- Occasionally the app would crash if you cancelled the pkg install. This could leave some temporary files created in the "/data/homebrew/ezremote-client/tmp" folder. It is safe to delete them.</s>

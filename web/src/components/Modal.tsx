@@ -25,7 +25,11 @@ export function Modal({ title, subtitle, onClose, children, footer, width = "max
   // background).
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    panelRef.current?.querySelector<HTMLElement>("input, button, select, textarea")?.focus();
+    // Prefer a text field so prompts open with the caret in the box; fall back
+    // to the first button for action-only dialogs (the X comes first otherwise).
+    const panel = panelRef.current;
+    const field = panel?.querySelector<HTMLElement>("input, select, textarea");
+    (field ?? panel?.querySelector<HTMLElement>("button"))?.focus();
     return () => {
       previous?.focus?.();
     };

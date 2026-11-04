@@ -1313,7 +1313,7 @@ export default function App() {
                 setPowerMenu(null);
                 logout();
               }}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-mist-300 hover:bg-white/5 hover:text-mist-100"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-mist-300 hover:bg-white/5 hover:text-mist-100"
             >
               <Icon name="logout" size={14} />
               Logout
@@ -1324,7 +1324,7 @@ export default function App() {
                 setPowerMenu(null);
                 restartClient();
               }}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-mist-300 hover:bg-white/5 hover:text-mist-100"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-mist-300 hover:bg-white/5 hover:text-mist-100"
             >
               <Icon name="refresh" size={14} />
               Restart ezRemote Client
@@ -1335,7 +1335,7 @@ export default function App() {
                 setPowerMenu(null);
                 stopHttpServer();
               }}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-rose-400 hover:bg-rose-400/10"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-rose-400 hover:bg-rose-400/10"
             >
               <Icon name="power" size={14} />
               Stop ezRemote Client

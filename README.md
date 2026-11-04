@@ -37,7 +37,9 @@ ezRemote Client is an application that allows you to connect the PS5 to remote F
 
 ## Installation
 1. Extract the **ezremote_client.zip** in to the **/data/homebrew** folder on the PS5.
-3. Install Ps5_ezRemote_Client_4.00.pkg (This create a shortcut on the dashboard to launch the app directly via elfldr http endpoint)
+2. Install Ps5_ezRemote_Client_4.00.pkg (This create a shortcut on the dashboard to launch the app directly via elfldr http endpoint)
+3. To launch app remotely from a browser, bookmark the URL   **http://\<\<PS5 IP\>\>:6701/start_client.html**
+   <br/>NOTE: You need to have started ezRemote Server first.
 
 ## Updating the app
 1. <s>Download the latest version from Releases and extract the **ezremote_client.zip** in to the **/data/homebrew** folder on the PS5 replacing everything. This will not overwrite any of your configs.</s> As of 2.17, app is automatically updated when a new version is released.

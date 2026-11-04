@@ -9,8 +9,6 @@
 
 extern bool done;
 
-// Starts a one-shot timer that force-exits the payload if shutdown blocks.
-void ArmExitWatchdog();
 extern int gui_mode;
 
 namespace GUI

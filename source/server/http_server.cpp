@@ -32,7 +32,6 @@
 #include "installer.h"
 
 extern bool done;
-extern void ArmExitWatchdog();
 // #include "dbglogger.h"
 
 #define SUCCESS_MSG "{ \"result\": { \"success\": true, \"error\": null } }"
@@ -3890,7 +3889,6 @@ namespace HttpServer
             svr->stop();
             // Ends the render loop in gui.cpp so the client terminates.
             done = true;
-            ArmExitWatchdog();
         });
 
         svr->set_error_handler([](const Request & /*req*/, Response &res)
@@ -3960,5 +3958,7 @@ namespace HttpServer
         // out from under a request that is still listing or transferring.
         if (svr != nullptr)
             svr->stop();
+        
+        pthread_cancel(http_server_thid);
     }
 }

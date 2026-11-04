@@ -267,30 +267,6 @@ static void terminate()
 	}
 }
 
-// Guarantees the payload ends even if shutdown blocks on a dead socket
-// (remoteclient->Quit() and Server::stop() both talk to the network).
-static void *ForceExitThread(void *argp)
-{
-	sleep(4);
-	_exit(0);
-	return NULL;
-}
-
-static void StartExitWatchdog()
-{
-	pthread_t thid;
-	if (pthread_create(&thid, NULL, ForceExitThread, NULL) == 0)
-	{
-		pthread_detach(thid);
-	}
-}
-
-void ArmExitWatchdog()
-{
-	static pthread_once_t once = PTHREAD_ONCE_INIT;
-	pthread_once(&once, StartExitWatchdog);
-}
-
 int main()
 {
 	// dbglogger_init();
@@ -344,8 +320,6 @@ int main()
 	atexit(terminate);
 
 	GUI::RenderLoop(window);
-
-	ArmExitWatchdog();
 
 	stop_activity = true;
 	HttpServer::Stop();

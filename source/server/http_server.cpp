@@ -30,6 +30,7 @@
 #include "sfo.h"
 #include "util.h"
 #include "installer.h"
+#include "activity.h"
 
 extern bool done;
 // #include "dbglogger.h"
@@ -699,6 +700,10 @@ namespace HttpServer
         std::string failed_items;
         uint64_t loaded = 0;
 
+        Activities::Guard activity(ACTIVITY_COPY, job->to_remote ? "Uploading to remote" : "Downloading to local", ACTIVITY_WEB);
+        for (size_t i = 0; i < job->items.size(); i++)
+            Activities::Item(activity.id, job->items[i].path);
+
         {
             std::lock_guard<std::mutex> lock(remote_session_mutex);
             std::string error;
@@ -986,6 +991,7 @@ namespace HttpServer
 
         svr->Post("/__local__/move", [&](const Request &req, Response &res)
         {
+            Activities::Guard activity(ACTIVITY_MOVE, "Moving local files", ACTIVITY_WEB);
             if (activity_inprogess)
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
@@ -1019,6 +1025,7 @@ namespace HttpServer
                 const char *item = json_object_get_string(json_object_array_get_idx(items, i));
                 if (item == nullptr)
                     continue;
+                Activities::Item(activity.id, item);
                 DirEntry entry;
                 std::string temp = std::string(item);
                 size_t slash_pos = temp.find_last_of("/");
@@ -1049,6 +1056,7 @@ namespace HttpServer
 
         svr->Post("/__local__/copy", [&](const Request &req, Response &res)
         {
+            Activities::Guard activity(ACTIVITY_COPY, "Copying local files", ACTIVITY_WEB);
             if (activity_inprogess)
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
@@ -1118,6 +1126,7 @@ namespace HttpServer
                     const char *item = json_object_get_string(json_object_array_get_idx(items, i));
                     if (item == nullptr)
                         continue;
+                    Activities::Item(activity.id, item);
                     DirEntry entry;
                     std::string temp = std::string(item);
                     size_t slash_pos = temp.find_last_of("/");
@@ -1145,6 +1154,7 @@ namespace HttpServer
 
         svr->Post("/__local__/remove", [&](const Request &req, Response &res)
         {
+            Activities::Guard activity(ACTIVITY_DELETE, "Deleting local files", ACTIVITY_WEB);
             if (activity_inprogess)
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
@@ -1176,6 +1186,7 @@ namespace HttpServer
                 const char *item = json_object_get_string(json_object_array_get_idx(items, i));
                 if (item == nullptr)
                     continue;
+                Activities::Item(activity.id, item);
                 bool ret = FS::RmRecursive(item);
                 if (!ret)
                 {
@@ -1637,6 +1648,33 @@ namespace HttpServer
         });
 
         // Proxies the ezRemote server's background download state.
+        svr->Get("/__local__/activities", [&](const Request &req, Response &res)
+        {
+            std::vector<Activity> list = Activities::Snapshot();
+            const uint64_t now = Util::GetTick();
+
+            json_object *result = json_object_new_array();
+            JsonObjectRef result_ref(result);
+            for (size_t i = 0; i < list.size(); i++)
+            {
+                json_object *item = json_object_new_object();
+                json_object_object_add(item, "id", json_object_new_uint64(list[i].id));
+                json_object_object_add(item, "kind", json_object_new_string(Activities::KindName(list[i].kind)));
+                json_object_object_add(item, "state", json_object_new_string(Activities::StateName(list[i].state)));
+                json_object_object_add(item, "label", json_object_new_string(list[i].label.c_str()));
+                json_object_object_add(item, "item", json_object_new_string(list[i].item.c_str()));
+                json_object_object_add(item, "done", json_object_new_uint64(list[i].done));
+                json_object_object_add(item, "total", json_object_new_uint64(list[i].total));
+                json_object_object_add(item, "elapsed", json_object_new_uint64(((list[i].finished > 0 ? list[i].finished : now) - list[i].started) / 1000000));
+                json_object_object_add(item, "origin", json_object_new_string(Activities::OriginName(list[i].origin)));
+                json_object_array_add(result, item);
+            }
+
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
+
         svr->Get("/__local__/bg_downloads", [&](const Request &req, Response &res)
         {
             json_object *list = json_object_new_array();
@@ -2079,6 +2117,7 @@ namespace HttpServer
         // Remote actions, gated in the UI by RemoteClient::SupportedActions().
         svr->Post("/__remote__/copy", [&](const Request &req, Response &res)
         {
+            Activities::Guard activity(ACTIVITY_COPY, "Copying remote files", ACTIVITY_WEB);
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *items = nullptr;
@@ -2126,6 +2165,7 @@ namespace HttpServer
                 const char *item = json_object_get_string(json_object_array_get_idx(items, i));
                 if (item == nullptr)
                     continue;
+                Activities::Item(activity.id, item);
 
                 std::string source(item);
                 std::string target = std::string(dest);
@@ -2147,6 +2187,7 @@ namespace HttpServer
 
         svr->Post("/__remote__/move", [&](const Request &req, Response &res)
         {
+            Activities::Guard activity(ACTIVITY_MOVE, "Moving remote files", ACTIVITY_WEB);
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *items = nullptr;
@@ -2194,6 +2235,7 @@ namespace HttpServer
                 const char *item = json_object_get_string(json_object_array_get_idx(items, i));
                 if (item == nullptr)
                     continue;
+                Activities::Item(activity.id, item);
 
                 std::string source(item);
                 std::string target = std::string(dest);
@@ -2993,6 +3035,7 @@ namespace HttpServer
 
         svr->Post("/__remote__/remove", [&](const Request &req, Response &res)
         {
+            Activities::Guard activity(ACTIVITY_DELETE, "Deleting remote files", ACTIVITY_WEB);
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *files = nullptr;
@@ -3026,6 +3069,7 @@ namespace HttpServer
                     const char *item = json_object_get_string(json_object_array_get_idx(files, i));
                     if (item == nullptr)
                         continue;
+                    Activities::Item(activity.id, item);
                     count++;
                     if (!client->Delete(item))
                         failed_items += std::string(item) + ",";
@@ -3158,6 +3202,10 @@ namespace HttpServer
                 FS::MkDirs(destination_dir);
             std::string zip_file = destination_dir +
                 (FS::hasEndSlash(destination_dir.c_str()) ? "" : "/") + compressedFilename;
+
+            Activities::Guard activity(ACTIVITY_COMPRESS, std::string("Creating ") + compressedFilename, ACTIVITY_WEB);
+            Activities::Item(activity.id, zip_file);
+
             zipFile zf = zipOpen64(zip_file.c_str(), APPEND_STATUS_CREATE);
             if (zf != NULL)
             {
@@ -3222,8 +3270,15 @@ namespace HttpServer
             sprintf(entry.name, "%s", "");
             sprintf(entry.path, "%s", item);
             entry.isDir = false;
-            FS::MkDirs(extract_zip_folder);
-            int ret = ZipUtil::Extract(entry, extract_zip_folder);
+
+            int ret;
+            {
+                // Runs inline in this request, so register it for the trackers.
+                Activities::Guard activity(ACTIVITY_EXTRACT, std::string("Extracting ") + item, ACTIVITY_WEB);
+                Activities::Item(activity.id, extract_zip_folder);
+                FS::MkDirs(extract_zip_folder);
+                ret = ZipUtil::Extract(entry, extract_zip_folder);
+            }
             if (ret == 0)
                 failed(res, 200, "Failed to extract file");
             else if (ret == -1)
@@ -3629,6 +3684,11 @@ namespace HttpServer
 
             Windows::SetModalMode(true);
 
+            // Covers the URL fetch and setup; the split/extract threads carry
+            // the rest of the work under their own activities.
+            Activities::Guard activity(ACTIVITY_INSTALL, std::string("Installing from URL: ") + filehost->GetUrl(), ACTIVITY_WEB);
+            Activities::Item(activity.id, filehost->GetUrl());
+
             std::string download_url = filehost->GetDownloadUrl();
             if (download_url.empty())
             {
@@ -3949,6 +4009,17 @@ namespace HttpServer
             return;
         }
         int ret = pthread_create(&http_server_thid, NULL, ServerThread, NULL);
+    }
+
+    bool AnyTransferRunning()
+    {
+        std::lock_guard<std::mutex> lock(web_transfer_mutex);
+        for (std::map<std::string, WebTransfer>::iterator it = web_transfers.begin(); it != web_transfers.end(); ++it)
+        {
+            if (it->second.state == 0)
+                return true;
+        }
+        return false;
     }
 
     void Stop()

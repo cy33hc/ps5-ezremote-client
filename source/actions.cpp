@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <json-c/json.h>
 #include "json_object_ref.h"
+#include "activity.h"
 #include <lexbor/html/parser.h>
 #include <lexbor/dom/interfaces/element.h>
 #include <minizip/unzip.h>
@@ -266,6 +267,7 @@ namespace Actions
 
     void *DeleteSelectedLocalFilesThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_DELETE, "Deleting local files");
         std::vector<DirEntry> files;
         if (multi_selected_local_files.size() > 0)
             std::copy(multi_selected_local_files.begin(), multi_selected_local_files.end(), std::back_inserter(files));
@@ -274,6 +276,8 @@ namespace Actions
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
+            sprintf(activity_message, "%s %s", lang_strings[STR_DELETING], it->path);
+            Activities::Item(activity.id, it->path);
             FS::RmRecursive(it->path);
         }
         activity_inprogess = false;
@@ -295,6 +299,7 @@ namespace Actions
 
     void *DeleteSelectedRemotesFilesThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_DELETE, "Deleting remote files");
         if (remoteclient->Ping())
         {
             std::vector<DirEntry> files;
@@ -310,6 +315,7 @@ namespace Actions
                 else
                 {
                     sprintf(activity_message, "%s %s", lang_strings[STR_DELETING], it->path);
+                    Activities::Item(activity.id, it->path);
                     if (!remoteclient->Delete(it->path))
                     {
                         sprintf(status_message, "%s - %s", lang_strings[STR_FAILED], remoteclient->LastResponse());
@@ -454,6 +460,7 @@ namespace Actions
 
     void *UploadFilesThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_UPLOAD, "Uploading files");
         file_transfering = true;
         std::vector<DirEntry> files;
         if (multi_selected_local_files.size() > 0)
@@ -677,6 +684,7 @@ namespace Actions
 
     void *DownloadFilesThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_DOWNLOAD, "Downloading files");
         file_transfering = true;
         std::vector<DirEntry> files;
         if (multi_selected_remote_files.size() > 0)
@@ -722,6 +730,7 @@ namespace Actions
 
     void *InstallRemotePkgsThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_INSTALL, "Installing remote packages");
         int failed = 0;
         int success = 0;
         int skipped = 0;
@@ -878,6 +887,10 @@ namespace Actions
         ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) argp;
         FileStream *sp = install_data->split_file;
 
+        Activities::Guard activity(ACTIVITY_INSTALL, "Extracting package for install");
+        if (install_data->archive_entry != nullptr)
+            Activities::Item(activity.id, install_data->archive_entry->filename);
+
         /* loop over file contents and write to fd */
         sp->Open();
         while (!install_data->stop_write_thread)
@@ -910,6 +923,9 @@ namespace Actions
         SplitPkgInstallData *install_data = (SplitPkgInstallData*) argp;
         FileStream *sp = install_data->split_file;
 
+        Activities::Guard activity(ACTIVITY_INSTALL, "Downloading package for install");
+        Activities::Item(activity.id, install_data->path);
+
         /* loop over file contents and write to fd */
         sp->Open();
         install_data->remote_client->Get(sp, install_data->path);
@@ -919,6 +935,7 @@ namespace Actions
 
     void *InstallLocalPkgsThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_INSTALL, "Installing packages");
         int failed = 0;
         int success = 0;
         int skipped = 0;
@@ -1032,6 +1049,8 @@ namespace Actions
 
     void *ExtractZipThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting archive");
+        Activities::Item(activity.id, extract_zip_folder);
         FS::MkDirs(extract_zip_folder);
         std::vector<DirEntry> files;
         if (multi_selected_local_files.size() > 0)
@@ -1075,6 +1094,8 @@ namespace Actions
 
     void *ExtractRemoteZipThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting remote archive");
+        Activities::Item(activity.id, extract_zip_folder);
         FS::MkDirs(extract_zip_folder);
         std::vector<DirEntry> files;
         if (multi_selected_remote_files.size() > 0)
@@ -1118,6 +1139,8 @@ namespace Actions
 
     void *MakeZipThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_COMPRESS, "Creating archive");
+        Activities::Item(activity.id, zip_file_path);
         zipFile zf = zipOpen64(zip_file_path, APPEND_STATUS_CREATE);
         if (zf != NULL)
         {
@@ -1603,6 +1626,7 @@ namespace Actions
 
     void *MoveLocalFilesThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_MOVE, "Moving local files");
         file_transfering = true;
         for (std::vector<DirEntry>::iterator it = local_paste_files.begin(); it != local_paste_files.end(); ++it)
         {
@@ -1610,6 +1634,7 @@ namespace Actions
                 break;
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_MOVING], it->path);
+            Activities::Item(activity.id, it->path);
             if (strcmp(it->directory, local_directory) == 0)
                 continue;
 
@@ -1679,6 +1704,7 @@ namespace Actions
 
     void *CopyLocalFilesThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_COPY, "Copying local files");
         file_transfering = true;
         for (std::vector<DirEntry>::iterator it = local_paste_files.begin(); it != local_paste_files.end(); ++it)
         {
@@ -1686,6 +1712,7 @@ namespace Actions
                 break;
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], it->path);
+            Activities::Item(activity.id, it->path);
             if (it->isDir)
             {
                 if (strncmp(local_directory, it->path, strlen(it->path)) == 0)
@@ -1766,6 +1793,7 @@ namespace Actions
 
     void *MoveRemoteFilesThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_MOVE, "Moving remote files");
         file_transfering = false;
         for (std::vector<DirEntry>::iterator it = remote_paste_files.begin(); it != remote_paste_files.end(); ++it)
         {
@@ -1787,6 +1815,7 @@ namespace Actions
             }
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_MOVING], it->path);
+            Activities::Item(activity.id, it->path);
             int res = CopyOrMoveRemoteFile(it->path, new_path, false);
             if (res == 0)
                 sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
@@ -1885,6 +1914,7 @@ namespace Actions
 
     void *CopyRemoteFilesThread(void *argp)
     {
+        Activities::Guard activity(ACTIVITY_COPY, "Copying remote files");
         file_transfering = false;
         for (std::vector<DirEntry>::iterator it = remote_paste_files.begin(); it != remote_paste_files.end(); ++it)
         {
@@ -1892,6 +1922,7 @@ namespace Actions
                 break;
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], it->path);
+            Activities::Item(activity.id, it->path);
             if (strcmp(it->directory, remote_directory) == 0)
                 continue;
 

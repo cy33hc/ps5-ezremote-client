@@ -391,6 +391,25 @@ export async function installRemotePackage(site: string, path: string, size: num
   await request("/__local__/install_bg", { site, path, size });
 }
 
+export interface Activity {
+  id: number;
+  kind: string;
+  /** Running | Done | Failed | Cancelled */
+  state: string;
+  label: string;
+  item: string;
+  done: number;
+  total: number;
+  elapsed: number;
+  /** "Native" or "Web" */
+  origin: string;
+}
+
+export async function activities(): Promise<Activity[]> {
+  const data = await request<Activity[]>("/__local__/activities");
+  return Array.isArray(data) ? data : [];
+}
+
 export async function clearBgDownloads(): Promise<void> {
   await request("/__local__/bg_downloads/clear", {});
 }

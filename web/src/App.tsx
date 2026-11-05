@@ -97,6 +97,9 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [transfer, setTransfer] = useState<api.TransferState | null>(null);
   const [bgOpen, setBgOpen] = useState(false);
+  const [activityList, setActivityList] = useState<api.Activity[]>([]);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [exitDialog, setExitDialog] = useState<"stop" | "restart" | null>(null);
   const [remotePkgView, setRemotePkgView] = useState<DirEntry | null>(null);
   const [auth, setAuth] = useState<api.AuthStatus | null>(null);
   // Touch devices use long-press for the context menu; a draggable row
@@ -230,6 +233,14 @@ export default function App() {
         if (!cancelled) setEzremoteVersion(version);
       } catch {
         if (!cancelled) setEzremoteVersion("");
+      }
+
+      // Background workers (copy/move/delete/compress/…) report separately.
+      try {
+        const running = await api.activities();
+        if (!cancelled) setActivityList(running);
+      } catch {
+        // Nothing to show.
       }
 
       // The queue listing is independent of the status probe.
@@ -766,24 +777,9 @@ export default function App() {
     });
   };
 
-  const stopHttpServer = () => {
-    if (!window.confirm("Stop the ezRemote Client HTTP server? The web UI will disconnect.")) return;
-    void (async () => {
-      try {
-        const response = await fetch("/stop");
-        if (!response.ok) {
-          notify("Could not stop the client (HTTP " + response.status + ")", "error");
-          return;
-        }
-      } catch {
-        // The listener is torn down mid-response; a network error means it worked.
-      }
-      notify("ezRemote Client stopped", "info");
-    })();
-  };
 
-  const restartClient = () => {
-    if (!window.confirm("Restart ezRemote Client?")) return;
+
+  const executeRestart = () => {
     void (async () => {
       try {
         await fetch("/stop");
@@ -797,6 +793,21 @@ export default function App() {
       window.setTimeout(() => {
         window.location.href = `http://${host}:6701/start_client`;
       }, 2500);
+    })();
+  };
+
+  const executeStop = () => {
+    void (async () => {
+      try {
+        const response = await fetch("/stop");
+        if (!response.ok) {
+          notify("Could not stop the client (HTTP " + response.status + ")", "error");
+          return;
+        }
+      } catch {
+        // The listener is torn down mid-response; a network error means it worked.
+      }
+      notify("ezRemote Client stopped", "info");
     })();
   };
 
@@ -1001,6 +1012,7 @@ export default function App() {
       items.push({ separator: true });
       items.push({ label: "Cut", icon: "cut", onSelect: cutSelection });
       items.push({ label: "Copy", icon: "copy", onSelect: copySelection });
+      if (clipboard) items.push({ label: "Paste", icon: "paste", onSelect: pasteClipboard });
       items.push({ separator: true });
       items.push({ label: "Rename", icon: "rename", onSelect: renameSelection });
       items.push({ label: "Delete", icon: "trash", danger: true, onSelect: deleteSelection });
@@ -1181,6 +1193,13 @@ export default function App() {
                 {queuedNotice}
               </span>
             ) : null}
+            <HeaderButton
+              icon="activity"
+              label="Activity"
+              onClick={() => setActivityOpen(true)}
+              badge={activityList.filter((item) => item.state === "Running").length}
+              busy={activityList.some((item) => item.state === "Running")}
+            />
             <HeaderButton
               icon="download"
               label="Downloads"
@@ -1390,7 +1409,7 @@ export default function App() {
               type="button"
               onClick={() => {
                 setPowerMenu(null);
-                restartClient();
+                setExitDialog("restart");
               }}
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-mist-300 hover:bg-white/5 hover:text-mist-100"
             >
@@ -1401,7 +1420,7 @@ export default function App() {
               type="button"
               onClick={() => {
                 setPowerMenu(null);
-                stopHttpServer();
+                setExitDialog("stop");
               }}
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-rose-400 hover:bg-rose-400/10"
             >
@@ -1450,6 +1469,20 @@ export default function App() {
         </>
       ) : null}
       {transfer ? <TransferDialog transfer={transfer} onClose={() => setTransfer(null)} /> : null}
+      {activityOpen ? <ActivitiesDialog activities={activityList} onClose={() => setActivityOpen(false)} /> : null}
+      {exitDialog ? (
+        <ExitConfirmDialog
+          mode={exitDialog}
+          running={activityList.filter((item) => item.state === "Running")}
+          onCancel={() => setExitDialog(null)}
+          onConfirm={() => {
+            const mode = exitDialog;
+            setExitDialog(null);
+            if (mode === "stop") executeStop();
+            else executeRestart();
+          }}
+        />
+      ) : null}
       {remotePkgView && serverInfo ? (
         <PackageInfoDialog
           item={joinPath(remotePath, remotePkgView.name)}
@@ -1712,6 +1745,119 @@ function Panel({
         onRowDragStart={onRowDragStart}
       />
     </section>
+  );
+}
+
+function ExitConfirmDialog({
+  mode,
+  running,
+  onCancel,
+  onConfirm,
+}: {
+  mode: "stop" | "restart";
+  running: api.Activity[];
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const stopping = mode === "stop";
+
+  return (
+    <Modal
+      title={stopping ? "Stop ezRemote Client" : "Restart ezRemote Client"}
+      subtitle={stopping ? "The web UI will disconnect and any transfer stops." : "The client restarts and this page reopens once it is back."}
+      width="max-w-xl"
+      onClose={onCancel}
+      footer={
+        <>
+          <button type="button" onClick={onCancel} className="rounded-lg px-3 py-1.5 text-sm font-medium text-mist-300 hover:bg-white/5">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold text-white transition ${
+              stopping || running.length > 0 ? "bg-rose-500 hover:bg-rose-400" : "bg-accent-500 hover:bg-accent-600"
+            }`}
+          >
+            {stopping ? "Stop client" : "Restart client"}
+          </button>
+        </>
+      }
+    >
+      {running.length > 0 ? (
+        <div className="rounded-lg border border-rose-400/40 bg-rose-400/10 p-3">
+          <p className="flex items-center gap-2 text-sm font-semibold text-rose-400">
+            <Icon name="alert" size={16} className="shrink-0" />
+            {running.length} background {running.length === 1 ? "activity is" : "activities are"} still running
+          </p>
+          <p className="mt-1 text-sm text-rose-300/90">
+            Interrupting {running.length === 1 ? "it" : "them"} may leave a partial file behind.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {running.slice(0, 5).map((item) => (
+              <li key={item.id} className="truncate text-xs text-rose-200/80">
+                {item.kind} · {item.label}
+                {item.item ? <span className="text-rose-200/50"> — {item.item}</span> : null}
+              </li>
+            ))}
+            {running.length > 5 ? <li className="text-xs text-rose-200/60">…and {running.length - 5} more</li> : null}
+          </ul>
+        </div>
+      ) : (
+        <p className="text-sm text-mist-300">No background activity is running.</p>
+      )}
+    </Modal>
+  );
+}
+
+function ActivitiesDialog({ activities, onClose }: { activities: api.Activity[]; onClose: () => void }) {
+  const rows = [...activities].reverse();
+  const label: Record<string, string> = {
+    Running: "text-amber-400",
+    Done: "text-mint-400",
+    Failed: "text-rose-400",
+    Cancelled: "text-mist-500",
+  };
+
+  return (
+    <Modal
+      title="Background activity"
+      subtitle={rows.length > 0 ? `${rows.length} item${rows.length > 1 ? "s" : ""}` : undefined}
+      width="max-w-3xl"
+      onClose={onClose}
+      footer={
+        <button type="button" onClick={onClose} className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-accent-600">
+          Close
+        </button>
+      }
+    >
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-mist-500">Nothing has run yet.</p>
+      ) : (
+        <ul className="max-h-[60vh] space-y-2 overflow-y-auto">
+          {rows.map((item) => (
+            <li key={item.id} className="rounded-lg border border-abyss-600 bg-abyss-800 px-3 py-2">
+              <div className="flex items-center gap-3">
+                <span className="min-w-0 flex-1 truncate text-sm text-mist-100">
+                  <span className="mr-1.5 rounded border border-abyss-600 px-1 py-px text-[10px] uppercase tracking-wide text-mist-500">
+                    {item.origin}
+                  </span>
+                  <span className="text-mist-500">{item.kind} · </span>
+                  {item.label}
+                </span>
+                <span className={`shrink-0 text-xs ${label[item.state] ?? "text-mist-500"}`}>{item.state}</span>
+                <span className="shrink-0 font-mono text-xs text-mist-500">{item.elapsed}s</span>
+              </div>
+              {item.item ? (
+                <p className="mt-1 truncate font-mono text-[11px] text-mist-500" title={item.item}>
+                  {item.item}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   );
 }
 

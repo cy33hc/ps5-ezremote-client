@@ -48,6 +48,7 @@ add_executable(ezremote_client.elf
   source/http/httplib.cpp
   source/server/http_server.cpp
   source/actions.cpp
+  source/activity.cpp
   source/config.cpp
   source/crypt.c
   source/dbglogger.c

@@ -8,6 +8,7 @@
 #include "fs.h"
 #include "config.h"
 #include "gui.h"
+#include "activity.h"
 #include <sys/stat.h>
 #include "actions.h"
 #include "util.h"
@@ -75,6 +76,7 @@ int selected_browser = 0;
 int saved_selected_browser;
 bool activity_inprogess = false;
 bool stop_activity = false;
+bool quit_pending = false;
 bool file_transfering = false;
 bool set_focus_to_local = false;
 bool set_focus_to_remote = false;
@@ -83,6 +85,7 @@ int favorite_url_idx = 0;
 char extract_zip_folder[256];
 char zip_file_path[384];
 bool show_settings = false;
+bool show_activities = false;
 bool show_bg_download_progress = false;
 uint64_t refresh_bg_download_time;
 
@@ -485,6 +488,34 @@ namespace Windows
         }
 
         ImGui::PopStyleVar();
+
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(1790);
+        if (ImGui::Button(ICON_FA_CLOCK, ImVec2(35, 0)))
+        {
+            show_activities = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Activities");
+            ImGui::EndTooltip();
+        }
+
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(1830);
+        if (ImGui::Button(ICON_FA_DOWNLOAD, ImVec2(35, 0)))
+        {
+            Actions::GetBackgroundDownloadProgress();
+            show_bg_download_progress = true;
+            refresh_bg_download_time = Util::GetTick();
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("%s", lang_strings[STR_BG_DOWNLOAD_PROGRESS]);
+            ImGui::EndTooltip();
+        }
 
         ImGui::SameLine();
         ImGui::SetCursorPosX(1870);
@@ -1977,6 +2008,138 @@ namespace Windows
         }
     }
 
+    static int RunningActivityCount()
+    {
+        std::vector<Activity> list = Activities::Snapshot();
+        int running = 0;
+        for (size_t i = 0; i < list.size(); i++)
+        {
+            if (list[i].state == ACTIVITY_RUNNING)
+                running++;
+        }
+        return running;
+    }
+
+    // Confirmation shown when the user quits while background work is running.
+    void ShowQuitWarningDialog()
+    {
+        if (!quit_pending)
+            return;
+
+        SetModalMode(true);
+        ImGui::OpenPopup("Quit##quit_warning");
+
+        ImGui::SetNextWindowPos(ImVec2(760, 420));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(400, 80), ImVec2(400, 200), NULL, NULL);
+        if (ImGui::BeginPopupModal("Quit##quit_warning", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextWrapped("%d background activity is still running.", RunningActivityCount());
+            ImGui::TextWrapped("Quitting now will stop it and may leave a partial file.");
+            ImGui::Separator();
+
+            if (ImGui::Button("Quit anyway##quit_yes", ImVec2(180, 0)))
+            {
+                quit_pending = false;
+                done = true;
+                selected_action = ACTION_NONE;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel##quit_no", ImVec2(180, 0)))
+            {
+                quit_pending = false;
+                selected_action = ACTION_NONE;
+                SetModalMode(false);
+                ImGui::CloseCurrentPopup();
+            }
+            if (ImGui::IsWindowAppearing())
+                ImGui::SetItemDefaultFocus();
+
+            ImGui::EndPopup();
+        }
+    }
+
+    void ShowActivitiesDialog()
+    {
+        if (!show_activities)
+            return;
+
+        ImGuiStyle *style = &ImGui::GetStyle();
+        ImVec4 *colors = style->Colors;
+
+        SetModalMode(true);
+        ImGui::OpenPopup("Activities##activities");
+
+        ImGui::SetNextWindowPos(ImVec2(340, 260));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(1240, 140), ImVec2(1240, 620), NULL, NULL);
+        if (ImGui::BeginPopupModal("Activities##activities", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            std::vector<Activity> list = Activities::Snapshot();
+            const uint64_t now = Util::GetTick();
+
+            if (list.empty())
+            {
+                ImGui::TextDisabled("Nothing has run yet.");
+            }
+            else
+            {
+                ImGui::Columns(5, "activities##Columns", true);
+                for (int i = (int) list.size() - 1; i >= 0; i--)
+                {
+                    const Activity &item = list[i];
+
+                    ImGui::SetColumnWidth(-1, 80);
+                    ImGui::Text("%s", Activities::OriginName(item.origin));
+
+                    ImGui::NextColumn();
+                    ImGui::SetColumnWidth(-1, 110);
+                    ImGui::Text("%s", Activities::KindName(item.kind));
+
+                    ImGui::NextColumn();
+                    ImGui::SetColumnWidth(-1, 800);
+                    ImGui::TextWrapped("%s", item.label.c_str());
+                    if (!item.item.empty())
+                    {
+                        // The item the activity is working on right now.
+                        ImGui::SetWindowFontScale(0.75f);
+                        ImGui::TextDisabled("%s", item.item.c_str());
+                        ImGui::SetWindowFontScale(1.0f);
+                    }
+
+                    ImGui::NextColumn();
+                    ImGui::SetColumnWidth(-1, 130);
+                    ImVec4 color = colors[ImGuiCol_Text];
+                    if (item.state == ACTIVITY_RUNNING)
+                        color = ImVec4(0.85f, 0.73f, 0.49f, 1.0f);
+                    else if (item.state == ACTIVITY_FAILED)
+                        color = ImVec4(0.95f, 0.30f, 0.30f, 1.0f);
+                    else if (item.state == ACTIVITY_DONE)
+                        color = ImVec4(0.34f, 0.65f, 0.29f, 1.0f);
+                    ImGui::TextColored(color, "%s", Activities::StateName(item.state));
+
+                    ImGui::NextColumn();
+                    ImGui::SetColumnWidth(-1, 100);
+                    ImGui::Text("%.0fs", ((item.finished > 0 ? item.finished : now) - item.started) / 1000000.0);
+                    ImGui::NextColumn();
+                    ImGui::Separator();
+                }
+                ImGui::Columns(1);
+            }
+
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 500);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+            if (ImGui::Button("Close##activities_close", ImVec2(150, 0)))
+            {
+                show_activities = false;
+                SetModalMode(false);
+                ImGui::CloseCurrentPopup();
+            }
+            if (ImGui::IsWindowAppearing())
+                ImGui::SetItemDefaultFocus();
+
+            ImGui::EndPopup();
+        }
+    }
+
     void ShowSettingsDialog()
     {
         if (show_settings)
@@ -2255,18 +2418,6 @@ namespace Windows
                 ImGui::PopStyleVar();
                 ImGui::Separator();
 
-                sprintf(id, "%s##settings", lang_strings[STR_SHOW_BG_DOWNLOAD_PROGRESS]);
-                if (ImGui::Button(id, ImVec2(835, 0)))
-                {
-                    Actions::GetBackgroundDownloadProgress();
-                    show_bg_download_progress = true;
-                    show_settings = false;
-                    refresh_bg_download_time = Util::GetTick();
-                    SetModalMode(false);
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::Separator();
-
                 sprintf(id, "%s##settings", lang_strings[STR_CLOSE]);
                 if (ImGui::Button(id, ImVec2(835, 0)))
                 {
@@ -2429,6 +2580,8 @@ namespace Windows
             ShowFavoriteUrlsDialog();
             ShowEditorDialog();
             ShowSettingsDialog();
+            ShowActivitiesDialog();
+            ShowQuitWarningDialog();
             ShowImageDialog();
             ShowPackageInfoDialog();
             ShowWarningDialog();
@@ -2610,9 +2763,16 @@ namespace Windows
             Actions::Disconnect();
             break;
         case ACTION_DISCONNECT_AND_EXIT:
-            Actions::Disconnect();
-            HttpServer::Stop();
-            done = true;
+            if (Activities::AnyRunning() || HttpServer::AnyTransferRunning())
+            {
+                quit_pending = true;
+            }
+            else
+            {
+                Actions::Disconnect();
+                HttpServer::Stop();
+                done = true;
+            }
             break;
         case ACTION_INSTALL_REMOTE_PKG:
             if (INSTALLER::EzRemoteServerVersion().empty())

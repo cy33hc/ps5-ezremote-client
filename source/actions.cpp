@@ -37,6 +37,31 @@
 
 namespace Actions
 {
+    // Per-operation inputs handed to worker threads, so a second operation
+    // cannot change what a running one works on.
+    struct TransferJob
+    {
+        std::vector<DirEntry> files;
+        std::string target; // destination folder for copy/move
+    };
+
+    // Per-operation inputs, so two archive jobs cannot overwrite each other.
+    struct ArchiveJob
+    {
+        std::vector<DirEntry> files;
+        std::string target; // zip path or extract folder
+    };
+
+    static std::vector<DirEntry> TakeSelection(const std::set<DirEntry> &multi, const DirEntry &single)
+    {
+        std::vector<DirEntry> files;
+        if (multi.size() > 0)
+            std::copy(multi.begin(), multi.end(), std::back_inserter(files));
+        else
+            files.push_back(single);
+        return files;
+    }
+
     static int FtpCallback(int64_t xfered, void *arg)
     {
         // The owning client is passed as the callback argument so progress stays
@@ -267,12 +292,10 @@ namespace Actions
 
     void *DeleteSelectedLocalFilesThread(void *argp)
     {
+        TransferJob *job = static_cast<TransferJob *>(argp);
         Activities::Guard activity(ACTIVITY_DELETE, "Deleting local files");
-        std::vector<DirEntry> files;
-        if (multi_selected_local_files.size() > 0)
-            std::copy(multi_selected_local_files.begin(), multi_selected_local_files.end(), std::back_inserter(files));
-        else
-            files.push_back(selected_local_file);
+        std::vector<DirEntry> files = job->files;
+        delete job;
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
@@ -288,8 +311,11 @@ namespace Actions
 
     void DeleteSelectedLocalFiles()
     {
-        int ret = pthread_create(&bk_activity_thid, NULL, DeleteSelectedLocalFilesThread, NULL);
-        if (ret != 0)
+        TransferJob *job = new TransferJob();
+        job->files = TakeSelection(multi_selected_local_files, selected_local_file);
+
+        int thread_res = pthread_create(&bk_activity_thid, NULL, DeleteSelectedLocalFilesThread, job);
+        if (thread_res != 0)
         {
             activity_inprogess = false;
             Windows::SetModalMode(false);
@@ -299,14 +325,12 @@ namespace Actions
 
     void *DeleteSelectedRemotesFilesThread(void *argp)
     {
+        TransferJob *job = static_cast<TransferJob *>(argp);
         Activities::Guard activity(ACTIVITY_DELETE, "Deleting remote files");
         if (remoteclient->Ping())
         {
-            std::vector<DirEntry> files;
-            if (multi_selected_remote_files.size() > 0)
-                std::copy(multi_selected_remote_files.begin(), multi_selected_remote_files.end(), std::back_inserter(files));
-            else
-                files.push_back(selected_remote_file);
+            std::vector<DirEntry> files = job->files;
+            delete job;
 
             for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
@@ -336,8 +360,11 @@ namespace Actions
 
     void DeleteSelectedRemotesFiles()
     {
-        int res = pthread_create(&bk_activity_thid, NULL, DeleteSelectedRemotesFilesThread, NULL);
-        if (res != 0)
+        TransferJob *job = new TransferJob();
+        job->files = TakeSelection(multi_selected_remote_files, selected_remote_file);
+
+        int thread_res = pthread_create(&bk_activity_thid, NULL, DeleteSelectedRemotesFilesThread, job);
+        if (thread_res != 0)
         {
             activity_inprogess = false;
             Windows::SetModalMode(false);
@@ -457,13 +484,11 @@ namespace Actions
 
     void *UploadFilesThread(void *argp)
     {
+        TransferJob *job = static_cast<TransferJob *>(argp);
         Activities::Guard activity(ACTIVITY_UPLOAD, "Uploading files");
         file_transfering = true;
-        std::vector<DirEntry> files;
-        if (multi_selected_local_files.size() > 0)
-            std::copy(multi_selected_local_files.begin(), multi_selected_local_files.end(), std::back_inserter(files));
-        else
-            files.push_back(selected_local_file);
+        std::vector<DirEntry> files = job->files;
+        delete job;
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
@@ -489,8 +514,11 @@ namespace Actions
     void UploadFiles()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, UploadFilesThread, NULL);
-        if (res != 0)
+        TransferJob *job = new TransferJob();
+        job->files = TakeSelection(multi_selected_local_files, selected_local_file);
+
+        int thread_res = pthread_create(&bk_activity_thid, NULL, UploadFilesThread, job);
+        if (thread_res != 0)
         {
             activity_inprogess = false;
             file_transfering = false;
@@ -681,13 +709,11 @@ namespace Actions
 
     void *DownloadFilesThread(void *argp)
     {
+        TransferJob *job = static_cast<TransferJob *>(argp);
         Activities::Guard activity(ACTIVITY_DOWNLOAD, "Downloading files");
         file_transfering = true;
-        std::vector<DirEntry> files;
-        if (multi_selected_remote_files.size() > 0)
-            std::copy(multi_selected_remote_files.begin(), multi_selected_remote_files.end(), std::back_inserter(files));
-        else
-            files.push_back(selected_remote_file);
+        std::vector<DirEntry> files = job->files;
+        delete job;
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
@@ -714,8 +740,11 @@ namespace Actions
     void DownloadFiles()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, DownloadFilesThread, NULL);
-        if (res != 0)
+        TransferJob *job = new TransferJob();
+        job->files = TakeSelection(multi_selected_remote_files, selected_remote_file);
+
+        int thread_res = pthread_create(&bk_activity_thid, NULL, DownloadFilesThread, job);
+        if (thread_res != 0)
         {
             file_transfering = false;
             activity_inprogess = false;
@@ -727,16 +756,14 @@ namespace Actions
 
     void *InstallRemotePkgsThread(void *argp)
     {
+        TransferJob *job = static_cast<TransferJob *>(argp);
         Activities::Guard activity(ACTIVITY_INSTALL, "Installing remote packages");
         int failed = 0;
         int success = 0;
         int skipped = 0;
 
-        std::vector<DirEntry> files;
-        if (multi_selected_remote_files.size() > 0)
-            std::copy(multi_selected_remote_files.begin(), multi_selected_remote_files.end(), std::back_inserter(files));
-        else
-            files.push_back(selected_remote_file);
+        std::vector<DirEntry> files = job->files;
+        delete job;
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
@@ -866,8 +893,11 @@ namespace Actions
     void InstallRemotePkgs()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, InstallRemotePkgsThread, NULL);
-        if (res != 0)
+        TransferJob *job = new TransferJob();
+        job->files = TakeSelection(multi_selected_remote_files, selected_remote_file);
+
+        int thread_res = pthread_create(&bk_activity_thid, NULL, InstallRemotePkgsThread, job);
+        if (thread_res != 0)
         {
             activity_inprogess = false;
             file_transfering = false;
@@ -932,17 +962,15 @@ namespace Actions
 
     void *InstallLocalPkgsThread(void *argp)
     {
+        TransferJob *job = static_cast<TransferJob *>(argp);
         Activities::Guard activity(ACTIVITY_INSTALL, "Installing packages");
         int failed = 0;
         int success = 0;
         int skipped = 0;
         int ret;
 
-        std::vector<DirEntry> files;
-        if (multi_selected_local_files.size() > 0)
-            std::copy(multi_selected_local_files.begin(), multi_selected_local_files.end(), std::back_inserter(files));
-        else
-            files.push_back(selected_local_file);
+        std::vector<DirEntry> files = job->files;
+        delete job;
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
@@ -1035,8 +1063,11 @@ namespace Actions
     void InstallLocalPkgs()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, InstallLocalPkgsThread, NULL);
-        if (res != 0)
+        TransferJob *job = new TransferJob();
+        job->files = TakeSelection(multi_selected_local_files, selected_local_file);
+
+        int thread_res = pthread_create(&bk_activity_thid, NULL, InstallLocalPkgsThread, job);
+        if (thread_res != 0)
         {
             activity_inprogess = false;
             multi_selected_local_files.clear();
@@ -1046,14 +1077,12 @@ namespace Actions
 
     void *ExtractZipThread(void *argp)
     {
+        ArchiveJob *job = static_cast<ArchiveJob *>(argp);
         Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting archive");
-        Activities::Item(activity.id, extract_zip_folder);
-        FS::MkDirs(extract_zip_folder);
-        std::vector<DirEntry> files;
-        if (multi_selected_local_files.size() > 0)
-            std::copy(multi_selected_local_files.begin(), multi_selected_local_files.end(), std::back_inserter(files));
-        else
-            files.push_back(selected_local_file);
+        Activities::Item(activity.id, job->target);
+        FS::MkDirs(job->target);
+        std::vector<DirEntry> files = job->files;
+        delete job;
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
@@ -1079,9 +1108,14 @@ namespace Actions
     void ExtractLocalZips()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, ExtractZipThread, NULL);
+        ArchiveJob *job = new ArchiveJob();
+        job->files = TakeSelection(multi_selected_local_files, selected_local_file);
+        job->target = std::string(extract_zip_folder);
+
+        int res = pthread_create(&bk_activity_thid, NULL, ExtractZipThread, job);
         if (res != 0)
         {
+            delete job;
             file_transfering = false;
             activity_inprogess = false;
             multi_selected_local_files.clear();
@@ -1091,14 +1125,12 @@ namespace Actions
 
     void *ExtractRemoteZipThread(void *argp)
     {
+        ArchiveJob *job = static_cast<ArchiveJob *>(argp);
         Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting remote archive");
-        Activities::Item(activity.id, extract_zip_folder);
-        FS::MkDirs(extract_zip_folder);
-        std::vector<DirEntry> files;
-        if (multi_selected_remote_files.size() > 0)
-            std::copy(multi_selected_remote_files.begin(), multi_selected_remote_files.end(), std::back_inserter(files));
-        else
-            files.push_back(selected_remote_file);
+        Activities::Item(activity.id, job->target);
+        FS::MkDirs(job->target);
+        std::vector<DirEntry> files = job->files;
+        delete job;
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
@@ -1124,9 +1156,14 @@ namespace Actions
     void ExtractRemoteZips()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, ExtractRemoteZipThread, NULL);
+        ArchiveJob *job = new ArchiveJob();
+        job->files = TakeSelection(multi_selected_remote_files, selected_remote_file);
+        job->target = std::string(extract_zip_folder);
+
+        int res = pthread_create(&bk_activity_thid, NULL, ExtractRemoteZipThread, job);
         if (res != 0)
         {
+            delete job;
             file_transfering = false;
             activity_inprogess = false;
             multi_selected_remote_files.clear();
@@ -1136,16 +1173,13 @@ namespace Actions
 
     void *MakeZipThread(void *argp)
     {
+        ArchiveJob *job = static_cast<ArchiveJob *>(argp);
         Activities::Guard activity(ACTIVITY_COMPRESS, "Creating archive");
-        Activities::Item(activity.id, zip_file_path);
-        zipFile zf = zipOpen64(zip_file_path, APPEND_STATUS_CREATE);
+        Activities::Item(activity.id, job->target);
+        zipFile zf = zipOpen64(job->target.c_str(), APPEND_STATUS_CREATE);
         if (zf != NULL)
         {
-            std::vector<DirEntry> files;
-            if (multi_selected_local_files.size() > 0)
-                std::copy(multi_selected_local_files.begin(), multi_selected_local_files.end(), std::back_inserter(files));
-            else
-                files.push_back(selected_local_file);
+            std::vector<DirEntry> files = job->files;
 
             for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
@@ -1174,9 +1208,14 @@ namespace Actions
     void MakeLocalZip()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, MakeZipThread, NULL);
+        ArchiveJob *job = new ArchiveJob();
+        job->files = TakeSelection(multi_selected_local_files, selected_local_file);
+        job->target = std::string(zip_file_path);
+
+        int res = pthread_create(&bk_activity_thid, NULL, MakeZipThread, job);
         if (res != 0)
         {
+            delete job;
             file_transfering = false;
             activity_inprogess = false;
             multi_selected_local_files.clear();
@@ -1621,31 +1660,35 @@ namespace Actions
     void *MoveLocalFilesThread(void *argp)
     {
         Activities::Guard activity(ACTIVITY_MOVE, "Moving local files");
+        TransferJob *job = static_cast<TransferJob *>(argp);
+        std::vector<DirEntry> files = job->files;
+        std::string target = job->target;
+        delete job;
         file_transfering = true;
-        for (std::vector<DirEntry>::iterator it = local_paste_files.begin(); it != local_paste_files.end(); ++it)
+        for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (stop_activity)
                 break;
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_MOVING], it->path);
             Activities::Item(activity.id, it->path);
-            if (strcmp(it->directory, local_directory) == 0)
+            if (strcmp(it->directory, target.c_str()) == 0)
                 continue;
 
             if (it->isDir)
             {
-                if (strncmp(local_directory, it->path, strlen(it->path)) == 0)
+                if (strncmp(target.c_str(), it->path, strlen(it->path)) == 0)
                 {
                     sprintf(status_message, "%s", lang_strings[STR_CANT_MOVE_TO_SUBDIR_MSG]);
                     continue;
                 }
                 char new_dir[512];
-                sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", it->name);
+                sprintf(new_dir, "%s%s%s", target.c_str(), FS::hasEndSlash(target.c_str()) ? "" : "/", it->name);
                 CopyOrMove(*it, new_dir, false);
             }
             else
             {
-                CopyOrMove(*it, local_directory, false);
+                CopyOrMove(*it, target.c_str(), false);
             }
         }
         activity_inprogess = false;
@@ -1659,8 +1702,12 @@ namespace Actions
     void MoveLocalFiles()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, MoveLocalFilesThread, NULL);
-        if (res != 0)
+        TransferJob *job = new TransferJob();
+        job->files.assign(local_paste_files.begin(), local_paste_files.end());
+        job->target = local_directory;
+
+        int thread_res = pthread_create(&bk_activity_thid, NULL, MoveLocalFilesThread, job);
+        if (thread_res != 0)
         {
             file_transfering = false;
             activity_inprogess = false;
@@ -1699,8 +1746,12 @@ namespace Actions
     void *CopyLocalFilesThread(void *argp)
     {
         Activities::Guard activity(ACTIVITY_COPY, "Copying local files");
+        TransferJob *job = static_cast<TransferJob *>(argp);
+        std::vector<DirEntry> files = job->files;
+        std::string target = job->target;
+        delete job;
         file_transfering = true;
-        for (std::vector<DirEntry>::iterator it = local_paste_files.begin(); it != local_paste_files.end(); ++it)
+        for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (stop_activity)
                 break;
@@ -1709,21 +1760,21 @@ namespace Actions
             Activities::Item(activity.id, it->path);
             if (it->isDir)
             {
-                if (strncmp(local_directory, it->path, strlen(it->path)) == 0)
+                if (strncmp(target.c_str(), it->path, strlen(it->path)) == 0)
                 {
                     sprintf(status_message, "%s", lang_strings[STR_CANT_COPY_TO_SUBDIR_MSG]);
                     continue;
                 }
                 // UniqueLocalName returns the original name when nothing collides.
-                std::string name = UniqueLocalName(local_directory, it->name);
+                std::string name = UniqueLocalName(target.c_str(), it->name);
                 char new_dir[512];
-                sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", name.c_str());
+                sprintf(new_dir, "%s%s%s", target.c_str(), FS::hasEndSlash(target.c_str()) ? "" : "/", name.c_str());
                 CopyOrMove(*it, new_dir, true);
             }
             else
             {
-                std::string target = std::string(local_directory) +
-                    (FS::hasEndSlash(local_directory) ? "" : "/") + UniqueLocalName(local_directory, it->name);
+                std::string target = std::string(target.c_str()) +
+                    (FS::hasEndSlash(target.c_str()) ? "" : "/") + UniqueLocalName(target.c_str(), it->name);
                 CopyOrMoveLocalFile(it->path, target.c_str(), true);
             }
         }
@@ -1738,8 +1789,12 @@ namespace Actions
     void CopyLocalFiles()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, CopyLocalFilesThread, NULL);
-        if (res != 0)
+        TransferJob *job = new TransferJob();
+        job->files.assign(local_paste_files.begin(), local_paste_files.end());
+        job->target = local_directory;
+
+        int thread_res = pthread_create(&bk_activity_thid, NULL, CopyLocalFilesThread, job);
+        if (thread_res != 0)
         {
             file_transfering = false;
             activity_inprogess = false;
@@ -1788,20 +1843,24 @@ namespace Actions
     void *MoveRemoteFilesThread(void *argp)
     {
         Activities::Guard activity(ACTIVITY_MOVE, "Moving remote files");
+        TransferJob *job = static_cast<TransferJob *>(argp);
+        std::vector<DirEntry> files = job->files;
+        std::string target = job->target;
+        delete job;
         file_transfering = false;
-        for (std::vector<DirEntry>::iterator it = remote_paste_files.begin(); it != remote_paste_files.end(); ++it)
+        for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (stop_activity)
                 break;
 
-            if (strcmp(it->directory, remote_directory) == 0)
+            if (strcmp(it->directory, target.c_str()) == 0)
                 continue;
 
             char new_path[1024];
-            sprintf(new_path, "%s%s%s", remote_directory, FS::hasEndSlash(remote_directory) ? "" : "/", it->name);
+            sprintf(new_path, "%s%s%s", target.c_str(), FS::hasEndSlash(target.c_str()) ? "" : "/", it->name);
             if (it->isDir)
             {
-                if (strncmp(remote_directory, it->path, strlen(it->path)) == 0)
+                if (strncmp(target.c_str(), it->path, strlen(it->path)) == 0)
                 {
                     sprintf(status_message, "%s", lang_strings[STR_CANT_MOVE_TO_SUBDIR_MSG]);
                     continue;
@@ -1825,8 +1884,12 @@ namespace Actions
     void MoveRemoteFiles()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, MoveRemoteFilesThread, NULL);
-        if (res != 0)
+        TransferJob *job = new TransferJob();
+        job->files.assign(remote_paste_files.begin(), remote_paste_files.end());
+        job->target = remote_directory;
+
+        int thread_res = pthread_create(&bk_activity_thid, NULL, MoveRemoteFilesThread, job);
+        if (thread_res != 0)
         {
             file_transfering = false;
             activity_inprogess = false;
@@ -1907,22 +1970,26 @@ namespace Actions
     void *CopyRemoteFilesThread(void *argp)
     {
         Activities::Guard activity(ACTIVITY_COPY, "Copying remote files");
+        TransferJob *job = static_cast<TransferJob *>(argp);
+        std::vector<DirEntry> files = job->files;
+        std::string target = job->target;
+        delete job;
         file_transfering = false;
-        for (std::vector<DirEntry>::iterator it = remote_paste_files.begin(); it != remote_paste_files.end(); ++it)
+        for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (stop_activity)
                 break;
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], it->path);
             Activities::Item(activity.id, it->path);
-            if (strcmp(it->directory, remote_directory) == 0)
+            if (strcmp(it->directory, target.c_str()) == 0)
                 continue;
 
             char new_path[1024];
-            sprintf(new_path, "%s%s%s", remote_directory, FS::hasEndSlash(remote_directory) ? "" : "/", it->name);
+            sprintf(new_path, "%s%s%s", target.c_str(), FS::hasEndSlash(target.c_str()) ? "" : "/", it->name);
             if (it->isDir)
             {
-                if (strncmp(remote_directory, it->path, strlen(it->path)) == 0)
+                if (strncmp(target.c_str(), it->path, strlen(it->path)) == 0)
                 {
                     sprintf(status_message, "%s", lang_strings[STR_CANT_COPY_TO_SUBDIR_MSG]);
                     continue;
@@ -1933,7 +2000,7 @@ namespace Actions
             }
             else
             {
-                int res = CopyRemotePath(*it, remote_directory);
+                int res = CopyRemotePath(*it, target.c_str());
                 if (res == 0)
                     sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
             }
@@ -1949,8 +2016,12 @@ namespace Actions
     void CopyRemoteFiles()
     {
         sprintf(status_message, "%s", "");
-        int res = pthread_create(&bk_activity_thid, NULL, CopyRemoteFilesThread, NULL);
-        if (res != 0)
+        TransferJob *job = new TransferJob();
+        job->files.assign(remote_paste_files.begin(), remote_paste_files.end());
+        job->target = remote_directory;
+
+        int thread_res = pthread_create(&bk_activity_thid, NULL, CopyRemoteFilesThread, job);
+        if (thread_res != 0)
         {
             file_transfering = false;
             activity_inprogess = false;

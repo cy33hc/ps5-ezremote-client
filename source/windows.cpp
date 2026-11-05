@@ -2105,6 +2105,11 @@ namespace Windows
                         ImGui::TextDisabled("%s", item.item.c_str());
                         ImGui::SetWindowFontScale(1.0f);
                     }
+                    if (item.state == ACTIVITY_RUNNING && item.total > 0)
+                    {
+                        float fraction = item.done * 1.0f / (float) item.total;
+                        ImGui::ProgressBar(fraction, ImVec2(-1, 6), "");
+                    }
 
                     ImGui::NextColumn();
                     ImGui::SetColumnWidth(-1, 130);
@@ -2116,6 +2121,13 @@ namespace Windows
                     else if (item.state == ACTIVITY_DONE)
                         color = ImVec4(0.34f, 0.65f, 0.29f, 1.0f);
                     ImGui::TextColored(color, "%s", Activities::StateName(item.state));
+                    if (item.state == ACTIVITY_RUNNING)
+                    {
+                        ImGui::PushID((int) item.id);
+                        if (ImGui::SmallButton("Cancel"))
+                            Activities::Cancel(item.id);
+                        ImGui::PopID();
+                    }
 
                     ImGui::NextColumn();
                     ImGui::SetColumnWidth(-1, 100);
@@ -2584,7 +2596,7 @@ namespace Windows
             BrowserPanel();
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3);
             StatusPanel();
-            ShowProgressDialog();
+            // Progress is shown per activity in the Activities dialog.
             ShowActionsDialog();
             ShowFavoriteUrlsDialog();
             ShowEditorDialog();

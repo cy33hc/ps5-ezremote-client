@@ -120,7 +120,7 @@ namespace Actions
     void MoveRemoteFiles();
     void *CopyRemoteFilesThread(void *argp);
     void CopyRemoteFiles();
-    int DownloadAndInstallPkg(const std::string &filename, pkg_header *header);
+    int DownloadAndInstallPkg(const std::string &filename, pkg_header *header, RemoteClient *client);
     void CreateLocalFile(char *filename);
     void CreateRemoteFile(char *filename);
     void *ExtractArchivePkg(void *argp);

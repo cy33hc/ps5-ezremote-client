@@ -9,6 +9,9 @@ extern bool stop_activity;
 // Id of the activity owned by the calling thread, set by Guard.
 extern thread_local uint64_t activity_current_id;
 
+// Overwrite policy snapshot for the calling thread; -1 means "use the global".
+extern thread_local int activity_overwrite_type;
+
 // Background work shared by the native UI and the web UI: copy, move, delete,
 // compress, extract, upload, download and install. Every worker thread registers
 // itself here so both front ends can show what is running and warn before exit.
@@ -25,6 +28,14 @@ enum ActivityKind
 };
 
 // Which front end started the work.
+// Which resource class the work occupies; local and remote operations can run
+// at the same time, remote ones contend on the site connection.
+enum ActivityScope
+{
+    ACTIVITY_LOCAL,
+    ACTIVITY_REMOTE
+};
+
 enum ActivityOrigin
 {
     ACTIVITY_NATIVE,
@@ -48,14 +59,21 @@ struct Activity
     std::string item;
     uint64_t done;
     uint64_t total;
+    bool cancel;       // requested by the user
     uint64_t started;  // Util::GetTick() when the activity began
     uint64_t finished; // when it ended, 0 while running
     int origin;
+    int scope;
 };
 
 namespace Activities
 {
-    uint64_t Begin(int kind, const std::string &label, int origin = ACTIVITY_NATIVE);
+    uint64_t Begin(int kind, const std::string &label, int origin = ACTIVITY_NATIVE, int scope = ACTIVITY_LOCAL);
+
+    // Overwrite policy for the calling thread; jobs keep their own snapshot so
+    // one operation cannot change what another does with existing files.
+    int OverwriteType();
+    void SnapshotOverwrite();
     void Item(uint64_t id, const std::string &item);
     void Progress(uint64_t id, uint64_t done, uint64_t total);
     // Report progress for the newest running activity; lets legacy code
@@ -67,7 +85,14 @@ namespace Activities
     std::vector<Activity> Snapshot();
     // Drops finished entries; returns how many were removed.
     int ClearFinished();
+    // Requests cancellation of one activity.
+    bool Cancel(uint64_t id);
+    // True when the calling thread's activity should stop.
+    bool Stopped();
     bool AnyRunning();
+    bool IsCancelled(uint64_t id);
+    bool AnyLocalRunning();
+    bool AnyRemoteRunning();
     const char *KindName(int kind);
     const char *StateName(int state);
     const char *OriginName(int origin);
@@ -79,15 +104,16 @@ namespace Activities
         uint64_t id;
         uint64_t previous;
 
-        Guard(int kind, const std::string &label, int origin = ACTIVITY_NATIVE)
-            : id(Begin(kind, label, origin)), previous(activity_current_id)
+        Guard(int kind, const std::string &label, int origin = ACTIVITY_NATIVE, int scope = ACTIVITY_LOCAL)
+            : id(Begin(kind, label, origin, scope)), previous(activity_current_id)
         {
+            SnapshotOverwrite();
             activity_current_id = id;
         }
 
         ~Guard()
         {
-            Finish(id, stop_activity ? ACTIVITY_CANCELLED : ACTIVITY_DONE);
+            Finish(id, (stop_activity || IsCancelled(id)) ? ACTIVITY_CANCELLED : ACTIVITY_DONE);
             activity_current_id = previous;
         }
     };

@@ -4,6 +4,9 @@
 #include <json-c/json.h>
 #include "json_object_ref.h"
 #include "activity.h"
+#include <mutex>
+
+#include "remote_pool.h"
 #include <lexbor/html/parser.h>
 #include <lexbor/dom/interfaces/element.h>
 #include <minizip/unzip.h>
@@ -290,6 +293,25 @@ namespace Actions
         }
     }
 
+    // Only one overwrite question is shown at a time; the answer belongs to the
+    // operation that asked it.
+    static std::mutex confirm_mutex;
+
+    static void PromptOverwrite(const char *dest)
+    {
+        std::lock_guard<std::mutex> lock(confirm_mutex);
+        sprintf(confirm_message, "%s %s?", lang_strings[STR_OVERWRITE], dest);
+        confirm_state = CONFIRM_WAIT;
+        action_to_take = selected_action;
+        activity_inprogess = false;
+        while (confirm_state == CONFIRM_WAIT)
+        {
+            usleep(100000);
+        }
+        activity_inprogess = true;
+        selected_action = action_to_take;
+    }
+
     void *DeleteSelectedLocalFilesThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
@@ -326,23 +348,31 @@ namespace Actions
     void *DeleteSelectedRemotesFilesThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
-        Activities::Guard activity(ACTIVITY_DELETE, "Deleting remote files");
-        if (remoteclient->Ping())
-        {
-            std::vector<DirEntry> files = job->files;
-            delete job;
+        Activities::Guard activity(ACTIVITY_DELETE, "Deleting remote files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
+        std::vector<DirEntry> files = job->files;
+        delete job;
 
+        // Own connection for the duration of this operation.
+        RemoteClient *client = RemotePool::Acquire(*remote_settings);
+        bool healthy = true;
+
+        if (client != nullptr && client->Ping())
+        {
             for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
                 if (it->isDir)
-                    remoteclient->Rmdir(it->path, true);
+                {
+                    if (!client->Rmdir(it->path, true))
+                        healthy = false;
+                }
                 else
                 {
                     sprintf(activity_message, "%s %s", lang_strings[STR_DELETING], it->path);
                     Activities::Item(activity.id, it->path);
-                    if (!remoteclient->Delete(it->path))
+                    if (!client->Delete(it->path))
                     {
-                        sprintf(status_message, "%s - %s", lang_strings[STR_FAILED], remoteclient->LastResponse());
+                        healthy = false;
+                        sprintf(status_message, "%s - %s", lang_strings[STR_FAILED], client->LastResponse());
                     }
                 }
             }
@@ -351,8 +381,11 @@ namespace Actions
         else
         {
             sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
+            healthy = false;
             Disconnect();
         }
+
+        RemotePool::Release(client, healthy);
         activity_inprogess = false;
         Windows::SetModalMode(false);
         return NULL;
@@ -371,30 +404,21 @@ namespace Actions
         }
     }
 
-    int UploadFile(const char *src, const char *dest)
+    int UploadFile(const char *src, const char *dest, RemoteClient *client)
     {
         int ret;
-        if (!remoteclient->Ping())
+        if (!client->Ping())
         {
-            remoteclient->Quit();
+            client->Quit();
             sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
             return 0;
         }
 
-        if (overwrite_type == OVERWRITE_PROMPT && remoteclient->FileExists(dest))
+        if (Activities::OverwriteType() == OVERWRITE_PROMPT && client->FileExists(dest))
         {
-            sprintf(confirm_message, "%s %s?", lang_strings[STR_OVERWRITE], dest);
-            confirm_state = CONFIRM_WAIT;
-            action_to_take = selected_action;
-            activity_inprogess = false;
-            while (confirm_state == CONFIRM_WAIT)
-            {
-                usleep(100000);
-            }
-            activity_inprogess = true;
-            selected_action = action_to_take;
+            PromptOverwrite(dest);
         }
-        else if (overwrite_type == OVERWRITE_NONE && remoteclient->FileExists(dest))
+        else if (Activities::OverwriteType() == OVERWRITE_NONE && client->FileExists(dest))
         {
             confirm_state = CONFIRM_NO;
         }
@@ -406,16 +430,16 @@ namespace Actions
         if (confirm_state == CONFIRM_YES)
         {
             prev_tick = Util::GetTick();
-            return remoteclient->Put(src, dest);
+            return client->Put(src, dest);
         }
 
         sceSystemServicePowerTick();
         return 1;
     }
 
-    int Upload(const DirEntry &src, const char *dest)
+    int Upload(const DirEntry &src, const char *dest, RemoteClient *client)
     {
-        if (stop_activity)
+        if (Activities::Stopped())
             return 1;
 
         int ret;
@@ -423,10 +447,10 @@ namespace Actions
         {
             int err;
             std::vector<DirEntry> entries = FS::ListDir(src.path, &err);
-            remoteclient->Mkdir(dest);
+            client->Mkdir(dest);
             for (int i = 0; i < entries.size(); i++)
             {
-                if (stop_activity)
+                if (Activities::Stopped())
                     return 1;
 
                 int path_length = strlen(dest) + strlen(entries[i].name) + 2;
@@ -441,8 +465,8 @@ namespace Actions
                         continue;
                     }
 
-                    remoteclient->Mkdir(new_path);
-                    ret = Upload(entries[i], new_path);
+                    client->Mkdir(new_path);
+                    ret = Upload(entries[i], new_path, client);
                     if (ret <= 0)
                     {
                         free(new_path);
@@ -453,7 +477,7 @@ namespace Actions
                 {
                     snprintf(activity_message, 1024, "%s %s", lang_strings[STR_UPLOADING], entries[i].path);
                     prev_tick = Util::GetTick();
-                    ret = UploadFile(entries[i].path, new_path);
+                    ret = UploadFile(entries[i].path, new_path, client);
                     if (ret <= 0)
                     {
                         sprintf(status_message, "%s %s", lang_strings[STR_FAIL_UPLOAD_MSG], entries[i].path);
@@ -470,7 +494,7 @@ namespace Actions
             char *new_path = (char *)malloc(path_length);
             snprintf(new_path, path_length, "%s%s%s", dest, FS::hasEndSlash(dest) ? "" : "/", src.name);
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_UPLOADING], src.name);
-            ret = UploadFile(src.path, new_path);
+            ret = UploadFile(src.path, new_path, client);
             if (ret <= 0)
             {
                 free(new_path);
@@ -485,24 +509,35 @@ namespace Actions
     void *UploadFilesThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
-        Activities::Guard activity(ACTIVITY_UPLOAD, "Uploading files");
+        Activities::Guard activity(ACTIVITY_UPLOAD, "Uploading files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         file_transfering = true;
         std::vector<DirEntry> files = job->files;
         delete job;
 
-        for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
+        RemoteClient *client = RemotePool::Acquire(*remote_settings);
+
+        if (client != nullptr)
         {
-            if (it->isDir)
+            for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
-                char new_dir[512];
-                sprintf(new_dir, "%s%s%s", remote_directory, FS::hasEndSlash(remote_directory) ? "" : "/", it->name);
-                Upload(*it, new_dir);
-            }
-            else
-            {
-                Upload(*it, remote_directory);
+                if (it->isDir)
+                {
+                    char new_dir[512];
+                    sprintf(new_dir, "%s%s%s", remote_directory, FS::hasEndSlash(remote_directory) ? "" : "/", it->name);
+                    Upload(*it, new_dir, client);
+                }
+                else
+                {
+                    Upload(*it, remote_directory, client);
+                }
             }
         }
+        else
+        {
+            sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
+        }
+
+        RemotePool::Release(client, true);
         activity_inprogess = false;
         file_transfering = false;
         multi_selected_local_files.clear();
@@ -591,31 +626,22 @@ namespace Actions
         return 0;
     }
 
-    int DownloadFile(const char *src, const char *dest)
+    int DownloadFile(const char *src, const char *dest, RemoteClient *client)
     {
         prev_tick = Util::GetTick();
         uint64_t file_size = 0;
-        if (!remoteclient->Size(src, &file_size))
+        if (!client->Size(src, &file_size))
         {
-            remoteclient->Quit();
+            client->Quit();
             sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
             return 0;
         }
 
-        if (overwrite_type == OVERWRITE_PROMPT && FS::FileExists(dest))
+        if (Activities::OverwriteType() == OVERWRITE_PROMPT && FS::FileExists(dest))
         {
-            sprintf(confirm_message, "%s %s?", lang_strings[STR_OVERWRITE], dest);
-            confirm_state = CONFIRM_WAIT;
-            action_to_take = selected_action;
-            activity_inprogess = false;
-            while (confirm_state == CONFIRM_WAIT)
-            {
-                usleep(100000);
-            }
-            activity_inprogess = true;
-            selected_action = action_to_take;
+            PromptOverwrite(dest);
         }
-        else if (overwrite_type == OVERWRITE_NONE && FS::FileExists(dest))
+        else if (Activities::OverwriteType() == OVERWRITE_NONE && FS::FileExists(dest))
         {
             confirm_state = CONFIRM_NO;
         }
@@ -632,27 +658,27 @@ namespace Actions
             {
                 return BackgroundDownload(src, dest, file_size);
             }
-            return remoteclient->Get(dest, src);
+            return client->Get(dest, src);
         }
 
         sceSystemServicePowerTick();
         return 1;
     }
 
-    int Download(const DirEntry &src, const char *dest)
+    int Download(const DirEntry &src, const char *dest, RemoteClient *client)
     {
-        if (stop_activity)
+        if (Activities::Stopped())
             return 1;
 
         int ret;
         if (src.isDir)
         {
             int err;
-            std::vector<DirEntry> entries = remoteclient->ListDir(src.path);
+            std::vector<DirEntry> entries = client->ListDir(src.path);
             FS::MkDirs(dest);
             for (int i = 0; i < entries.size(); i++)
             {
-                if (stop_activity)
+                if (Activities::Stopped())
                     return 1;
 
                 int path_length = strlen(dest) + strlen(entries[i].name) + 2;
@@ -668,7 +694,7 @@ namespace Actions
                     }
 
                     FS::MkDirs(new_path);
-                    ret = Download(entries[i], new_path);
+                    ret = Download(entries[i], new_path, client);
                     if (ret <= 0)
                     {
                         free(new_path);
@@ -678,7 +704,7 @@ namespace Actions
                 else
                 {
                     snprintf(activity_message, 1024, "%s %s", lang_strings[STR_DOWNLOADING], entries[i].path);
-                    ret = DownloadFile(entries[i].path, new_path);
+                    ret = DownloadFile(entries[i].path, new_path, client);
                     if (ret <= 0)
                     {
                         sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DOWNLOAD_MSG], entries[i].path);
@@ -695,7 +721,7 @@ namespace Actions
             char *new_path = (char *)malloc(path_length);
             snprintf(new_path, path_length, "%s%s%s", dest, FS::hasEndSlash(dest) ? "" : "/", src.name);
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_DOWNLOADING], src.path);
-            ret = DownloadFile(src.path, new_path);
+            ret = DownloadFile(src.path, new_path, client);
             if (ret <= 0)
             {
                 free(new_path);
@@ -710,24 +736,35 @@ namespace Actions
     void *DownloadFilesThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
-        Activities::Guard activity(ACTIVITY_DOWNLOAD, "Downloading files");
+        Activities::Guard activity(ACTIVITY_DOWNLOAD, "Downloading files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         file_transfering = true;
         std::vector<DirEntry> files = job->files;
         delete job;
 
-        for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
+        RemoteClient *client = RemotePool::Acquire(*remote_settings);
+
+        if (client != nullptr)
         {
-            if (it->isDir)
+            for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
-                char new_dir[512];
-                sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", it->name);
-                Download(*it, new_dir);
-            }
-            else
-            {
-                Download(*it, local_directory);
+                if (it->isDir)
+                {
+                    char new_dir[512];
+                    sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", it->name);
+                    Download(*it, new_dir, client);
+                }
+                else
+                {
+                    Download(*it, local_directory, client);
+                }
             }
         }
+        else
+        {
+            sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
+        }
+
+        RemotePool::Release(client, true);
 
         file_transfering = false;
         activity_inprogess = false;
@@ -757,7 +794,7 @@ namespace Actions
     void *InstallRemotePkgsThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
-        Activities::Guard activity(ACTIVITY_INSTALL, "Installing remote packages");
+        Activities::Guard activity(ACTIVITY_INSTALL, "Installing remote packages", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         int failed = 0;
         int success = 0;
         int skipped = 0;
@@ -765,9 +802,20 @@ namespace Actions
         std::vector<DirEntry> files = job->files;
         delete job;
 
+        RemoteClient *client = RemotePool::Acquire(*remote_settings);
+
+        if (client == nullptr)
+        {
+            sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
+            RemotePool::Release(client, true);
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            return NULL;
+        }
+
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
-            if (stop_activity)
+            if (Activities::Stopped())
                 break;
             sprintf(activity_message, "%s %s", lang_strings[STR_INSTALLING], it->name);
 
@@ -780,17 +828,17 @@ namespace Actions
                     pkg_header header;
                     memset(&header, 0, sizeof(header));
 
-                    if (remoteclient->Head(it->path, (void *)&header, sizeof(header)) == 0)
+                    if (client->Head(it->path, (void *)&header, sizeof(header)) == 0)
                         failed++;
                     else
                     {
                         if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
                         {
                             uint64_t file_size;
-                            remoteclient->Size(it->path, &file_size);
+                            client->Size(it->path, &file_size);
                             if (!remote_settings->enable_rpi)
                             {
-                                if (DownloadAndInstallPkg(it->path, &header) == 0)
+                                if (DownloadAndInstallPkg(it->path, &header, client) == 0)
                                     failed++;
                                 else
                                     success++;
@@ -809,7 +857,7 @@ namespace Actions
                                     install_data->split_file = sp;
                                     install_data->remote_client = INSTALLER::GetRemoteClient(remote_settings);
                                     install_data->path = it->path;
-                                    remoteclient->Size(it->path, &install_data->size);
+                                    client->Size(it->path, &install_data->size);
                                     install_data->stop_write_thread = false;
                                     install_data->delete_client = true;
 
@@ -823,7 +871,7 @@ namespace Actions
                                 else
                                 {
                                     std::string url = INSTALLER::getRemoteUrl(it->path, file_size, true);
-                                    std::string title = INSTALLER::GetRemotePkgTitle(remoteclient, it->path, &header);
+                                    std::string title = INSTALLER::GetRemotePkgTitle(client, it->path, &header);
                                     if (INSTALLER::InstallRemotePkg(url, &header, title) == 0)
                                         failed++;
                                     else
@@ -884,6 +932,7 @@ namespace Actions
                     lang_strings[STR_INSTALL_SKIPPED], skipped);
         }
     finish:
+        RemotePool::Release(client, true);
         activity_inprogess = false;
         multi_selected_remote_files.clear();
         Windows::SetModalMode(false);
@@ -950,7 +999,7 @@ namespace Actions
         SplitPkgInstallData *install_data = (SplitPkgInstallData*) argp;
         FileStream *sp = install_data->split_file;
 
-        Activities::Guard activity(ACTIVITY_INSTALL, "Downloading package for install");
+        Activities::Guard activity(ACTIVITY_INSTALL, "Downloading package for install", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         Activities::Item(activity.id, install_data->path);
 
         /* loop over file contents and write to fd */
@@ -974,7 +1023,7 @@ namespace Actions
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
-            if (stop_activity)
+            if (Activities::Stopped())
                 break;
             sprintf(activity_message, "%s %s", lang_strings[STR_INSTALLING], it->name);
 
@@ -1086,7 +1135,7 @@ namespace Actions
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
-            if (stop_activity)
+            if (Activities::Stopped())
                 break;
             if (!it->isDir)
             {
@@ -1126,26 +1175,38 @@ namespace Actions
     void *ExtractRemoteZipThread(void *argp)
     {
         ArchiveJob *job = static_cast<ArchiveJob *>(argp);
-        Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting remote archive");
+        Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting remote archive", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         Activities::Item(activity.id, job->target);
         FS::MkDirs(job->target);
         std::vector<DirEntry> files = job->files;
+        std::string target = job->target;
         delete job;
 
-        for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
+        RemoteClient *client = RemotePool::Acquire(*remote_settings);
+
+        if (client != nullptr)
         {
-            if (stop_activity)
-                break;
-            if (!it->isDir)
+            for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
-                int ret = ZipUtil::Extract(*it, extract_zip_folder, remoteclient);
-                if (ret == 0)
+                if (Activities::Stopped())
+                    break;
+                if (!it->isDir)
                 {
-                    sprintf(status_message, "%s %s", lang_strings[STR_FAILED_TO_EXTRACT], it->name);
-                    usleep(100000);
+                    int ret = ZipUtil::Extract(*it, target.c_str(), client);
+                    if (ret == 0)
+                    {
+                        sprintf(status_message, "%s %s", lang_strings[STR_FAILED_TO_EXTRACT], it->name);
+                        usleep(100000);
+                    }
                 }
             }
         }
+        else
+        {
+            sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
+        }
+
+        RemotePool::Release(client, true);
         activity_inprogess = false;
         multi_selected_remote_files.clear();
         Windows::SetModalMode(false);
@@ -1183,7 +1244,7 @@ namespace Actions
 
             for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
-                if (stop_activity)
+                if (Activities::Stopped())
                     break;
                 int res = ZipUtil::ZipAddPath(zf, it->path, strlen(local_directory) + 1, Z_DEFAULT_COMPRESSION);
                 if (res <= 0)
@@ -1486,6 +1547,9 @@ namespace Actions
 
     void Disconnect()
     {
+        // Pooled connections belong to the session being closed.
+        RemotePool::Clear();
+
         if (remoteclient != nullptr)
         {
             if (remoteclient->IsConnected())
@@ -1540,20 +1604,11 @@ namespace Actions
     int CopyOrMoveLocalFile(const char *src, const char *dest, bool isCopy)
     {
         int ret;
-        if (overwrite_type == OVERWRITE_PROMPT && FS::FileExists(dest))
+        if (Activities::OverwriteType() == OVERWRITE_PROMPT && FS::FileExists(dest))
         {
-            sprintf(confirm_message, "%s %s?", lang_strings[STR_OVERWRITE], dest);
-            confirm_state = CONFIRM_WAIT;
-            action_to_take = selected_action;
-            activity_inprogess = false;
-            while (confirm_state == CONFIRM_WAIT)
-            {
-                usleep(100000);
-            }
-            activity_inprogess = true;
-            selected_action = action_to_take;
+            PromptOverwrite(dest);
         }
-        else if (overwrite_type == OVERWRITE_NONE && FS::FileExists(dest))
+        else if (Activities::OverwriteType() == OVERWRITE_NONE && FS::FileExists(dest))
         {
             confirm_state = CONFIRM_NO;
         }
@@ -1576,7 +1631,7 @@ namespace Actions
 
     int CopyOrMove(const DirEntry &src, const char *dest, bool isCopy)
     {
-        if (stop_activity)
+        if (Activities::Stopped())
             return 1;
 
         int ret;
@@ -1597,7 +1652,7 @@ namespace Actions
             FS::MkDirs(dest);
             for (int i = 0; i < entries.size(); i++)
             {
-                if (stop_activity)
+                if (Activities::Stopped())
                     return 1;
 
                 int path_length = strlen(dest) + strlen(entries[i].name) + 2;
@@ -1667,7 +1722,7 @@ namespace Actions
         file_transfering = true;
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
-            if (stop_activity)
+            if (Activities::Stopped())
                 break;
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_MOVING], it->path);
@@ -1753,7 +1808,7 @@ namespace Actions
         file_transfering = true;
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
-            if (stop_activity)
+            if (Activities::Stopped())
                 break;
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], it->path);
@@ -1803,23 +1858,14 @@ namespace Actions
         }
     }
 
-    int CopyOrMoveRemoteFile(const std::string &src, const std::string &dest, bool isCopy)
+    int CopyOrMoveRemoteFile(const std::string &src, const std::string &dest, bool isCopy, RemoteClient *client)
     {
         int ret;
-        if (overwrite_type == OVERWRITE_PROMPT && remoteclient->FileExists(dest))
+        if (Activities::OverwriteType() == OVERWRITE_PROMPT && client->FileExists(dest))
         {
-            sprintf(confirm_message, "%s %s?", lang_strings[STR_OVERWRITE], dest.c_str());
-            confirm_state = CONFIRM_WAIT;
-            action_to_take = selected_action;
-            activity_inprogess = false;
-            while (confirm_state == CONFIRM_WAIT)
-            {
-                usleep(100000);
-            }
-            activity_inprogess = true;
-            selected_action = action_to_take;
+            PromptOverwrite(dest.c_str());
         }
-        else if (overwrite_type == OVERWRITE_NONE && remoteclient->FileExists(dest))
+        else if (Activities::OverwriteType() == OVERWRITE_NONE && client->FileExists(dest))
         {
             confirm_state = CONFIRM_NO;
         }
@@ -1832,9 +1878,9 @@ namespace Actions
         {
             prev_tick = Util::GetTick();
             if (isCopy)
-                return remoteclient->Copy(src, dest);
+                return client->Copy(src, dest);
             else
-                return remoteclient->Move(src, dest);
+                return client->Move(src, dest);
         }
 
         return 1;
@@ -1842,15 +1888,26 @@ namespace Actions
 
     void *MoveRemoteFilesThread(void *argp)
     {
-        Activities::Guard activity(ACTIVITY_MOVE, "Moving remote files");
+        Activities::Guard activity(ACTIVITY_MOVE, "Moving remote files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         TransferJob *job = static_cast<TransferJob *>(argp);
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
         delete job;
+
+        RemoteClient *client = RemotePool::Acquire(*remote_settings);
+
+        if (client == nullptr)
+        {
+            RemotePool::Release(client, true);
+            file_transfering = false;
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            return NULL;
+        }
         file_transfering = false;
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
-            if (stop_activity)
+            if (Activities::Stopped())
                 break;
 
             if (strcmp(it->directory, target.c_str()) == 0)
@@ -1869,10 +1926,11 @@ namespace Actions
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_MOVING], it->path);
             Activities::Item(activity.id, it->path);
-            int res = CopyOrMoveRemoteFile(it->path, new_path, false);
+            int res = CopyOrMoveRemoteFile(it->path, new_path, false, client);
             if (res == 0)
                 sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
         }
+        RemotePool::Release(client, true);
         activity_inprogess = false;
         file_transfering = false;
         remote_paste_files.clear();
@@ -1898,20 +1956,20 @@ namespace Actions
         }
     }
 
-    int CopyRemotePath(const DirEntry &src, const char *dest)
+    int CopyRemotePath(const DirEntry &src, const char *dest, RemoteClient *client)
     {
-        if (stop_activity)
+        if (Activities::Stopped())
             return 1;
 
         int ret;
         if (src.isDir)
         {
             int err;
-            std::vector<DirEntry> entries = remoteclient->ListDir(src.path);
-            remoteclient->Mkdir(dest);
+            std::vector<DirEntry> entries = client->ListDir(src.path);
+            client->Mkdir(dest);
             for (int i = 0; i < entries.size(); i++)
             {
-                if (stop_activity)
+                if (Activities::Stopped())
                     return 1;
 
                 int path_length = strlen(dest) + strlen(entries[i].name) + 2;
@@ -1926,8 +1984,8 @@ namespace Actions
                         continue;
                     }
 
-                    remoteclient->Mkdir(new_path);
-                    ret = CopyRemotePath(entries[i], new_path);
+                    client->Mkdir(new_path);
+                    ret = CopyRemotePath(entries[i], new_path, client);
                     if (ret <= 0)
                     {
                         free(new_path);
@@ -1938,7 +1996,7 @@ namespace Actions
                 {
                     snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], entries[i].path);
                     prev_tick = Util::GetTick();
-                    ret = CopyOrMoveRemoteFile(entries[i].path, new_path, true);
+                    ret = CopyOrMoveRemoteFile(entries[i].path, new_path, true, client);
                     if (ret <= 0)
                     {
                         sprintf(status_message, "%s %s", lang_strings[STR_FAIL_COPY_MSG], entries[i].path);
@@ -1955,7 +2013,7 @@ namespace Actions
             char *new_path = (char *)malloc(path_length);
             snprintf(new_path, path_length, "%s%s%s", dest, FS::hasEndSlash(dest) ? "" : "/", src.name);
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], src.name);
-            ret = CopyOrMoveRemoteFile(src.path, new_path, true);
+            ret = CopyOrMoveRemoteFile(src.path, new_path, true, client);
             if (ret <= 0)
             {
                 free(new_path);
@@ -1969,15 +2027,26 @@ namespace Actions
 
     void *CopyRemoteFilesThread(void *argp)
     {
-        Activities::Guard activity(ACTIVITY_COPY, "Copying remote files");
+        Activities::Guard activity(ACTIVITY_COPY, "Copying remote files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         TransferJob *job = static_cast<TransferJob *>(argp);
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
         delete job;
+
+        RemoteClient *client = RemotePool::Acquire(*remote_settings);
+
+        if (client == nullptr)
+        {
+            RemotePool::Release(client, true);
+            file_transfering = false;
+            activity_inprogess = false;
+            Windows::SetModalMode(false);
+            return NULL;
+        }
         file_transfering = false;
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
-            if (stop_activity)
+            if (Activities::Stopped())
                 break;
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], it->path);
@@ -1994,17 +2063,18 @@ namespace Actions
                     sprintf(status_message, "%s", lang_strings[STR_CANT_COPY_TO_SUBDIR_MSG]);
                     continue;
                 }
-                int res = CopyRemotePath(*it, new_path);
+                int res = CopyRemotePath(*it, new_path, client);
                 if (res == 0)
                     sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
             }
             else
             {
-                int res = CopyRemotePath(*it, target.c_str());
+                int res = CopyRemotePath(*it, target.c_str(), client);
                 if (res == 0)
                     sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
             }
         }
+        RemotePool::Release(client, true);
         activity_inprogess = false;
         file_transfering = false;
         remote_paste_files.clear();
@@ -2030,7 +2100,7 @@ namespace Actions
         }
     }
 
-    int DownloadAndInstallPkg(const std::string &filename, pkg_header *header)
+    int DownloadAndInstallPkg(const std::string &filename, pkg_header *header, RemoteClient *client)
     {
         char local_file[2000];
         uint64_t tick = Util::GetTick();
@@ -2038,11 +2108,11 @@ namespace Actions
 
         sprintf(activity_message, "%s %s to %s", lang_strings[STR_DOWNLOADING], filename.c_str(), local_file);
         uint64_t install_size = 0;
-        remoteclient->Size(filename, &install_size);
+        client->Size(filename, &install_size);
         prev_tick = Util::GetTick();
 
         file_transfering = true;
-        int ret = remoteclient->Get(local_file, filename);
+        int ret = client->Get(local_file, filename);
         if (ret == 0)
             return 0;
 

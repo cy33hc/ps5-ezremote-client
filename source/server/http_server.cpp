@@ -992,7 +992,7 @@ namespace HttpServer
         svr->Post("/__local__/move", [&](const Request &req, Response &res)
         {
             Activities::Guard activity(ACTIVITY_MOVE, "Moving local files", ACTIVITY_WEB);
-            if (activity_inprogess)
+            if (Activities::AnyLocalRunning())
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
@@ -1057,7 +1057,7 @@ namespace HttpServer
         svr->Post("/__local__/copy", [&](const Request &req, Response &res)
         {
             Activities::Guard activity(ACTIVITY_COPY, "Copying local files", ACTIVITY_WEB);
-            if (activity_inprogess)
+            if (Activities::AnyLocalRunning())
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
@@ -1155,7 +1155,7 @@ namespace HttpServer
         svr->Post("/__local__/remove", [&](const Request &req, Response &res)
         {
             Activities::Guard activity(ACTIVITY_DELETE, "Deleting local files", ACTIVITY_WEB);
-            if (activity_inprogess)
+            if (Activities::AnyLocalRunning())
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
@@ -1204,7 +1204,7 @@ namespace HttpServer
 
         svr->Post("/__local__/install", [&](const Request &req, Response &res)
         {
-            if (activity_inprogess)
+            if (Activities::AnyLocalRunning())
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
@@ -2129,7 +2129,7 @@ namespace HttpServer
         // Remote actions, gated in the UI by RemoteClient::SupportedActions().
         svr->Post("/__remote__/copy", [&](const Request &req, Response &res)
         {
-            Activities::Guard activity(ACTIVITY_COPY, "Copying remote files", ACTIVITY_WEB);
+            Activities::Guard activity(ACTIVITY_COPY, "Copying remote files", ACTIVITY_WEB, ACTIVITY_REMOTE);
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *items = nullptr;
@@ -2199,7 +2199,7 @@ namespace HttpServer
 
         svr->Post("/__remote__/move", [&](const Request &req, Response &res)
         {
-            Activities::Guard activity(ACTIVITY_MOVE, "Moving remote files", ACTIVITY_WEB);
+            Activities::Guard activity(ACTIVITY_MOVE, "Moving remote files", ACTIVITY_WEB, ACTIVITY_REMOTE);
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *items = nullptr;
@@ -3047,7 +3047,7 @@ namespace HttpServer
 
         svr->Post("/__remote__/remove", [&](const Request &req, Response &res)
         {
-            Activities::Guard activity(ACTIVITY_DELETE, "Deleting remote files", ACTIVITY_WEB);
+            Activities::Guard activity(ACTIVITY_DELETE, "Deleting remote files", ACTIVITY_WEB, ACTIVITY_REMOTE);
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *files = nullptr;
@@ -3178,7 +3178,7 @@ namespace HttpServer
 
         svr->Post("/__local__/compress", [&](const Request &req, Response &res)
         {
-            if (activity_inprogess)
+            if (Activities::AnyLocalRunning())
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
@@ -3247,7 +3247,7 @@ namespace HttpServer
 
         svr->Post("/__local__/extract", [&](const Request &req, Response &res)
         {
-            if (activity_inprogess)
+            if (Activities::AnyLocalRunning())
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;
@@ -3630,7 +3630,7 @@ namespace HttpServer
 
         svr->Post("/__local__/install_url", [&](const Request &req, Response &res)
         {
-            if (activity_inprogess)
+            if (Activities::AnyLocalRunning())
             {
                 failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
                 return;

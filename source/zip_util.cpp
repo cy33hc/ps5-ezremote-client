@@ -172,7 +172,7 @@ namespace ZipUtil
             do
             {
                 dirent = readdir(dfd);
-                if (stop_activity)
+                if (Activities::Stopped())
                     return 1;
                 if (dirent != NULL && strcmp(dirent->d_name, ".") != 0 && strcmp(dirent->d_name, "..") != 0)
                 {
@@ -579,7 +579,7 @@ namespace ZipUtil
         FS::MkDirs(basepath.c_str());
         for (;;)
         {
-            if (stop_activity)
+            if (Activities::Stopped())
                 break;
 
             ret = archive_read_next_header(a, &e);

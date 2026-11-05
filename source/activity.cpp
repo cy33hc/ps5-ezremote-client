@@ -4,6 +4,9 @@
 #include "util.h"
 
 thread_local uint64_t activity_current_id = 0;
+thread_local int activity_overwrite_type = -1;
+
+extern int overwrite_type;
 
 namespace
 {
@@ -28,7 +31,7 @@ namespace
 
 namespace Activities
 {
-    uint64_t Begin(int kind, const std::string &label, int origin)
+    uint64_t Begin(int kind, const std::string &label, int origin, int scope)
     {
         std::lock_guard<std::mutex> lock(activity_mutex);
 
@@ -41,7 +44,9 @@ namespace Activities
         activity.total = 0;
         activity.started = Util::GetTick();
         activity.finished = 0;
+        activity.cancel = false;
         activity.origin = origin;
+        activity.scope = scope;
         activity_list.push_back(activity);
 
         while (activity_list.size() > ACTIVITY_MAX_ENTRIES)
@@ -140,6 +145,75 @@ namespace Activities
             }
         }
         return removed;
+    }
+
+    void SetOverwriteType(int type)
+    {
+        activity_overwrite_type = type;
+    }
+
+    int OverwriteType()
+    {
+        return activity_overwrite_type >= 0 ? activity_overwrite_type : overwrite_type;
+    }
+
+    void SnapshotOverwrite()
+    {
+        activity_overwrite_type = overwrite_type;
+    }
+
+    bool Cancel(uint64_t id)
+    {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        for (size_t i = 0; i < activity_list.size(); i++)
+        {
+            if (activity_list[i].id == id && activity_list[i].state == ACTIVITY_RUNNING)
+            {
+                activity_list[i].cancel = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool IsCancelled(uint64_t id)
+    {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        for (size_t i = 0; i < activity_list.size(); i++)
+        {
+            if (activity_list[i].id == id)
+                return activity_list[i].cancel;
+        }
+        return false;
+    }
+
+    bool Stopped()
+    {
+        if (stop_activity)
+            return true;
+        return IsCancelled(activity_current_id);
+    }
+
+    bool AnyLocalRunning()
+    {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        for (size_t i = 0; i < activity_list.size(); i++)
+        {
+            if (activity_list[i].state == ACTIVITY_RUNNING && activity_list[i].scope == ACTIVITY_LOCAL)
+                return true;
+        }
+        return false;
+    }
+
+    bool AnyRemoteRunning()
+    {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        for (size_t i = 0; i < activity_list.size(); i++)
+        {
+            if (activity_list[i].state == ACTIVITY_RUNNING && activity_list[i].scope == ACTIVITY_REMOTE)
+                return true;
+        }
+        return false;
     }
 
     bool AnyRunning()

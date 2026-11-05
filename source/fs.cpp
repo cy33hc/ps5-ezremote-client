@@ -389,7 +389,7 @@ namespace FS
 
     int RmRecursive(const std::string &path)
     {
-        if (stop_activity)
+        if (Activities::Stopped())
             return 1;
 
         DIR *dfd = opendir(path.c_str());
@@ -432,7 +432,7 @@ namespace FS
 
             closedir(dfd);
 
-            if (stop_activity)
+            if (Activities::Stopped())
                 return 0;
 
             int ret = rmdir(path.c_str());

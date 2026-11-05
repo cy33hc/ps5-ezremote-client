@@ -50,8 +50,6 @@ static char txt_bg_download_size[32];
 bool is_server_started = false;
 bool ezremote_server_version_match = true;
 bool handle_updates = false;
-uint64_t bytes_transfered;
-uint64_t bytes_to_download;
 uint64_t prev_tick;
 
 std::vector<DirEntry> local_files;
@@ -1600,20 +1598,22 @@ namespace Windows
                     uint64_t moved = 0;
                     uint64_t total = 0;
 
+                    // The activity tracker now carries progress for local
+                    // copies, zips and installs.
+                    Activity current;
+                    if (Activities::CurrentRunning(&current) && current.total > 0)
+                    {
+                        moved = current.done;
+                        total = current.total;
+                    }
+
                     // Remote transfers report through the connection's counters.
-                    if (remoteclient != nullptr)
+                    if (total == 0 && remoteclient != nullptr)
                     {
                         moved = remoteclient->TransferredBytes();
                         total = remoteclient->TotalBytes();
                     }
 
-                    // Local copies, zips and installs still report through the
-                    // globals (fs.cpp / installer.cpp).
-                    if (total == 0)
-                    {
-                        moved = bytes_transfered;
-                        total = bytes_to_download;
-                    }
                     progress = total > 0 ? moved * 1.0f / (float)total : 0.0f;
                     transfer_speed = (moved * 1.0f / tick_delta) / 1048576.0f;
 
@@ -2073,6 +2073,7 @@ namespace Windows
         ImGui::SetNextWindowSizeConstraints(ImVec2(1240, 140), ImVec2(1240, 620), NULL, NULL);
         if (ImGui::BeginPopupModal("Activities##activities", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         {
+            const bool appearing = ImGui::IsWindowAppearing();
             std::vector<Activity> list = Activities::Snapshot();
             const uint64_t now = Util::GetTick();
 
@@ -2125,15 +2126,23 @@ namespace Windows
                 ImGui::Columns(1);
             }
 
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 500);
+            // 190 + gap 10 + 190, centred in the 1240 px window.
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 390.0f) * 0.5f);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
-            if (ImGui::Button("Close##activities_close", ImVec2(150, 0)))
+            if (ImGui::Button("Clear completed##activities_clear", ImVec2(190, 0)))
+            {
+                Activities::ClearFinished();
+            }
+            ImGui::SameLine();
+            if (appearing)
+                ImGui::SetKeyboardFocusHere();
+            if (ImGui::Button("Close##activities_close", ImVec2(190, 0)))
             {
                 show_activities = false;
                 SetModalMode(false);
                 ImGui::CloseCurrentPopup();
             }
-            if (ImGui::IsWindowAppearing())
+            if (appearing)
                 ImGui::SetItemDefaultFocus();
 
             ImGui::EndPopup();

@@ -405,6 +405,12 @@ export interface Activity {
   origin: string;
 }
 
+/** Removes finished entries; returns how many were dropped. */
+export async function clearActivities(): Promise<number> {
+  const data = await request<{ removed?: number }>("/__local__/activities/clear", {});
+  return data.removed ?? 0;
+}
+
 export async function activities(): Promise<Activity[]> {
   const data = await request<Activity[]>("/__local__/activities");
   return Array.isArray(data) ? data : [];

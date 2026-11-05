@@ -425,8 +425,6 @@ namespace Actions
                 else
                 {
                     snprintf(activity_message, 1024, "%s %s", lang_strings[STR_UPLOADING], entries[i].path);
-                    bytes_to_download = entries[i].file_size;
-                    bytes_transfered = 0;
                     prev_tick = Util::GetTick();
                     ret = UploadFile(entries[i].path, new_path);
                     if (ret <= 0)
@@ -445,7 +443,6 @@ namespace Actions
             char *new_path = (char *)malloc(path_length);
             snprintf(new_path, path_length, "%s%s%s", dest, FS::hasEndSlash(dest) ? "" : "/", src.name);
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_UPLOADING], src.name);
-            bytes_to_download = src.file_size;
             ret = UploadFile(src.path, new_path);
             if (ret <= 0)
             {
@@ -568,9 +565,9 @@ namespace Actions
 
     int DownloadFile(const char *src, const char *dest)
     {
-        bytes_transfered = 0;
         prev_tick = Util::GetTick();
-        if (!remoteclient->Size(src, &bytes_to_download))
+        uint64_t file_size = 0;
+        if (!remoteclient->Size(src, &file_size))
         {
             remoteclient->Quit();
             sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
@@ -603,9 +600,9 @@ namespace Actions
         {
             prev_tick = Util::GetTick();
 
-            if (enable_background_download && bytes_to_download > minimum_backgrond_file_size)
+            if (enable_background_download && file_size > minimum_backgrond_file_size)
             {
-                return BackgroundDownload(src, dest, bytes_to_download);
+                return BackgroundDownload(src, dest, file_size);
             }
             return remoteclient->Get(dest, src);
         }
@@ -1189,7 +1186,6 @@ namespace Actions
 
     void *InstallLocalUrlPkgThread(void *argp)
     {
-        bytes_transfered = 0;
         prev_tick = Util::GetTick();
         sprintf(status_message, "%s", "");
         pkg_header header;
@@ -1227,7 +1223,8 @@ namespace Actions
         int s = sizeof(pkg_header);
         memset(&header, 0, s);
 
-        int ret = tmp_client.Size(path, &bytes_to_download);
+        uint64_t url_file_size = 0;
+        int ret = tmp_client.Size(path, &url_file_size);
         if (ret == 0)
         {
             sprintf(status_message, "%s", tmp_client.LastResponse());
@@ -1586,8 +1583,6 @@ namespace Actions
                 else
                 {
                     snprintf(activity_message, 1024, "%s %s", isCopy ? lang_strings[STR_COPYING] : lang_strings[STR_MOVING], entries[i].path);
-                    bytes_to_download = entries[i].file_size;
-                    bytes_transfered = 0;
                     prev_tick = Util::GetTick();
                     ret = CopyOrMoveLocalFile(entries[i].path, new_path, isCopy);
                     if (ret <= 0)
@@ -1611,7 +1606,6 @@ namespace Actions
             char *new_path = (char *)malloc(path_length);
             snprintf(new_path, path_length, "%s%s%s", dest, FS::hasEndSlash(dest) ? "" : "/", src.name);
             snprintf(activity_message, 1024, "%s %s", isCopy ? lang_strings[STR_COPYING] : lang_strings[STR_MOVING], src.name);
-            bytes_to_download = src.file_size;
             ret = CopyOrMoveLocalFile(src.path, new_path, isCopy);
             if (ret <= 0)
             {
@@ -1880,8 +1874,6 @@ namespace Actions
                 else
                 {
                     snprintf(activity_message, 1024, "%s %s", lang_strings[STR_COPYING], entries[i].path);
-                    bytes_to_download = entries[i].file_size;
-                    bytes_transfered = 0;
                     prev_tick = Util::GetTick();
                     ret = CopyOrMoveRemoteFile(entries[i].path, new_path, true);
                     if (ret <= 0)
@@ -1974,8 +1966,8 @@ namespace Actions
         sprintf(local_file, "%s/%lu.pkg", temp_folder, tick);
 
         sprintf(activity_message, "%s %s to %s", lang_strings[STR_DOWNLOADING], filename.c_str(), local_file);
-        remoteclient->Size(filename, &bytes_to_download);
-        bytes_transfered = 0;
+        uint64_t install_size = 0;
+        remoteclient->Size(filename, &install_size);
         prev_tick = Util::GetTick();
 
         file_transfering = true;

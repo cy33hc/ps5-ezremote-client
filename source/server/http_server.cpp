@@ -1675,6 +1675,18 @@ namespace HttpServer
             res.set_content(result_str, strlen(result_str), "application/json");
         });
 
+        svr->Post("/__local__/activities/clear", [&](const Request &req, Response &res)
+        {
+            int removed = Activities::ClearFinished();
+
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "removed", json_object_new_int(removed));
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
+
         svr->Get("/__local__/bg_downloads", [&](const Request &req, Response &res)
         {
             json_object *list = json_object_new_array();
@@ -3678,8 +3690,6 @@ namespace HttpServer
             snprintf(activity_message, 1023, "%s %s", lang_strings[STR_INSTALLING], filehost->GetUrl().c_str());
             activity_inprogess = true;
             file_transfering = true;
-            bytes_to_download = 100;
-            bytes_transfered = 0;
             prev_tick = Util::GetTick();
 
             Windows::SetModalMode(true);

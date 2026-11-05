@@ -1,4 +1,5 @@
 #include "fs.h"
+#include "activity.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -498,7 +499,7 @@ namespace FS
             return false;
         }
 
-        bytes_to_download = file_stat.st_size;
+        uint64_t total_size = file_stat.st_size;
 
         FILE *dest = fopen(to.c_str(), "wb");
         if (!dest)
@@ -508,7 +509,7 @@ namespace FS
         }
 
         size_t bytes_read = 0;
-        bytes_transfered = 0;
+        uint64_t copied = 0;
         prev_tick = Util::GetTick();
         const size_t buf_size = 0x10000;
         unsigned char *buf = new unsigned char[buf_size];
@@ -533,8 +534,9 @@ namespace FS
                 return false;
             }
 
-            bytes_transfered += bytes_read;
-        } while (bytes_transfered < bytes_to_download);
+            copied += bytes_read;
+            Activities::ProgressCurrent(copied, total_size);
+        } while (copied < total_size);
 
         delete[] buf;
         fclose(src);

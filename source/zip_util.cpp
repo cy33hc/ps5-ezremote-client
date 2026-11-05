@@ -20,6 +20,7 @@
 #include "windows.h"
 #include "util.h"
 #include "zip_util.h"
+#include "activity.h"
 
 namespace ZipUtil
 {
@@ -57,10 +58,10 @@ namespace ZipUtil
         memset(&zi, 0, sizeof(zip_fileinfo));
         convertToZipTime(file_stat.st_mtim.tv_sec, &zi.tmz_date);
 
-        bytes_transfered = 0;
+        uint64_t copied = 0;
         prev_tick = Util::GetTick();
 
-        bytes_to_download = file_stat.st_size;
+        const uint64_t total_size = file_stat.st_size;
 
         // Large file?
         int use_zip64 = (file_stat.st_size >= 0xFFFFFFFF);
@@ -112,7 +113,8 @@ namespace ZipUtil
             }
 
             seek += written;
-            bytes_transfered += read;
+            copied += read;
+            Activities::ProgressCurrent(copied, total_size);
         }
 
         free(buf);
@@ -276,11 +278,11 @@ namespace ZipUtil
     /*
      * Extract to a file descriptor
      */
-    static int extract2fd(struct archive *a, const std::string &pathname, int fd)
+    static int extract2fd(struct archive *a, const std::string &pathname, int fd, uint64_t total_size)
     {
         ssize_t len;
         unsigned char *buffer = (unsigned char *)malloc(ARCHIVE_TRANSFER_SIZE);
-        bytes_transfered = 0;
+        uint64_t extracted = 0;
         prev_tick = Util::GetTick();
 
         /* loop over file contents and write to fd */
@@ -300,7 +302,8 @@ namespace ZipUtil
                 free(buffer);
                 return 0;
             }
-            bytes_transfered += len;
+            extracted += len;
+            Activities::ProgressCurrent(extracted, total_size);
 
             if (write(fd, buffer, len) != len)
             {
@@ -344,14 +347,14 @@ namespace ZipUtil
             return;
         }
 
-        bytes_to_download = archive_entry_size(e);
+        const uint64_t total_size = archive_entry_size(e);
         if ((fd = open(path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0777)) < 0)
         {
             sprintf(status_message, "error open('%s')", path.c_str());
             return;
         }
 
-        extract2fd(a, path, fd);
+        extract2fd(a, path, fd, total_size);
 
         /* set access and modification time */
         if (close(fd) != 0)

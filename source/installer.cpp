@@ -35,6 +35,7 @@
 #include "sceUserService.h"
 #include "sceSystemService.h"
 #include "installer.h"
+#include "activity.h"
 
 struct BgProgressCheck
 {
@@ -343,8 +344,7 @@ namespace INSTALLER
 			if (ret || (progress_info.error_info.error_code != 0))
 			goto finish;
 
-			bytes_to_download = progress_info.total_size;
-			bytes_transfered = progress_info.downloaded_size;
+			Activities::ProgressCurrent(progress_info.downloaded_size, progress_info.total_size);
 			sceSystemServicePowerTick();
 			usleep(500000);
 		}
@@ -489,8 +489,6 @@ namespace INSTALLER
 		} 
 
 		sprintf(activity_message, "%s", lang_strings[STR_WAIT_FOR_INSTALL_MSG]);
-		bytes_to_download = header->pkg_content_size;
-		bytes_transfered = 0;
 		prev_tick = Util::GetTick();
 
 		SceAppInstallStatusInstalled progress_info;
@@ -501,8 +499,7 @@ namespace INSTALLER
 			if (ret || (progress_info.error_info.error_code != 0))
 				return -3;
 
-			bytes_to_download = progress_info.total_size;
-			bytes_transfered = progress_info.downloaded_size;
+			Activities::ProgressCurrent(progress_info.downloaded_size, progress_info.total_size);
 			sceSystemServicePowerTick();
 		}
 
@@ -809,8 +806,6 @@ namespace INSTALLER
 			}
 
 			file_transfering = true;
-			bytes_to_download = header.pkg_content_size;
-			bytes_transfered = 0;
 			prev_tick = Util::GetTick();
 
 			SceAppInstallStatusInstalled progress_info;
@@ -821,8 +816,7 @@ namespace INSTALLER
 				if (ret || (progress_info.error_info.error_code != 0))
 					return 0;
 	
-				bytes_to_download = progress_info.total_size;
-				bytes_transfered = progress_info.downloaded_size;
+			Activities::ProgressCurrent(progress_info.downloaded_size, progress_info.total_size);
 				sceSystemServicePowerTick();
 			}
 		}
@@ -910,8 +904,6 @@ namespace INSTALLER
 			}
 
 			file_transfering = true;
-			bytes_to_download = pkg_data->size;
-			bytes_transfered = 0;
 			prev_tick = Util::GetTick();
 
 			SceAppInstallStatusInstalled progress_info;
@@ -922,8 +914,7 @@ namespace INSTALLER
 				if (ret || (progress_info.error_info.error_code != 0))
 					return 0;
 	
-				bytes_to_download = progress_info.total_size;
-				bytes_transfered = progress_info.downloaded_size;
+			Activities::ProgressCurrent(progress_info.downloaded_size, progress_info.total_size);
 				sceSystemServicePowerTick();
 			}
 		}

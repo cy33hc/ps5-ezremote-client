@@ -3,6 +3,8 @@
 #include "activity.h"
 #include "util.h"
 
+thread_local uint64_t activity_current_id = 0;
+
 namespace
 {
     std::mutex activity_mutex;
@@ -67,6 +69,43 @@ namespace Activities
         }
     }
 
+    void ProgressCurrent(uint64_t done, uint64_t total)
+    {
+        // Prefer the activity owned by this thread, so concurrent operations
+        // never report into each other.
+        if (activity_current_id != 0)
+        {
+            Progress(activity_current_id, done, total);
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        for (size_t i = activity_list.size(); i-- > 0;)
+        {
+            if (activity_list[i].state == ACTIVITY_RUNNING)
+            {
+                activity_list[i].done = done;
+                activity_list[i].total = total;
+                return;
+            }
+        }
+    }
+
+    bool CurrentRunning(Activity *out)
+    {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        for (size_t i = activity_list.size(); i-- > 0;)
+        {
+            if (activity_list[i].state == ACTIVITY_RUNNING)
+            {
+                if (out != nullptr)
+                    *out = activity_list[i];
+                return true;
+            }
+        }
+        return false;
+    }
+
     void Finish(uint64_t id, int state, const std::string &error)
     {
         std::lock_guard<std::mutex> lock(activity_mutex);
@@ -86,6 +125,21 @@ namespace Activities
     {
         std::lock_guard<std::mutex> lock(activity_mutex);
         return activity_list;
+    }
+
+    int ClearFinished()
+    {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        int removed = 0;
+        for (size_t i = activity_list.size(); i-- > 0;)
+        {
+            if (activity_list[i].state != ACTIVITY_RUNNING)
+            {
+                activity_list.erase(activity_list.begin() + i);
+                removed++;
+            }
+        }
+        return removed;
     }
 
     bool AnyRunning()

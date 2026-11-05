@@ -6,6 +6,8 @@
 #include <vector>
 
 extern bool stop_activity;
+// Id of the activity owned by the calling thread, set by Guard.
+extern thread_local uint64_t activity_current_id;
 
 // Background work shared by the native UI and the web UI: copy, move, delete,
 // compress, extract, upload, download and install. Every worker thread registers
@@ -56,9 +58,15 @@ namespace Activities
     uint64_t Begin(int kind, const std::string &label, int origin = ACTIVITY_NATIVE);
     void Item(uint64_t id, const std::string &item);
     void Progress(uint64_t id, uint64_t done, uint64_t total);
+    // Report progress for the newest running activity; lets legacy code
+    // (fs.cpp / installer.cpp) feed the tracker without knowing the id.
+    void ProgressCurrent(uint64_t done, uint64_t total);
+    bool CurrentRunning(Activity *out);
     void Finish(uint64_t id, int state, const std::string &error = "");
 
     std::vector<Activity> Snapshot();
+    // Drops finished entries; returns how many were removed.
+    int ClearFinished();
     bool AnyRunning();
     const char *KindName(int kind);
     const char *StateName(int state);
@@ -69,8 +77,19 @@ namespace Activities
     struct Guard
     {
         uint64_t id;
-        Guard(int kind, const std::string &label, int origin = ACTIVITY_NATIVE) : id(Begin(kind, label, origin)) {}
-        ~Guard() { Finish(id, stop_activity ? ACTIVITY_CANCELLED : ACTIVITY_DONE); }
+        uint64_t previous;
+
+        Guard(int kind, const std::string &label, int origin = ACTIVITY_NATIVE)
+            : id(Begin(kind, label, origin)), previous(activity_current_id)
+        {
+            activity_current_id = id;
+        }
+
+        ~Guard()
+        {
+            Finish(id, stop_activity ? ACTIVITY_CANCELLED : ACTIVITY_DONE);
+            activity_current_id = previous;
+        }
     };
 }
 

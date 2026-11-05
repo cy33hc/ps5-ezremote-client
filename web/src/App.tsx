@@ -1469,7 +1469,22 @@ export default function App() {
         </>
       ) : null}
       {transfer ? <TransferDialog transfer={transfer} onClose={() => setTransfer(null)} /> : null}
-      {activityOpen ? <ActivitiesDialog activities={activityList} onClose={() => setActivityOpen(false)} /> : null}
+      {activityOpen ? (
+        <ActivitiesDialog
+          activities={activityList}
+          onClose={() => setActivityOpen(false)}
+          onClear={() => {
+            void (async () => {
+              try {
+                await api.clearActivities();
+                setActivityList(await api.activities());
+              } catch (error) {
+                notify(error instanceof Error ? error.message : "Could not clear activities", "error");
+              }
+            })();
+          }}
+        />
+      ) : null}
       {exitDialog ? (
         <ExitConfirmDialog
           mode={exitDialog}
@@ -1810,7 +1825,15 @@ function ExitConfirmDialog({
   );
 }
 
-function ActivitiesDialog({ activities, onClose }: { activities: api.Activity[]; onClose: () => void }) {
+function ActivitiesDialog({
+  activities,
+  onClose,
+  onClear,
+}: {
+  activities: api.Activity[];
+  onClose: () => void;
+  onClear: () => void;
+}) {
   const rows = [...activities].reverse();
   const label: Record<string, string> = {
     Running: "text-amber-400",
@@ -1826,9 +1849,18 @@ function ActivitiesDialog({ activities, onClose }: { activities: api.Activity[];
       width="max-w-3xl"
       onClose={onClose}
       footer={
-        <button type="button" onClick={onClose} className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-accent-600">
-          Close
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={onClear}
+            className="mr-auto rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-mist-200 transition hover:bg-white/5"
+          >
+            Clear completed
+          </button>
+          <button type="button" onClick={onClose} className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-accent-600">
+            Close
+          </button>
+        </>
       }
     >
       {rows.length === 0 ? (

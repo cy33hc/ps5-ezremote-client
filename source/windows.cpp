@@ -2101,7 +2101,7 @@ namespace Windows
             ImGui::OpenPopup(lang_strings[STR_SETTINGS]);
 
             ImGui::SetNextWindowPos(ImVec2(1050, 80));
-            ImGui::SetNextWindowSizeConstraints(ImVec2(850, 80), ImVec2(850, 750), NULL, NULL);
+            ImGui::SetNextWindowSizeConstraints(ImVec2(850, 80), ImVec2(850, 900), NULL, NULL);
             if (ImGui::BeginPopupModal(lang_strings[STR_SETTINGS], NULL, ImGuiWindowFlags_AlwaysAutoResize))
             {
                 char id[192];

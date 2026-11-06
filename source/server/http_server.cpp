@@ -328,6 +328,7 @@ namespace HttpServer
         uint64_t total = 0;
         int state = 0; // 0 running, 1 done, 2 failed
         std::string error;
+        uint64_t activity_id = 0;
         // While an upload is in flight, progress is read from the connection's
         // own counters instead of the shared globals.
         std::shared_ptr<RemoteClient> held;
@@ -371,6 +372,8 @@ namespace HttpServer
         it->second.total = total;
         if (!name.empty())
             it->second.name = name;
+        if (it->second.activity_id != 0)
+            Activities::Progress(it->second.activity_id, loaded, total);
     }
 
     static void SetTransferLive(const std::string &id, RemoteClient *client, uint64_t base, bool live)
@@ -702,8 +705,11 @@ namespace HttpServer
         uint64_t loaded = 0;
 
         Activities::Guard activity(ACTIVITY_COPY, job->to_remote ? "Uploading to remote" : "Downloading to local", ACTIVITY_WEB, ACTIVITY_REMOTE);
-        for (size_t i = 0; i < job->items.size(); i++)
-            Activities::Item(activity.id, job->items[i].path);
+
+        {
+            std::lock_guard<std::mutex> lock(web_transfer_mutex);
+            web_transfers[job->id].activity_id = activity.id;
+        }
 
         std::shared_ptr<RemoteClient> held;
         RemoteClient *client = nullptr;
@@ -731,6 +737,7 @@ namespace HttpServer
             for (size_t i = 0; i < job->items.size(); i++)
             {
                 const CopyItem &item = job->items[i];
+                Activities::Item(activity.id, item.path);
                 if (job->to_remote)
                 {
                     if (item.is_dir)

@@ -4,6 +4,7 @@
 #include <json-c/json.h>
 #include "json_object_ref.h"
 #include "activity.h"
+#include <atomic>
 #include <mutex>
 
 #include "remote_pool.h"
@@ -54,6 +55,27 @@ namespace Actions
         std::vector<DirEntry> files;
         std::string target; // zip path or extract folder
     };
+
+    // Remote transfers block inside Get, so a watcher feeds the activity's
+    // progress from the connection's own counters.
+    struct ProgressWatch
+    {
+        RemoteClient *client;
+        uint64_t activity_id;
+        std::atomic<bool> done;
+    };
+
+    static void *ProgressWatchThread(void *argp)
+    {
+        ProgressWatch *watch = (ProgressWatch *)argp;
+        while (!watch->done)
+        {
+            Activities::Progress(watch->activity_id, watch->client->TransferredBytes(), watch->client->TotalBytes());
+            usleep(200000);
+        }
+        delete watch;
+        return NULL;
+    }
 
     static std::vector<DirEntry> TakeSelection(const std::set<DirEntry> &multi, const DirEntry &single)
     {
@@ -354,6 +376,7 @@ namespace Actions
         {
             for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
+                Activities::Item(activity.id, it->path);
                 if (it->isDir)
                 {
                     if (!client->Rmdir(it->path, true))
@@ -362,7 +385,6 @@ namespace Actions
                 else
                 {
                     sprintf(activity_message, "%s %s", lang_strings[STR_DELETING], it->path);
-                    Activities::Item(activity.id, it->path);
                     if (!client->Delete(it->path))
                     {
                         healthy = false;
@@ -420,7 +442,21 @@ namespace Actions
         if (confirm_state == CONFIRM_YES)
         {
             prev_tick = Util::GetTick();
-            return client->Put(src, dest);
+
+            ProgressWatch *watch = new ProgressWatch{client, activity_current_id, false};
+            pthread_t watch_thid;
+            bool watching = pthread_create(&watch_thid, NULL, ProgressWatchThread, watch) == 0;
+            if (!watching)
+                delete watch;
+
+            int ret = client->Put(src, dest);
+
+            if (watching)
+            {
+                watch->done = true;
+                pthread_join(watch_thid, NULL);
+            }
+            return ret;
         }
 
         sceSystemServicePowerTick();
@@ -509,6 +545,7 @@ namespace Actions
         {
             for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
+                Activities::Item(activity.id, it->path);
                 if (it->isDir)
                 {
                     char new_dir[512];
@@ -641,7 +678,21 @@ namespace Actions
             {
                 return BackgroundDownload(src, dest, file_size);
             }
-            return client->Get(dest, src);
+
+            ProgressWatch *watch = new ProgressWatch{client, activity_current_id, false};
+            pthread_t watch_thid;
+            bool watching = pthread_create(&watch_thid, NULL, ProgressWatchThread, watch) == 0;
+            if (!watching)
+                delete watch;
+
+            int ret = client->Get(dest, src);
+
+            if (watching)
+            {
+                watch->done = true;
+                pthread_join(watch_thid, NULL);
+            }
+            return ret;
         }
 
         sceSystemServicePowerTick();
@@ -729,6 +780,7 @@ namespace Actions
         {
             for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
+                Activities::Item(activity.id, it->path);
                 if (it->isDir)
                 {
                     char new_dir[512];
@@ -1095,8 +1147,8 @@ namespace Actions
     {
         ArchiveJob *job = static_cast<ArchiveJob *>(argp);
         Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting archive");
-        Activities::Item(activity.id, job->target);
-        FS::MkDirs(job->target);
+        std::string target = job->target;
+        FS::MkDirs(target);
         std::vector<DirEntry> files = job->files;
         delete job;
 
@@ -1104,9 +1156,11 @@ namespace Actions
         {
             if (Activities::Stopped())
                 break;
+
+            Activities::Item(activity.id, it->name);
             if (!it->isDir)
             {
-                int ret = ZipUtil::Extract(*it, extract_zip_folder);
+                int ret = ZipUtil::Extract(*it, target.c_str());
                 if (ret == 0)
                 {
                     sprintf(status_message, "%s %s", lang_strings[STR_FAILED_TO_EXTRACT], it->name);
@@ -1138,7 +1192,6 @@ namespace Actions
     {
         ArchiveJob *job = static_cast<ArchiveJob *>(argp);
         Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting remote archive", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
-        Activities::Item(activity.id, job->target);
         FS::MkDirs(job->target);
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
@@ -1152,8 +1205,10 @@ namespace Actions
             {
                 if (Activities::Stopped())
                     break;
+                
                 if (!it->isDir)
                 {
+                    Activities::Item(activity.id, it->name);
                     int ret = ZipUtil::Extract(*it, target.c_str(), client);
                     if (ret == 0)
                     {
@@ -1193,7 +1248,7 @@ namespace Actions
     {
         ArchiveJob *job = static_cast<ArchiveJob *>(argp);
         Activities::Guard activity(ACTIVITY_COMPRESS, "Creating archive");
-        Activities::Item(activity.id, job->target);
+
         zipFile zf = zipOpen64(job->target.c_str(), APPEND_STATUS_CREATE);
         if (zf != NULL)
         {
@@ -1203,6 +1258,8 @@ namespace Actions
             {
                 if (Activities::Stopped())
                     break;
+                
+                Activities::Item(activity.id, it->path);
                 int res = ZipUtil::ZipAddPath(zf, it->path, strlen(local_directory) + 1, Z_DEFAULT_COMPRESSION);
                 if (res <= 0)
                 {

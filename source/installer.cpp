@@ -356,7 +356,6 @@ namespace INSTALLER
 			RemoveSplitPkgInstallData(bg_check_data->hash);
 			free(bg_check_data);
 		}
-		file_transfering = false;
 		return nullptr;
 	}
 
@@ -800,7 +799,6 @@ namespace INSTALLER
 				goto finish;
 			}
 
-			file_transfering = true;
 			prev_tick = Util::GetTick();
 
 			SceAppInstallStatusInstalled progress_info;
@@ -901,7 +899,6 @@ namespace INSTALLER
 				goto finish;
 			}
 
-			file_transfering = true;
 			prev_tick = Util::GetTick();
 
 			SceAppInstallStatusInstalled progress_info;
@@ -933,7 +930,6 @@ namespace INSTALLER
 	finish:
 		pthread_create(&bk_clean_thid, NULL, CleanSplitPkgDataThread, pkg_data);
 		RemoveSplitPkgInstallData(hash);
-		file_transfering = false;
 		return ret;
 	}
 	

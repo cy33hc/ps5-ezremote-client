@@ -72,9 +72,7 @@ char dialog_editor_text[1024];
 char activity_message[1024];
 int selected_browser = 0;
 int saved_selected_browser;
-bool stop_activity = false;
 bool quit_pending = false;
-bool file_transfering = false;
 bool set_focus_to_local = false;
 bool set_focus_to_remote = false;
 bool select_url_inprogress = false;
@@ -1073,7 +1071,6 @@ namespace Windows
             {
                 SetModalMode(false);
                 selected_action = local_browser_selected ? ACTION_LOCAL_PASTE : ACTION_REMOTE_PASTE;
-                file_transfering = true;
                 confirm_transfer_state = 0;
                 dont_prompt_overwrite_cb = dont_prompt_overwrite;
                 ImGui::CloseCurrentPopup();
@@ -1215,7 +1212,6 @@ namespace Windows
                     ime_after_update = AfterExtractRemoteFolderCallback;
                 Dialog::initImeDialog(lang_strings[STR_EXTRACT_LOCATION], extract_zip_folder, 255, SCE_IME_TYPE_DEFAULT, 600, 350);
                 gui_mode = GUI_MODE_IME;
-                file_transfering = false;
                 SetModalMode(false);
                 ImGui::CloseCurrentPopup();
             }
@@ -1238,7 +1234,6 @@ namespace Windows
                     ime_after_update = AfterZipFileCallback;
                     Dialog::initImeDialog(lang_strings[STR_ZIP_FILE_PATH], zip_file_path, 383, SCE_IME_TYPE_DEFAULT, 600, 350);
                     gui_mode = GUI_MODE_IME;
-                    file_transfering = true;
                     SetModalMode(false);
                     ImGui::CloseCurrentPopup();
                 }
@@ -1255,7 +1250,6 @@ namespace Windows
                 {
                     SetModalMode(false);
                     selected_action = ACTION_UPLOAD;
-                    file_transfering = true;
                     confirm_transfer_state = 0;
                     dont_prompt_overwrite_cb = dont_prompt_overwrite;
                     ImGui::CloseCurrentPopup();
@@ -1281,7 +1275,6 @@ namespace Windows
                 {
                     SetModalMode(false);
                     selected_action = ACTION_DOWNLOAD;
-                    file_transfering = true;
                     confirm_transfer_state = 0;
                     dont_prompt_overwrite_cb = dont_prompt_overwrite;
                     ImGui::CloseCurrentPopup();
@@ -1973,6 +1966,14 @@ namespace Windows
             if (ImGui::IsWindowAppearing())
                 ImGui::SetItemDefaultFocus();
 
+            if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
+            {
+                quit_pending = false;
+                selected_action = ACTION_NONE;
+                SetModalMode(false);
+                ImGui::CloseCurrentPopup();
+            }
+
             ImGui::EndPopup();
         }
     }
@@ -2631,21 +2632,18 @@ namespace Windows
         case ACTION_EXTRACT_LOCAL_ZIP:
             sprintf(status_message, "%s", "");
             sprintf(activity_message, "%s", "");
-            file_transfering = true;
             selected_action = ACTION_NONE;
             Actions::ExtractLocalZips();
             break;
         case ACTION_EXTRACT_REMOTE_ZIP:
             sprintf(status_message, "%s", "");
             sprintf(activity_message, "%s", "");
-            file_transfering = true;
             selected_action = ACTION_NONE;
             Actions::ExtractRemoteZips();
             break;
         case ACTION_CREATE_LOCAL_ZIP:
             sprintf(status_message, "%s", "");
             sprintf(activity_message, "%s", "");
-            file_transfering = true;
             selected_action = ACTION_NONE;
             Actions::MakeLocalZip();
             break;
@@ -2733,7 +2731,6 @@ namespace Windows
             else
             {
                 sprintf(status_message, "%s", "");
-                file_transfering = true;
                 sprintf(activity_message, "%s", "");
                 Actions::InstallRemotePkgs();
             }
@@ -2746,7 +2743,6 @@ namespace Windows
             }
             else
             {
-                file_transfering = true;
                 sprintf(status_message, "%s", "");
                 sprintf(activity_message, "%s", "");
                 Actions::InstallLocalPkgs();

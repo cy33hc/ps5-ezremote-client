@@ -123,7 +123,9 @@ namespace RemotePool
         }
 
         bool pooled = false;
-        if (healthy && client->IsConnected())
+        // An empty key means the pool was cleared while this caller was busy:
+        // the connection belongs to a closed session, so close it.
+        if (!key.empty() && healthy && client->IsConnected())
         {
             std::lock_guard<std::mutex> lock(pool_mutex);
             std::vector<RemoteClient *> &idle = pool_idle[key];
@@ -158,6 +160,28 @@ namespace RemotePool
         {
             Release(released, true);
         });
+    }
+
+    void ClearFor(const RemoteSettings &settings)
+    {
+        const std::string key = PoolKey(settings);
+        std::vector<RemoteClient *> closing;
+
+        {
+            std::lock_guard<std::mutex> lock(pool_mutex);
+            std::vector<RemoteClient *> &idle = pool_idle[key];
+            closing.swap(idle);
+            pool_idle.erase(key);
+
+            for (size_t i = 0; i < closing.size(); i++)
+                pool_key.erase(closing[i]);
+        }
+
+        for (size_t i = 0; i < closing.size(); i++)
+        {
+            closing[i]->Quit();
+            delete closing[i];
+        }
     }
 
     void Clear()

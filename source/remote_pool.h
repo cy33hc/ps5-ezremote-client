@@ -23,6 +23,9 @@ namespace RemotePool
 
     // Closes every idle connection, e.g. on disconnect or shutdown.
     void Clear();
+
+    // Closes the idle connections of one site only.
+    void ClearFor(const RemoteSettings &settings);
 }
 
 #endif

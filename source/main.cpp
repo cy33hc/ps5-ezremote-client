@@ -17,6 +17,7 @@
 #include "util.h"
 #include "textures.h"
 #include "windows.h"
+#include "activity.h"
 // #include "dbglogger.h"
 
 extern "C"
@@ -323,7 +324,7 @@ int main()
 
 	GUI::RenderLoop(window);
 
-	stop_activity = true;
+	Activities::Shutdown();
 	HttpServer::Stop();
 	if (remoteclient != nullptr)
 	{

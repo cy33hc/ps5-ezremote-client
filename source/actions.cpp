@@ -500,7 +500,6 @@ namespace Actions
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
         Activities::Guard activity(ACTIVITY_UPLOAD, "Uploading files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
-        file_transfering = true;
         std::vector<DirEntry> files = job->files;
         delete job;
 
@@ -528,7 +527,6 @@ namespace Actions
         }
 
         RemotePool::Release(client, true);
-        file_transfering = false;
         multi_selected_local_files.clear();
         selected_action = ACTION_REFRESH_REMOTE_FILES;
         return NULL;
@@ -543,7 +541,6 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, UploadFilesThread, job);
         if (thread_res != 0)
         {
-            file_transfering = false;
             multi_selected_local_files.clear();
             selected_action = ACTION_REFRESH_REMOTE_FILES;
         }
@@ -723,7 +720,6 @@ namespace Actions
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
         Activities::Guard activity(ACTIVITY_DOWNLOAD, "Downloading files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
-        file_transfering = true;
         std::vector<DirEntry> files = job->files;
         delete job;
 
@@ -752,7 +748,6 @@ namespace Actions
 
         RemotePool::Release(client, true);
 
-        file_transfering = false;
         multi_selected_remote_files.clear();
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
@@ -767,7 +762,6 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, DownloadFilesThread, job);
         if (thread_res != 0)
         {
-            file_transfering = false;
             multi_selected_remote_files.clear();
             selected_action = ACTION_REFRESH_LOCAL_FILES;
         }
@@ -927,7 +921,6 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, InstallRemotePkgsThread, job);
         if (thread_res != 0)
         {
-            file_transfering = false;
             multi_selected_remote_files.clear();
         }
     }
@@ -1137,7 +1130,6 @@ namespace Actions
         if (res != 0)
         {
             delete job;
-            file_transfering = false;
             multi_selected_local_files.clear();
         }
     }
@@ -1193,7 +1185,6 @@ namespace Actions
         if (res != 0)
         {
             delete job;
-            file_transfering = false;
             multi_selected_remote_files.clear();
         }
     }
@@ -1241,7 +1232,6 @@ namespace Actions
         if (res != 0)
         {
             delete job;
-            file_transfering = false;
             multi_selected_local_files.clear();
         }
     }
@@ -1290,7 +1280,6 @@ namespace Actions
             return NULL;
         }
 
-        file_transfering = 1;
         int is_performed = tmp_client.Get(filename, path);
 
         if (is_performed == 0)
@@ -1661,7 +1650,6 @@ namespace Actions
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
         delete job;
-        file_transfering = true;
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (Activities::Stopped())
@@ -1688,7 +1676,6 @@ namespace Actions
                 CopyOrMove(*it, target.c_str(), false);
             }
         }
-        file_transfering = false;
         local_paste_files.clear();
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
@@ -1704,7 +1691,6 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, MoveLocalFilesThread, job);
         if (thread_res != 0)
         {
-            file_transfering = false;
             local_paste_files.clear();
         }
     }
@@ -1743,7 +1729,6 @@ namespace Actions
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
         delete job;
-        file_transfering = true;
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (Activities::Stopped())
@@ -1771,7 +1756,6 @@ namespace Actions
                 CopyOrMoveLocalFile(it->path, target.c_str(), true);
             }
         }
-        file_transfering = false;
         local_paste_files.clear();
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
@@ -1787,7 +1771,6 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, CopyLocalFilesThread, job);
         if (thread_res != 0)
         {
-            file_transfering = false;
             local_paste_files.clear();
         }
     }
@@ -1833,10 +1816,8 @@ namespace Actions
         if (client == nullptr)
         {
             RemotePool::Release(client, true);
-            file_transfering = false;
             return NULL;
         }
-        file_transfering = false;
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (Activities::Stopped())
@@ -1863,7 +1844,6 @@ namespace Actions
                 sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
         }
         RemotePool::Release(client, true);
-        file_transfering = false;
         remote_paste_files.clear();
         selected_action = ACTION_REFRESH_REMOTE_FILES;
         return NULL;
@@ -1879,7 +1859,6 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, MoveRemoteFilesThread, job);
         if (thread_res != 0)
         {
-            file_transfering = false;
             remote_paste_files.clear();
         }
     }
@@ -1966,10 +1945,8 @@ namespace Actions
         if (client == nullptr)
         {
             RemotePool::Release(client, true);
-            file_transfering = false;
             return NULL;
         }
-        file_transfering = false;
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (Activities::Stopped())
@@ -2001,7 +1978,6 @@ namespace Actions
             }
         }
         RemotePool::Release(client, true);
-        file_transfering = false;
         remote_paste_files.clear();
         selected_action = ACTION_REFRESH_REMOTE_FILES;
         return NULL;
@@ -2017,7 +1993,6 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, CopyRemoteFilesThread, job);
         if (thread_res != 0)
         {
-            file_transfering = false;
             remote_paste_files.clear();
         }
     }
@@ -2033,7 +2008,6 @@ namespace Actions
         client->Size(filename, &install_size);
         prev_tick = Util::GetTick();
 
-        file_transfering = true;
         int ret = client->Get(local_file, filename);
         if (ret == 0)
             return 0;

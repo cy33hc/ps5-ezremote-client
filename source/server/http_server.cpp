@@ -331,6 +331,7 @@ namespace HttpServer
         std::string error;
         // While an upload is in flight, progress is read from the connection's
         // own counters instead of the shared globals.
+        std::shared_ptr<RemoteClient> held;
         RemoteClient *client = nullptr;
         uint64_t base = 0;
         bool live = false;
@@ -705,6 +706,7 @@ namespace HttpServer
         for (size_t i = 0; i < job->items.size(); i++)
             Activities::Item(activity.id, job->items[i].path);
 
+        std::shared_ptr<RemoteClient> held;
         RemoteClient *client = nullptr;
 
         {
@@ -718,13 +720,14 @@ namespace HttpServer
                 return nullptr;
             }
 
-            client = RemotePool::Acquire(setting->second);
-            if (client == nullptr)
+            held = RemotePool::AcquireShared(setting->second);
+            if (held == nullptr)
             {
                 FinishTransfer(job->id, 2, "Could not connect");
                 delete job;
                 return nullptr;
             }
+            client = held.get();
 
             for (size_t i = 0; i < job->items.size(); i++)
             {
@@ -775,7 +778,6 @@ namespace HttpServer
         else
             FinishTransfer(job->id, 1, "");
 
-        RemotePool::Release(client, failed_items.empty());
         delete job;
         return nullptr;
     }
@@ -1506,6 +1508,16 @@ namespace HttpServer
             }
 
             RemoteSettings &settings = it->second;
+
+            // One connection for the whole handler: redirect resolution and the
+            // header/title read share it instead of taking the session twice.
+            std::shared_ptr<RemoteClient> held = RemotePool::AcquireShared(settings);
+            if (held == nullptr)
+            {
+                failed(res, 200, "Could not connect");
+                return;
+            }
+
             bool anonymous = strlen(settings.username) == 0 && strlen(settings.password) == 0 &&
                 (settings.type == CLIENT_TYPE_WEBDAV ||
                  (settings.type == CLIENT_TYPE_HTTP_SERVER &&
@@ -1533,15 +1545,7 @@ namespace HttpServer
                 if (settings.type == CLIENT_TYPE_HTTP_SERVER &&
                     strcmp(settings.http_server_type, HTTP_SERVER_GITHUB) == 0)
                 {
-                    std::lock_guard<std::mutex> lock(remote_session_mutex);
-                    std::string error;
-                    RemoteClient *client = GetRemoteSession(site, error);
-                    if (client == nullptr)
-                    {
-                        failed(res, 200, error);
-                        return;
-                    }
-                    target_path = static_cast<GithubClient *>(client)->GetRedirectUrl(target_path);
+                    target_path = static_cast<GithubClient *>(held.get())->GetRedirectUrl(target_path);
                 }
 
                 std::string hash = INSTALLER::StoreBgInstallHostData(&settings, target_path, size);
@@ -1556,17 +1560,7 @@ namespace HttpServer
             pkg_header header;
             memset(&header, 0, sizeof(header));
             std::string title;
-            {
-                std::lock_guard<std::mutex> lock(remote_session_mutex);
-                std::string error;
-                RemoteClient *client = GetRemoteSession(site, error);
-                if (client == nullptr)
-                {
-                    failed(res, 200, error);
-                    return;
-                }
-                title = INSTALLER::GetRemotePkgTitle(client, path, &header);
-            }
+            title = INSTALLER::GetRemotePkgTitle(held.get(), path, &header);
 
             if (INSTALLER::InstallRemotePkg(url, &header, title) == 0)
             {
@@ -1829,7 +1823,8 @@ namespace HttpServer
                 }
 
                 // Extraction reads the whole package header tree; own connection.
-                RemoteClient *client = RemotePool::Acquire(setting->second);
+                std::shared_ptr<RemoteClient> held = RemotePool::AcquireShared(setting->second);
+                RemoteClient *client = held.get();
                 if (client == nullptr)
                 {
                     failed(res, 200, "Could not connect");
@@ -1837,7 +1832,6 @@ namespace HttpServer
                 }
 
                 bool extracted = INSTALLER::ExtractRemotePkg(client, path, TMP_SFO_PATH, TMP_PARAM_JSON_PATH, TMP_ICON_PATH);
-                RemotePool::Release(client, extracted);
 
                 if (!extracted)
                 {
@@ -1918,18 +1912,6 @@ namespace HttpServer
             {
                 bad_request(res, "Required items and dest parameters missing");
                 return;
-            }
-
-            {
-                std::lock_guard<std::mutex> lock(web_transfer_mutex);
-                for (std::map<std::string, WebTransfer>::iterator it = web_transfers.begin(); it != web_transfers.end(); ++it)
-                {
-                    if (it->second.state == 0)
-                    {
-                        failed(res, 200, "Another transfer is already running");
-                        return;
-                    }
-                }
             }
 
             bool overwrite = false;
@@ -2042,18 +2024,6 @@ namespace HttpServer
                 return;
             }
 
-            {
-                std::lock_guard<std::mutex> lock(web_transfer_mutex);
-                for (std::map<std::string, WebTransfer>::iterator it = web_transfers.begin(); it != web_transfers.end(); ++it)
-                {
-                    if (it->second.state == 0)
-                    {
-                        failed(res, 200, "Another transfer is already running");
-                        return;
-                    }
-                }
-            }
-
             bool overwrite = false;
             json_object *overwrite_obj = json_object_object_get(jobj, "overwrite");
             if (overwrite_obj != nullptr)
@@ -2082,14 +2052,21 @@ namespace HttpServer
             {
                 json_object *conflicts = json_object_new_array();
                 {
-                    std::lock_guard<std::mutex> lock(remote_session_mutex);
-                    std::string error;
-                    RemoteClient *client = GetRemoteSession(site, error);
-                    if (client == nullptr)
+                    std::map<std::string, RemoteSettings>::iterator setting = site_settings.find(site);
+                    if (setting == site_settings.end())
                     {
                         json_object_put(conflicts);
                         delete job;
-                        failed(res, 200, error);
+                        failed(res, 200, "Unknown site");
+                        return;
+                    }
+
+                    std::shared_ptr<RemoteClient> held = RemotePool::AcquireShared(setting->second);
+                    if (held == nullptr)
+                    {
+                        json_object_put(conflicts);
+                        delete job;
+                        failed(res, 200, "Could not connect");
                         return;
                     }
 
@@ -2100,7 +2077,7 @@ namespace HttpServer
                             target += "/";
                         target += CopyItemName(job->items[i].path);
 
-                        ProbeRemoteConflicts(client, job->items[i].path, target, job->items[i].is_dir, conflicts);
+                        ProbeRemoteConflicts(held.get(), job->items[i].path, target, job->items[i].is_dir, conflicts);
                     }
                 }
 
@@ -2158,18 +2135,6 @@ namespace HttpServer
                 return;
             }
 
-            {
-                std::lock_guard<std::mutex> lock(web_transfer_mutex);
-                for (std::map<std::string, WebTransfer>::iterator it = web_transfers.begin(); it != web_transfers.end(); ++it)
-                {
-                    if (it->second.state == 0)
-                    {
-                        failed(res, 200, "Another transfer is already running");
-                        return;
-                    }
-                }
-            }
-
             std::map<std::string, RemoteSettings>::iterator setting = site_settings.find(site);
             if (setting == site_settings.end())
             {
@@ -2177,7 +2142,8 @@ namespace HttpServer
                 return;
             }
 
-            RemoteClient *client = RemotePool::Acquire(setting->second);
+            std::shared_ptr<RemoteClient> held = RemotePool::AcquireShared(setting->second);
+            RemoteClient *client = held.get();
             if (client == nullptr)
             {
                 failed(res, 200, "Could not connect");
@@ -2203,7 +2169,6 @@ namespace HttpServer
                     failed_items += source + ",";
             }
 
-            RemotePool::Release(client, failed_items.empty());
 
             if (!failed_items.empty())
             {
@@ -2235,18 +2200,6 @@ namespace HttpServer
                 return;
             }
 
-            {
-                std::lock_guard<std::mutex> lock(web_transfer_mutex);
-                for (std::map<std::string, WebTransfer>::iterator it = web_transfers.begin(); it != web_transfers.end(); ++it)
-                {
-                    if (it->second.state == 0)
-                    {
-                        failed(res, 200, "Another transfer is already running");
-                        return;
-                    }
-                }
-            }
-
             std::map<std::string, RemoteSettings>::iterator setting = site_settings.find(site);
             if (setting == site_settings.end())
             {
@@ -2254,7 +2207,8 @@ namespace HttpServer
                 return;
             }
 
-            RemoteClient *client = RemotePool::Acquire(setting->second);
+            std::shared_ptr<RemoteClient> held = RemotePool::AcquireShared(setting->second);
+            RemoteClient *client = held.get();
             if (client == nullptr)
             {
                 failed(res, 200, "Could not connect");
@@ -2280,7 +2234,6 @@ namespace HttpServer
                     failed_items += source + ",";
             }
 
-            RemotePool::Release(client, failed_items.empty());
 
             if (!failed_items.empty())
             {
@@ -2846,7 +2799,14 @@ namespace HttpServer
                 site = json_object_get_string(json_object_object_get(jobj, "site"));
 
             std::lock_guard<std::mutex> lock(remote_session_mutex);
-            CloseRemoteSession((site != nullptr && strlen(site) > 0) ? std::string(site) : std::string(last_site));
+            std::string closing_site = (site != nullptr && strlen(site) > 0) ? std::string(site) : std::string(last_site);
+            CloseRemoteSession(closing_site);
+
+            // Pooled connections belong to the session being closed.
+            std::map<std::string, RemoteSettings>::iterator setting = site_settings.find(closing_site);
+            if (setting != site_settings.end())
+                RemotePool::ClearFor(setting->second);
+
             success(res);
         });
 
@@ -3026,7 +2986,8 @@ namespace HttpServer
                 }
                 else
                 {
-                    RemoteClient *client = RemotePool::Acquire(setting->second);
+                    std::shared_ptr<RemoteClient> held = RemotePool::AcquireShared(setting->second);
+            RemoteClient *client = held.get();
                     if (client == nullptr)
                     {
                         error = "Could not connect";
@@ -3034,7 +2995,6 @@ namespace HttpServer
                     else
                     {
                         uploaded = client->Put(temp_path, remote_path) != 0;
-                        RemotePool::Release(client, uploaded);
                     }
                 }
             }
@@ -3154,7 +3114,8 @@ namespace HttpServer
                 return;
             }
 
-            RemoteClient *client = RemotePool::Acquire(setting->second);
+            std::shared_ptr<RemoteClient> held = RemotePool::AcquireShared(setting->second);
+            RemoteClient *client = held.get();
             if (client == nullptr)
             {
                 failed(res, 200, "Could not connect");
@@ -3193,7 +3154,6 @@ namespace HttpServer
                 }
             }
 
-            RemotePool::Release(client, failed_items.empty());
 
             if (count == 0)
             {
@@ -3765,7 +3725,6 @@ namespace HttpServer
 
             std::string hash = Util::UrlHash(filehost->GetUrl());
             snprintf(activity_message, 1023, "%s %s", lang_strings[STR_INSTALLING], filehost->GetUrl().c_str());
-            file_transfering = true;
             prev_tick = Util::GetTick();
 
 
@@ -3778,7 +3737,6 @@ namespace HttpServer
             if (download_url.empty())
             {
                 failed(res, 200, lang_strings[STR_CANT_EXTRACT_URL_MSG]);
-                file_transfering = false;
                 return;
             }
             delete(filehost);
@@ -3796,7 +3754,6 @@ namespace HttpServer
             if (!baseclient->FileExists(path))
             {
                 failed(res, 200, baseclient->LastResponse());
-                file_transfering = false;
                 return;
             }
             baseclient->Head(path, &header, sizeof(pkg_header));
@@ -3843,7 +3800,6 @@ namespace HttpServer
 
                     std::string remote_install_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
                     int rc = INSTALLER::InstallRemotePkg(remote_install_url, &header, title);
-                    file_transfering = false;
                 }
                 else if (enable_rpi && use_disk_cache && BE32(header.pkg_magic) == PKG_CNT_MAGIC)
                 {
@@ -3867,7 +3823,6 @@ namespace HttpServer
                     if (ret == 0)
                     {
                         failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
-                        file_transfering = false;
                         return;
                     }
                 }
@@ -3894,7 +3849,6 @@ namespace HttpServer
                     if (ret == 0)
                     {
                         failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
-                        file_transfering = false;
                         free(install_data);
                         return;
                     }
@@ -3902,7 +3856,6 @@ namespace HttpServer
                 else
                 {
                     failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
-                    file_transfering = false;
                     return;
                 }
             }

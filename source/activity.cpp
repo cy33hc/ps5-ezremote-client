@@ -1,3 +1,4 @@
+#include <atomic>
 #include <mutex>
 
 #include "activity.h"
@@ -5,6 +6,11 @@
 
 thread_local uint64_t activity_current_id = 0;
 thread_local int activity_overwrite_type = -1;
+
+namespace
+{
+    std::atomic<bool> shutdown_requested{false};
+}
 
 extern int overwrite_type;
 
@@ -187,9 +193,19 @@ namespace Activities
         return false;
     }
 
+    void Shutdown()
+    {
+        shutdown_requested = true;
+    }
+
+    bool ShutdownRequested()
+    {
+        return shutdown_requested;
+    }
+
     bool Stopped()
     {
-        if (stop_activity)
+        if (shutdown_requested)
             return true;
         return IsCancelled(activity_current_id);
     }

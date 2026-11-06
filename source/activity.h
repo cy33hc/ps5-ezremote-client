@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-extern bool stop_activity;
 // Id of the activity owned by the calling thread, set by Guard.
 extern thread_local uint64_t activity_current_id;
 
@@ -68,6 +67,10 @@ struct Activity
 
 namespace Activities
 {
+    // Process shutdown: every running activity stops.
+    void Shutdown();
+    bool ShutdownRequested();
+
     uint64_t Begin(int kind, const std::string &label, int origin = ACTIVITY_NATIVE, int scope = ACTIVITY_LOCAL);
 
     // Overwrite policy for the calling thread; jobs keep their own snapshot so
@@ -115,7 +118,7 @@ namespace Activities
 
         ~Guard()
         {
-            Finish(id, (stop_activity || IsCancelled(id)) ? ACTIVITY_CANCELLED : ACTIVITY_DONE);
+            Finish(id, (ShutdownRequested() || IsCancelled(id)) ? ACTIVITY_CANCELLED : ACTIVITY_DONE);
             activity_current_id = previous;
         }
     };

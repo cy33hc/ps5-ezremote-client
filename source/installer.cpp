@@ -35,6 +35,8 @@
 #include "sceUserService.h"
 #include "sceSystemService.h"
 #include "installer.h"
+#include <mutex>
+
 #include "activity.h"
 
 struct BgProgressCheck
@@ -47,8 +49,10 @@ struct BgProgressCheck
 	std::string title;
 };
 
-static bool sceAppInst_done = false;
+static std::once_flag sceAppInst_once;
+static bool sceAppInst_ok = false;
 
+static std::mutex install_data_mutex;
 static std::map<std::string, ArchivePkgInstallData *> archive_pkg_install_data_list;
 static std::map<std::string, SplitPkgInstallData *> split_pkg_install_data_list;
 
@@ -61,22 +65,12 @@ namespace INSTALLER
 
 	int Init(void)
 	{
-		int ret;
-
-		if (sceAppInst_done)
+		std::call_once(sceAppInst_once, []()
 		{
-			return 0;
-		}
+			sceAppInst_ok = sceAppInstUtilInitialize() == 0;
+		});
 
-		ret = sceAppInstUtilInitialize();
-		if (ret)
-		{
-			return -1;
-		}
-
-		sceAppInst_done = true;
-
-		return 0;
+		return sceAppInst_ok ? 0 : -1;
 	}
 
 	void Exit(void)
@@ -737,6 +731,7 @@ namespace INSTALLER
 
 	ArchivePkgInstallData *GetArchivePkgInstallData(const std::string &hash)
 	{
+		std::lock_guard<std::mutex> lock(install_data_mutex);
 		auto it = archive_pkg_install_data_list.find(hash);
 		return it != archive_pkg_install_data_list.end() ? it->second : nullptr;
 	}
@@ -748,6 +743,7 @@ namespace INSTALLER
 
 	void AddArchivePkgInstallData(const std::string &hash, ArchivePkgInstallData *pkg_data)
 	{
+		std::lock_guard<std::mutex> lock(install_data_mutex);
 		std::pair<std::string, ArchivePkgInstallData *> pair = std::make_pair(hash, pkg_data);
 		archive_pkg_install_data_list.erase(hash);
 		archive_pkg_install_data_list.insert(pair);
@@ -755,6 +751,7 @@ namespace INSTALLER
 
 	void RemoveArchivePkgInstallData(const std::string &hash)
 	{
+		std::lock_guard<std::mutex> lock(install_data_mutex);
 		archive_pkg_install_data_list.erase(hash);
 	}
 
@@ -840,12 +837,14 @@ namespace INSTALLER
 
 	SplitPkgInstallData *GetSplitPkgInstallData(const std::string &hash)
 	{
+		std::lock_guard<std::mutex> lock(install_data_mutex);
 		auto it = split_pkg_install_data_list.find(hash);
 		return it != split_pkg_install_data_list.end() ? it->second : nullptr;
 	}
 
 	void AddSplitPkgInstallData(const std::string &hash, SplitPkgInstallData *pkg_data)
 	{
+		std::lock_guard<std::mutex> lock(install_data_mutex);
 		std::pair<std::string, SplitPkgInstallData *> pair = std::make_pair(hash, pkg_data);
 		split_pkg_install_data_list.erase(hash);
 		split_pkg_install_data_list.insert(pair);
@@ -853,6 +852,7 @@ namespace INSTALLER
 
 	void RemoveSplitPkgInstallData(const std::string &hash)
 	{
+		std::lock_guard<std::mutex> lock(install_data_mutex);
 		split_pkg_install_data_list.erase(hash);
 	}
 

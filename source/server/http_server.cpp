@@ -1201,12 +1201,7 @@ namespace HttpServer
 
         svr->Post("/__local__/install", [&](const Request &req, Response &res)
         {
-            if (Activities::AnyLocalRunning())
-            {
-                failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
-                return;
-            }
-
+            Activities::Guard activity(ACTIVITY_INSTALL, "Installing local packages", ACTIVITY_WEB);
             json_object *items;
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
@@ -1232,6 +1227,7 @@ namespace HttpServer
                 const char *item = json_object_get_string(json_object_array_get_idx(items, i));
                 if (item == nullptr)
                     continue;
+                Activities::Item(activity.id, item);
                 if (!INSTALLER::InstallLocalPkg(item))
                     failed_items += (std::string(item) + ",");
             }
@@ -3717,12 +3713,6 @@ namespace HttpServer
 
         svr->Post("/__local__/install_url", [&](const Request &req, Response &res)
         {
-            if (Activities::AnyLocalRunning())
-            {
-                failed(res, 200, lang_strings[STR_ACTIVITY_IN_PROGRESS_MSG]);
-                return;
-            }
-
             std::string url;
             const char *url_param;
             bool use_alldebrid = false;

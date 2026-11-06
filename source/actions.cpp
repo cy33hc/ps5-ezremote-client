@@ -798,6 +798,7 @@ namespace Actions
             if (Activities::Stopped())
                 break;
             sprintf(activity_message, "%s %s", lang_strings[STR_INSTALLING], it->name);
+            Activities::Item(activity.id, it->name);
 
             if (!it->isDir)
             {
@@ -1002,6 +1003,7 @@ namespace Actions
             if (Activities::Stopped())
                 break;
             sprintf(activity_message, "%s %s", lang_strings[STR_INSTALLING], it->name);
+            Activities::Item(activity.id, it->name);
 
             if (!it->isDir)
             {

@@ -10,6 +10,7 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
+upload.sh
 build
 .vscode
 # web UI build tooling

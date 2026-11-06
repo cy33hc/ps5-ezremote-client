@@ -71,6 +71,7 @@
 #define CONFIG_LANGUAGE "language"
 
 #define CONFIG_ENABLE_BG_DOWNLOAD "enable_background_download"
+#define CONFIG_SHOW_ACTIVITY_DIALOG "show_activity_dialog"
 #define CONFIG_BG_DOWNLOAD_SIZE "minimum_backgrond_file_size"
 
 #define HTTP_SERVER_APACHE "Apache"
@@ -143,6 +144,7 @@ extern char realdebrid_api_key[64];
 extern char temp_folder[256];
 extern std::string ezremote_server_version;
 extern bool enable_background_download;
+extern bool show_activity_dialog;
 extern uint64_t minimum_backgrond_file_size;
 
 namespace CONFIG

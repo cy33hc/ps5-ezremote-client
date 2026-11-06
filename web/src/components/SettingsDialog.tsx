@@ -61,6 +61,7 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
         showHiddenFiles: settings.showHiddenFiles,
         tempFolder: settings.tempFolder,
         enableBackgroundDownload: settings.enableBackgroundDownload,
+        showActivityDialog: settings.showActivityDialog,
         minimumBackgroundFileSize: Math.max(0, Number(minSizeMb) || 0) * MB,
         webServerEnabled: settings.webServerEnabled,
         httpServerPort: settings.httpServerPort,
@@ -127,6 +128,11 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
             </Field>
             <Check label="Delete temporary package after install" checked={settings.autoDeleteTmpPkg} onChange={(value) => update("autoDeleteTmpPkg", value)} />
             <Check label="Show hidden files" checked={settings.showHiddenFiles} onChange={(value) => update("showHiddenFiles", value)} />
+            <Check
+              label="Open the activities dialog when a new activity starts"
+              checked={settings.showActivityDialog}
+              onChange={(value) => update("showActivityDialog", value)}
+            />
           </Section>
 
           <Section title="Downloads">

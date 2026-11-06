@@ -428,7 +428,7 @@ namespace FS
                         return ret;
                     }
                 }
-            } while (dir != NULL && !stop_activity);
+            } while (dir != NULL && !Activities::Stopped());
 
             closedir(dfd);
 

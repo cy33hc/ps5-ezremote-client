@@ -89,6 +89,8 @@ namespace Activities
     bool Cancel(uint64_t id);
     // True when the calling thread's activity should stop.
     bool Stopped();
+    // Most recently started entry, used to react to new work.
+    bool Latest(Activity *out);
     bool AnyRunning();
     bool IsCancelled(uint64_t id);
     bool AnyLocalRunning();

@@ -362,9 +362,7 @@ namespace INSTALLER
 			RemoveSplitPkgInstallData(bg_check_data->hash);
 			free(bg_check_data);
 		}
-		activity_inprogess = false;
 		file_transfering = false;
-		Windows::SetModalMode(false);
 		return nullptr;
 	}
 
@@ -935,9 +933,7 @@ namespace INSTALLER
 	finish:
 		pthread_create(&bk_clean_thid, NULL, CleanSplitPkgDataThread, pkg_data);
 		RemoveSplitPkgInstallData(hash);
-		activity_inprogess = false;
 		file_transfering = false;
-		Windows::SetModalMode(false);
 		return ret;
 	}
 	

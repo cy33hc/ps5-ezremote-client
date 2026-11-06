@@ -95,9 +95,16 @@ export default function App() {
   const [remoteEnabled, setRemoteEnabled] = useState(true);
   const [remoteClipboard, setRemoteClipboard] = useState<{ mode: "copy" | "cut"; items: string[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [transfer, setTransfer] = useState<api.TransferState | null>(null);
   const [bgOpen, setBgOpen] = useState(false);
   const [activityList, setActivityList] = useState<api.Activity[]>([]);
+  const [showActivityDialog, setShowActivityDialog] = useState(true);
+  const lastActivityIdRef = useRef(0);
+  useEffect(() => {
+    void api
+      .getSettings()
+      .then((loaded) => setShowActivityDialog(loaded.showActivityDialog))
+      .catch(() => {});
+  }, []);
   const [activityOpen, setActivityOpen] = useState(false);
   const [exitDialog, setExitDialog] = useState<"stop" | "restart" | null>(null);
   const [remotePkgView, setRemotePkgView] = useState<DirEntry | null>(null);
@@ -120,7 +127,6 @@ export default function App() {
     index: number;
     skipped: string[];
   } | null>(null);
-  const transferBusy = transfer !== null && transfer.state === 0;
   const activeBg = bgList.filter((item) => item.state !== 3 && item.state !== 4).length;
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [clipboard, setClipboard] = useState<{ mode: "copy" | "cut"; items: string[] } | null>(null);
@@ -238,7 +244,17 @@ export default function App() {
       // Background workers (copy/move/delete/compress/…) report separately.
       try {
         const running = await api.activities();
-        if (!cancelled) setActivityList(running);
+        if (!cancelled) {
+          setActivityList(running);
+          const newest = running[running.length - 1];
+          if (newest && newest.id !== lastActivityIdRef.current) {
+            // Seed the baseline on first poll: existing history is not news.
+            const firstPoll = lastActivityIdRef.current === 0;
+            lastActivityIdRef.current = newest.id;
+            // Native-initiated work is surfaced on the console only.
+            if (!firstPoll && showActivityDialog && newest.origin !== "Native") setActivityOpen(true);
+          }
+        }
       } catch {
         // Nothing to show.
       }
@@ -278,7 +294,7 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [bgOpen, authed]);
+  }, [bgOpen, authed, showActivityDialog]);
 
   // Connect the remote pane once a profile is known (and only once per failure).
   useEffect(() => {
@@ -840,7 +856,6 @@ export default function App() {
         await new Promise((resolve) => setTimeout(resolve, 400));
         try {
           const state = await api.transferStatus(id);
-          setTransfer(state);
 
           if (state.state === 0) continue;
 
@@ -852,11 +867,9 @@ export default function App() {
 
           refresh();
           await loadRemote(remotePath);
-          window.setTimeout(() => setTransfer(null), 4000);
           return;
         } catch (error) {
           notify(error instanceof Error ? error.message : "Transfer failed", "error");
-          setTransfer(null);
           return;
         }
       }
@@ -877,15 +890,7 @@ export default function App() {
         return;
       }
 
-      const source = toRemote ? path : remotePath;
-      setTransfer({
-        id: result.id,
-        name: items.length === 1 ? joinPath(source, items[0].path.substring(items[0].path.lastIndexOf("/") + 1)) : `${items.length} items`,
-        loaded: 0,
-        total: 0,
-        state: 0,
-        error: "",
-      });
+      // Progress lives in the activities dialog; still follow for completion.
       void followTransfer(result.id);
     },
     [followTransfer, notify, path, remotePath, serverInfo],
@@ -897,11 +902,6 @@ export default function App() {
         notify("Select a server profile first", "error");
         return;
       }
-      if (transferBusy) {
-        notify("A transfer is already running — wait for it to finish", "error");
-        return;
-      }
-
       const chosen = source ?? (toRemote ? localSelected : remoteSelected);
       const items: api.CopyItem[] = toRemote
         ? chosen.map((entry) => ({ path: joinPath(path, entry.name), is_dir: entry.type === "dir" }))
@@ -928,21 +928,12 @@ export default function App() {
           return;
         }
 
-        const source = toRemote ? path : remotePath;
-        setTransfer({
-          id: probe.id,
-          name: items.length === 1 ? joinPath(source, items[0].path.substring(items[0].path.lastIndexOf("/") + 1)) : `${items.length} items`,
-          loaded: 0,
-          total: 0,
-          state: 0,
-          error: "",
-        });
         void followTransfer(probe.id);
       } catch (error) {
         notify(error instanceof Error ? error.message : "Transfer failed", "error");
       }
     },
-    [followTransfer, localSelected, notify, path, remotePath, remoteSelected, serverInfo, transferBusy],
+    [followTransfer, localSelected, notify, path, remotePath, remoteSelected, serverInfo],
   );
 
   // Resolve one conflict; "always" covers the remaining files of this transfer only.
@@ -1008,7 +999,7 @@ export default function App() {
       }
       items.push({ label: "Compress to zip", icon: "package", onSelect: compressSelection });
       items.push({ separator: true });
-      items.push({ label: "Copy to remote", icon: "copy", onSelect: localToRemote, disabled: !serverInfo || !remotePath || !canRemote(RA.UPLOAD) || transferBusy });
+      items.push({ label: "Copy to remote", icon: "copy", onSelect: localToRemote, disabled: !serverInfo || !remotePath || !canRemote(RA.UPLOAD) });
       items.push({ separator: true });
       items.push({ label: "Cut", icon: "cut", onSelect: cutSelection });
       items.push({ label: "Copy", icon: "copy", onSelect: copySelection });
@@ -1094,7 +1085,7 @@ export default function App() {
             label: packages.length > 1 ? `Install ${packages.length} packages` : "Install package",
             icon: "package",
             onSelect: () => installRemotePackages(packages),
-            disabled: !canRemote(RA.INSTALL) || transferBusy,
+            disabled: !canRemote(RA.INSTALL),
           });
         if (entry.name.toLowerCase().endsWith(".pkg"))
           items.push({ label: "Package info", icon: "info", onSelect: () => openRemotePkgInfo(entry), disabled: !serverInfo });
@@ -1106,23 +1097,23 @@ export default function App() {
           });
       }
       items.push({ separator: true });
-      items.push({ label: "Copy to local", icon: "copy", onSelect: remoteToLocal, disabled: !serverInfo || !canRemote(RA.DOWNLOAD) || transferBusy });
+      items.push({ label: "Copy to local", icon: "copy", onSelect: remoteToLocal, disabled: !serverInfo || !canRemote(RA.DOWNLOAD) });
       items.push({ separator: true });
-      items.push({ label: "Cut", icon: "cut", onSelect: () => copyRemoteItems("cut"), disabled: !canRemote(RA.CUT) || transferBusy });
-      items.push({ label: "Copy", icon: "copy", onSelect: () => copyRemoteItems("copy"), disabled: !canRemote(RA.COPY) || transferBusy });
+      items.push({ label: "Cut", icon: "cut", onSelect: () => copyRemoteItems("cut"), disabled: !canRemote(RA.CUT) });
+      items.push({ label: "Copy", icon: "copy", onSelect: () => copyRemoteItems("copy"), disabled: !canRemote(RA.COPY) });
       if (remoteClipboard)
-        items.push({ label: "Paste", icon: "paste", onSelect: pasteRemoteItems, disabled: !canRemote(RA.PASTE) || transferBusy });
+        items.push({ label: "Paste", icon: "paste", onSelect: pasteRemoteItems, disabled: !canRemote(RA.PASTE) });
       items.push({ separator: true });
-      items.push({ label: "Rename", icon: "rename", onSelect: remoteRename, disabled: !canRemote(RA.RENAME) || transferBusy });
-      items.push({ label: "Delete", icon: "trash", danger: true, onSelect: remoteDelete, disabled: !canRemote(RA.DELETE) || transferBusy });
+      items.push({ label: "Rename", icon: "rename", onSelect: remoteRename, disabled: !canRemote(RA.RENAME) });
+      items.push({ label: "Delete", icon: "trash", danger: true, onSelect: remoteDelete, disabled: !canRemote(RA.DELETE) });
       items.push({ label: "Properties", icon: "info", onSelect: () => setProperties(remoteSelected[0] ?? entry) });
       return items;
     }
 
-    items.push({ label: "New folder", icon: "folderPlus", onSelect: remoteNewFolder, disabled: !serverInfo || !canRemote(RA.NEW_FOLDER) || transferBusy });
-    items.push({ label: "New file", icon: "file", onSelect: remoteNewFile, disabled: !serverInfo || !canRemote(RA.NEW_FILE) || transferBusy });
+    items.push({ label: "New folder", icon: "folderPlus", onSelect: remoteNewFolder, disabled: !serverInfo || !canRemote(RA.NEW_FOLDER) });
+    items.push({ label: "New file", icon: "file", onSelect: remoteNewFile, disabled: !serverInfo || !canRemote(RA.NEW_FILE) });
     if (remoteClipboard)
-      items.push({ label: "Paste", icon: "paste", onSelect: pasteRemoteItems, disabled: !canRemote(RA.PASTE) || transferBusy });
+      items.push({ label: "Paste", icon: "paste", onSelect: pasteRemoteItems, disabled: !canRemote(RA.PASTE) });
     items.push({ label: "Refresh", icon: "refresh", onSelect: () => void loadRemote(remotePath), disabled: !serverInfo });
     items.push({ label: "Select all", icon: "selectAll", onSelect: toggleAll(setRemoteSelection, remoteVisible) });
     items.push({ separator: true });
@@ -1468,7 +1459,6 @@ export default function App() {
           </div>
         </>
       ) : null}
-      {transfer ? <TransferDialog transfer={transfer} onClose={() => setTransfer(null)} /> : null}
       {activityOpen ? (
         <ActivitiesDialog
           activities={activityList}
@@ -1961,44 +1951,6 @@ function BackgroundDownloadsDialog({
           })}
         </ul>
       )}
-    </Modal>
-  );
-}
-
-function TransferDialog({ transfer, onClose }: { transfer: api.TransferState; onClose: () => void }) {
-  const running = transfer.state === 0;
-  const failed = transfer.state === 2;
-  const pct = transfer.total > 0 ? Math.min(100, Math.round((transfer.loaded / transfer.total) * 100)) : 0;
-
-  return (
-    <Modal
-      title={running ? "Copying" : failed ? "Transfer failed" : "Transfer complete"}
-      subtitle={running ? `${pct}% · ${formatSize(String(transfer.loaded))}${transfer.total > 0 ? ` / ${formatSize(String(transfer.total))}` : ""}` : undefined}
-      dismissible={!running}
-      onClose={onClose}
-      footer={
-        running ? undefined : (
-          <button type="button" onClick={onClose} className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-accent-600">
-            Close
-          </button>
-        )
-      }
-    >
-      <p className="break-all font-mono text-sm text-mist-100">{transfer.name || "Preparing…"}</p>
-      <span className="mt-3 block h-3 overflow-hidden rounded-full bg-abyss-700">
-        <span
-          className={`block h-full rounded-full transition-[width] duration-200 ${
-            failed ? "bg-rose-400" : running ? "bg-accent-500" : "bg-mint-400"
-          }`}
-          style={{ width: `${pct}%` }}
-        />
-      </span>
-      {running ? (
-        <p className="mt-3 text-xs leading-relaxed text-mist-500">
-          Browsing and other actions are paused until this transfer finishes.
-        </p>
-      ) : null}
-      {failed && transfer.error ? <p className="mt-3 break-all text-sm text-rose-400">{transfer.error}</p> : null}
     </Modal>
   );
 }

@@ -72,7 +72,6 @@ char dialog_editor_text[1024];
 char activity_message[1024];
 int selected_browser = 0;
 int saved_selected_browser;
-bool activity_inprogess = false;
 bool stop_activity = false;
 bool quit_pending = false;
 bool file_transfering = false;
@@ -1561,86 +1560,6 @@ namespace Windows
         }
     }
 
-    void ShowProgressDialog()
-    {
-        if (activity_inprogess)
-        {
-            ImGuiIO &io = ImGui::GetIO();
-            (void)io;
-            ImGuiStyle *style = &ImGui::GetStyle();
-            ImVec4 *colors = style->Colors;
-
-            SetModalMode(true);
-            ImGui::OpenPopup(lang_strings[STR_PROGRESS]);
-
-            ImGui::SetNextWindowPos(ImVec2(680, 350));
-            ImGui::SetNextWindowSizeConstraints(ImVec2(640, 80), ImVec2(640, 400), NULL, NULL);
-            if (ImGui::BeginPopupModal(lang_strings[STR_PROGRESS], NULL, ImGuiWindowFlags_AlwaysAutoResize))
-            {
-                ImVec2 cur_pos = ImGui::GetCursorPos();
-                ImGui::SetCursorPos(cur_pos);
-                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 620);
-                ImGui::Text("%s", activity_message);
-                ImGui::PopTextWrapPos();
-                ImGui::SetCursorPosY(cur_pos.y + 95);
-
-                if (file_transfering)
-                {
-                    static float progress = 0.0f;
-                    static double transfer_speed = 0.0f;
-                    static char progress_text[32];
-                    static uint64_t cur_tick;
-                    static double tick_delta;
-                   
-                    cur_tick = Util::GetTick();
-                    tick_delta = (cur_tick - prev_tick) * 1.0f / 1000000.0f;
-
-                    uint64_t moved = 0;
-                    uint64_t total = 0;
-
-                    // The activity tracker now carries progress for local
-                    // copies, zips and installs.
-                    Activity current;
-                    if (Activities::CurrentRunning(&current) && current.total > 0)
-                    {
-                        moved = current.done;
-                        total = current.total;
-                    }
-
-                    // Remote transfers report through the connection's counters.
-                    if (total == 0 && remoteclient != nullptr)
-                    {
-                        moved = remoteclient->TransferredBytes();
-                        total = remoteclient->TotalBytes();
-                    }
-
-                    progress = total > 0 ? moved * 1.0f / (float)total : 0.0f;
-                    transfer_speed = (moved * 1.0f / tick_delta) / 1048576.0f;
-
-                    sprintf(progress_text, "%.2f MB/s", transfer_speed);
-                    ImGui::ProgressBar(progress, ImVec2(625, 0), progress_text);
-                }
-
-                ImGui::Separator();
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 245);
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
-                if (ImGui::Button(lang_strings[STR_CANCEL], ImVec2(150, 0)))
-                {
-                    stop_activity = true;
-                    SetModalMode(false);
-                }
-                if (stop_activity)
-                {
-                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 620);
-                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", lang_strings[STR_CANCEL_ACTION_MSG]);
-                    ImGui::PopTextWrapPos();
-                }
-                ImGui::EndPopup();
-                sceSystemServicePowerTick();
-            }
-        }
-    }
-
     void ShowFavoriteUrlsDialog()
     {
         if (select_url_inprogress)
@@ -2157,6 +2076,13 @@ namespace Windows
             if (appearing)
                 ImGui::SetItemDefaultFocus();
 
+            if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
+            {
+                show_activities = false;
+                SetModalMode(false);
+                ImGui::CloseCurrentPopup();
+            }
+
             ImGui::EndPopup();
         }
     }
@@ -2245,6 +2171,13 @@ namespace Windows
                 ImGui::SameLine();
                 ImGui::SetCursorPosX(805);
                 ImGui::Checkbox("##enable_bg_download", &enable_background_download);
+                ImGui::Separator();
+
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
+                ImGui::Text("Show activities dialog on new activity");
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(805);
+                ImGui::Checkbox("##show_activity_dialog", &show_activity_dialog);
                 ImGui::Separator();
 
                 field_size = ImGui::CalcTextSize(lang_strings[STR_BG_DOWNLOAD_MIN_SIZE]);
@@ -2596,11 +2529,22 @@ namespace Windows
             BrowserPanel();
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3);
             StatusPanel();
-            // Progress is shown per activity in the Activities dialog.
             ShowActionsDialog();
             ShowFavoriteUrlsDialog();
             ShowEditorDialog();
             ShowSettingsDialog();
+
+            // Surface the new activity instead of the old progress dialog.
+            static uint64_t last_activity_id = 0;
+            Activity newest;
+            if (Activities::Latest(&newest) && newest.id != last_activity_id)
+            {
+                last_activity_id = newest.id;
+                // Web-initiated work is surfaced in the web UI only.
+                if (show_activity_dialog && newest.origin != ACTIVITY_WEB)
+                    show_activities = true;
+            }
+
             ShowActivitiesDialog();
             ShowQuitWarningDialog();
             ShowImageDialog();
@@ -2655,16 +2599,12 @@ namespace Windows
             }
             break;
         case ACTION_DELETE_LOCAL:
-            activity_inprogess = true;
             sprintf(activity_message, "%s", "");
-            stop_activity = false;
             selected_action = ACTION_NONE;
             Actions::DeleteSelectedLocalFiles();
             break;
         case ACTION_DELETE_REMOTE:
-            activity_inprogess = true;
             sprintf(activity_message, "%s", "");
-            stop_activity = false;
             selected_action = ACTION_NONE;
             Actions::DeleteSelectedRemotesFiles();
             break;
@@ -2672,9 +2612,7 @@ namespace Windows
             sprintf(status_message, "%s", "");
             if (dont_prompt_overwrite || (!dont_prompt_overwrite && confirm_transfer_state == 1))
             {
-                activity_inprogess = true;
                 sprintf(activity_message, "%s", "");
-                stop_activity = false;
                 Actions::UploadFiles();
                 confirm_transfer_state = -1;
                 selected_action = ACTION_NONE;
@@ -2684,9 +2622,7 @@ namespace Windows
             sprintf(status_message, "%s", "");
             if (dont_prompt_overwrite || (!dont_prompt_overwrite && confirm_transfer_state == 1))
             {
-                activity_inprogess = true;
                 sprintf(activity_message, "%s", "");
-                stop_activity = false;
                 Actions::DownloadFiles();
                 confirm_transfer_state = -1;
                 selected_action = ACTION_NONE;
@@ -2694,27 +2630,21 @@ namespace Windows
             break;
         case ACTION_EXTRACT_LOCAL_ZIP:
             sprintf(status_message, "%s", "");
-            activity_inprogess = true;
             sprintf(activity_message, "%s", "");
-            stop_activity = false;
             file_transfering = true;
             selected_action = ACTION_NONE;
             Actions::ExtractLocalZips();
             break;
         case ACTION_EXTRACT_REMOTE_ZIP:
             sprintf(status_message, "%s", "");
-            activity_inprogess = true;
             sprintf(activity_message, "%s", "");
-            stop_activity = false;
             file_transfering = true;
             selected_action = ACTION_NONE;
             Actions::ExtractRemoteZips();
             break;
         case ACTION_CREATE_LOCAL_ZIP:
             sprintf(status_message, "%s", "");
-            activity_inprogess = true;
             sprintf(activity_message, "%s", "");
-            stop_activity = false;
             file_transfering = true;
             selected_action = ACTION_NONE;
             Actions::MakeLocalZip();
@@ -2803,10 +2733,8 @@ namespace Windows
             else
             {
                 sprintf(status_message, "%s", "");
-                activity_inprogess = true;
                 file_transfering = true;
                 sprintf(activity_message, "%s", "");
-                stop_activity = false;
                 Actions::InstallRemotePkgs();
             }
             selected_action = ACTION_NONE;
@@ -2818,11 +2746,9 @@ namespace Windows
             }
             else
             {
-                activity_inprogess = true;
                 file_transfering = true;
                 sprintf(status_message, "%s", "");
                 sprintf(activity_message, "%s", "");
-                stop_activity = false;
                 Actions::InstallLocalPkgs();
             }
             selected_action = ACTION_NONE;
@@ -2834,10 +2760,8 @@ namespace Windows
             }
             else
             {
-                activity_inprogess = true;
                 sprintf(status_message, "%s", "");
                 sprintf(activity_message, "%s", "");
-                stop_activity = false;
                 Actions::InstallUrlPkg();
             }
             selected_action = ACTION_NONE;
@@ -2869,9 +2793,7 @@ namespace Windows
             sprintf(activity_message, "%s", "");
             if (dont_prompt_overwrite || (!dont_prompt_overwrite && confirm_transfer_state == 1))
             {
-                activity_inprogess = true;
                 sprintf(activity_message, "%s", "");
-                stop_activity = false;
                 confirm_transfer_state = -1;
                 if (paste_action == ACTION_LOCAL_CUT)
                     Actions::MoveLocalFiles();
@@ -2879,7 +2801,6 @@ namespace Windows
                     Actions::CopyLocalFiles();
                 else
                 {
-                    activity_inprogess = false;
                 }
                 selected_action = ACTION_NONE;
             }
@@ -2889,9 +2810,7 @@ namespace Windows
             sprintf(activity_message, "%s", "");
             if (dont_prompt_overwrite || (!dont_prompt_overwrite && confirm_transfer_state == 1))
             {
-                activity_inprogess = true;
                 sprintf(activity_message, "%s", "");
-                stop_activity = false;
                 confirm_transfer_state = -1;
                 if (paste_action == ACTION_REMOTE_CUT)
                     Actions::MoveRemoteFiles();
@@ -2899,7 +2818,6 @@ namespace Windows
                     Actions::CopyRemoteFiles();
                 else
                 {
-                    activity_inprogess = false;
                 }
                 selected_action = ACTION_NONE;
             }

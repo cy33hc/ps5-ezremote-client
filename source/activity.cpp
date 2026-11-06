@@ -216,6 +216,16 @@ namespace Activities
         return false;
     }
 
+    bool Latest(Activity *out)
+    {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        if (activity_list.empty())
+            return false;
+        if (out != nullptr)
+            *out = activity_list.back();
+        return true;
+    }
+
     bool AnyRunning()
     {
         std::lock_guard<std::mutex> lock(activity_mutex);

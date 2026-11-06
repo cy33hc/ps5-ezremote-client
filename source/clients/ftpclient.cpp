@@ -16,6 +16,7 @@
 #include "clients/ftpclient.h"
 #include "util.h"
 #include "windows.h"
+#include "activity.h"
 
 #define FTP_CLIENT_BUFSIZ 1048576
 #define ACCEPT_TIMEOUT 30
@@ -1223,14 +1224,14 @@ int FtpClient::Rmdir(const std::string &path)
  */
 int FtpClient::Rmdir(const std::string &path, bool recursive)
 {
-	if (stop_activity)
+	if (Activities::Stopped())
 		return 1;
 
 	std::vector<DirEntry> list = ListDir(path);
 	int ret;
 	for (int i = 0; i < list.size(); i++)
 	{
-		if (stop_activity)
+		if (Activities::Stopped())
 			return 1;
 
 		if (list[i].isDir && recursive)

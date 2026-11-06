@@ -15,6 +15,7 @@
 #include "clients/smbclient.h"
 #include "windows.h"
 #include "util.h"
+#include "activity.h"
 
 SmbClient::SmbClient()
 {
@@ -148,14 +149,14 @@ int SmbClient::_Rmdir(const std::string &ppath)
  */
 int SmbClient::Rmdir(const std::string &path, bool recursive)
 {
-	if (stop_activity)
+	if (Activities::Stopped())
 		return 1;
 
 	std::vector<DirEntry> list = ListDir(path);
 	int ret;
 	for (int i = 0; i < list.size(); i++)
 	{
-		if (stop_activity)
+		if (Activities::Stopped())
 			return 1;
 
 		if (list[i].isDir && recursive)

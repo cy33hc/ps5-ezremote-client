@@ -253,6 +253,7 @@ export interface Settings {
   showHiddenFiles: boolean;
   tempFolder: string;
   enableBackgroundDownload: boolean;
+  showActivityDialog: boolean;
   minimumBackgroundFileSize: number;
   webServerEnabled: boolean;
   httpServerPort: number;

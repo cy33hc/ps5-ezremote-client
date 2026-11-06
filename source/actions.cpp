@@ -303,12 +303,10 @@ namespace Actions
         sprintf(confirm_message, "%s %s?", lang_strings[STR_OVERWRITE], dest);
         confirm_state = CONFIRM_WAIT;
         action_to_take = selected_action;
-        activity_inprogess = false;
         while (confirm_state == CONFIRM_WAIT)
         {
             usleep(100000);
         }
-        activity_inprogess = true;
         selected_action = action_to_take;
     }
 
@@ -325,8 +323,6 @@ namespace Actions
             Activities::Item(activity.id, it->path);
             FS::RmRecursive(it->path);
         }
-        activity_inprogess = false;
-        Windows::SetModalMode(false);
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
     }
@@ -339,8 +335,6 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, DeleteSelectedLocalFilesThread, job);
         if (thread_res != 0)
         {
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
             selected_action = ACTION_REFRESH_LOCAL_FILES;
         }
     }
@@ -386,8 +380,6 @@ namespace Actions
         }
 
         RemotePool::Release(client, healthy);
-        activity_inprogess = false;
-        Windows::SetModalMode(false);
         return NULL;
     }
 
@@ -399,8 +391,6 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, DeleteSelectedRemotesFilesThread, job);
         if (thread_res != 0)
         {
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
         }
     }
 
@@ -538,10 +528,8 @@ namespace Actions
         }
 
         RemotePool::Release(client, true);
-        activity_inprogess = false;
         file_transfering = false;
         multi_selected_local_files.clear();
-        Windows::SetModalMode(false);
         selected_action = ACTION_REFRESH_REMOTE_FILES;
         return NULL;
     }
@@ -555,10 +543,8 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, UploadFilesThread, job);
         if (thread_res != 0)
         {
-            activity_inprogess = false;
             file_transfering = false;
             multi_selected_local_files.clear();
-            Windows::SetModalMode(false);
             selected_action = ACTION_REFRESH_REMOTE_FILES;
         }
     }
@@ -767,9 +753,7 @@ namespace Actions
         RemotePool::Release(client, true);
 
         file_transfering = false;
-        activity_inprogess = false;
         multi_selected_remote_files.clear();
-        Windows::SetModalMode(false);
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
     }
@@ -784,9 +768,7 @@ namespace Actions
         if (thread_res != 0)
         {
             file_transfering = false;
-            activity_inprogess = false;
             multi_selected_remote_files.clear();
-            Windows::SetModalMode(false);
             selected_action = ACTION_REFRESH_LOCAL_FILES;
         }
     }
@@ -808,8 +790,6 @@ namespace Actions
         {
             sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
             RemotePool::Release(client, true);
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
             return NULL;
         }
 
@@ -933,9 +913,7 @@ namespace Actions
         }
     finish:
         RemotePool::Release(client, true);
-        activity_inprogess = false;
         multi_selected_remote_files.clear();
-        Windows::SetModalMode(false);
         return NULL;
     }
 
@@ -948,10 +926,8 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, InstallRemotePkgsThread, job);
         if (thread_res != 0)
         {
-            activity_inprogess = false;
             file_transfering = false;
             multi_selected_remote_files.clear();
-            Windows::SetModalMode(false);
         }
     }
 
@@ -1103,9 +1079,7 @@ namespace Actions
                     lang_strings[STR_INSTALL_SUCCESS], success, lang_strings[STR_INSTALL_FAILED], failed,
                     lang_strings[STR_INSTALL_SKIPPED], skipped);
         }
-        activity_inprogess = false;
         multi_selected_local_files.clear();
-        Windows::SetModalMode(false);
         return NULL;
     }
 
@@ -1118,9 +1092,7 @@ namespace Actions
         int thread_res = pthread_create(&bk_activity_thid, NULL, InstallLocalPkgsThread, job);
         if (thread_res != 0)
         {
-            activity_inprogess = false;
             multi_selected_local_files.clear();
-            Windows::SetModalMode(false);
         }
     }
 
@@ -1147,9 +1119,7 @@ namespace Actions
                 }
             }
         }
-        activity_inprogess = false;
         multi_selected_local_files.clear();
-        Windows::SetModalMode(false);
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
     }
@@ -1166,9 +1136,7 @@ namespace Actions
         {
             delete job;
             file_transfering = false;
-            activity_inprogess = false;
             multi_selected_local_files.clear();
-            Windows::SetModalMode(false);
         }
     }
 
@@ -1207,9 +1175,7 @@ namespace Actions
         }
 
         RemotePool::Release(client, true);
-        activity_inprogess = false;
         multi_selected_remote_files.clear();
-        Windows::SetModalMode(false);
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
     }
@@ -1226,9 +1192,7 @@ namespace Actions
         {
             delete job;
             file_transfering = false;
-            activity_inprogess = false;
             multi_selected_remote_files.clear();
-            Windows::SetModalMode(false);
         }
     }
 
@@ -1259,9 +1223,7 @@ namespace Actions
         {
             sprintf(status_message, "%s", lang_strings[STR_ERROR_CREATE_ZIP]);
         }
-        activity_inprogess = false;
         multi_selected_local_files.clear();
-        Windows::SetModalMode(false);
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
     }
@@ -1278,9 +1240,7 @@ namespace Actions
         {
             delete job;
             file_transfering = false;
-            activity_inprogess = false;
             multi_selected_local_files.clear();
-            Windows::SetModalMode(false);
         }
     }
 
@@ -1297,8 +1257,6 @@ namespace Actions
         if (!filehost->IsValidUrl())
         {
             sprintf(status_message, "%s", lang_strings[STR_FAIL_TO_OBTAIN_GG_DL_MSG]);
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
             return NULL;
         }
         full_url = filehost->GetDownloadUrl();
@@ -1307,8 +1265,6 @@ namespace Actions
         if (full_url.empty())
         {
             sprintf(status_message, "%s", lang_strings[STR_FAIL_TO_OBTAIN_GG_DL_MSG]);
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
             return NULL;
         }
         size_t scheme_pos = full_url.find_first_of("://");
@@ -1329,8 +1285,6 @@ namespace Actions
         {
             sprintf(status_message, "%s", tmp_client.LastResponse());
             tmp_client.Quit();
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
             return NULL;
         }
 
@@ -1341,8 +1295,6 @@ namespace Actions
         {
             sprintf(status_message, "%s - %s", lang_strings[STR_FAILED], tmp_client.LastResponse());
             tmp_client.Quit();
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
             return NULL;
         }
         tmp_client.Quit();
@@ -1351,8 +1303,6 @@ namespace Actions
         if (in == NULL)
         {
             sprintf(status_message, "%s - Error opening temp pkg file - %s", lang_strings[STR_FAILED], filename);
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
             return NULL;
         }
 
@@ -1383,8 +1333,6 @@ namespace Actions
             }
         }
 
-        activity_inprogess = false;
-        Windows::SetModalMode(false);
         return NULL;
     }
 
@@ -1425,21 +1373,15 @@ namespace Actions
                         {
                             std::string error_message = JsonGetString(result, "error");
                             snprintf(status_message, 1024, "%s", error_message.c_str());
-                            activity_inprogess = false;
-                            Windows::SetModalMode(false);
                         }
                     }
                 }
                 else
                 {
-                    activity_inprogess = false;
-                    Windows::SetModalMode(false);
                 }
             }
             else
             {
-                activity_inprogess = false;
-                Windows::SetModalMode(false);
             }
         }
 
@@ -1458,8 +1400,6 @@ namespace Actions
 
         if (res != 0)
         {
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
         }
     }
 
@@ -1746,10 +1686,8 @@ namespace Actions
                 CopyOrMove(*it, target.c_str(), false);
             }
         }
-        activity_inprogess = false;
         file_transfering = false;
         local_paste_files.clear();
-        Windows::SetModalMode(false);
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
     }
@@ -1765,9 +1703,7 @@ namespace Actions
         if (thread_res != 0)
         {
             file_transfering = false;
-            activity_inprogess = false;
             local_paste_files.clear();
-            Windows::SetModalMode(false);
         }
     }
 
@@ -1833,10 +1769,8 @@ namespace Actions
                 CopyOrMoveLocalFile(it->path, target.c_str(), true);
             }
         }
-        activity_inprogess = false;
         file_transfering = false;
         local_paste_files.clear();
-        Windows::SetModalMode(false);
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
     }
@@ -1852,9 +1786,7 @@ namespace Actions
         if (thread_res != 0)
         {
             file_transfering = false;
-            activity_inprogess = false;
             local_paste_files.clear();
-            Windows::SetModalMode(false);
         }
     }
 
@@ -1900,8 +1832,6 @@ namespace Actions
         {
             RemotePool::Release(client, true);
             file_transfering = false;
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
             return NULL;
         }
         file_transfering = false;
@@ -1931,10 +1861,8 @@ namespace Actions
                 sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
         }
         RemotePool::Release(client, true);
-        activity_inprogess = false;
         file_transfering = false;
         remote_paste_files.clear();
-        Windows::SetModalMode(false);
         selected_action = ACTION_REFRESH_REMOTE_FILES;
         return NULL;
     }
@@ -1950,9 +1878,7 @@ namespace Actions
         if (thread_res != 0)
         {
             file_transfering = false;
-            activity_inprogess = false;
             remote_paste_files.clear();
-            Windows::SetModalMode(false);
         }
     }
 
@@ -2039,8 +1965,6 @@ namespace Actions
         {
             RemotePool::Release(client, true);
             file_transfering = false;
-            activity_inprogess = false;
-            Windows::SetModalMode(false);
             return NULL;
         }
         file_transfering = false;
@@ -2075,10 +1999,8 @@ namespace Actions
             }
         }
         RemotePool::Release(client, true);
-        activity_inprogess = false;
         file_transfering = false;
         remote_paste_files.clear();
-        Windows::SetModalMode(false);
         selected_action = ACTION_REFRESH_REMOTE_FILES;
         return NULL;
     }
@@ -2094,9 +2016,7 @@ namespace Actions
         if (thread_res != 0)
         {
             file_transfering = false;
-            activity_inprogess = false;
             remote_paste_files.clear();
-            Windows::SetModalMode(false);
         }
     }
 

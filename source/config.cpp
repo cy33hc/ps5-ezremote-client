@@ -51,6 +51,7 @@ char realdebrid_api_key[64];
 char temp_folder[256];
 std::string ezremote_server_version;
 bool enable_background_download;
+bool show_activity_dialog = true;
 uint64_t minimum_backgrond_file_size;
 
 unsigned char cipher_key[32] = {'s', '5', 'v', '8', 'y', '/', 'B', '?', 'E', '(', 'H', '+', 'M', 'b', 'Q', 'e', 'T', 'h', 'W', 'm', 'Z', 'q', '4', 't', '7', 'w', '9', 'z', '$', 'C', '&', 'F'};
@@ -177,6 +178,9 @@ namespace CONFIG
 
         enable_background_download = ReadBool(CONFIG_GLOBAL, CONFIG_ENABLE_BG_DOWNLOAD, true);
         WriteBool(CONFIG_GLOBAL, CONFIG_ENABLE_BG_DOWNLOAD, enable_background_download);
+
+        show_activity_dialog = ReadBool(CONFIG_GLOBAL, CONFIG_SHOW_ACTIVITY_DIALOG, true);
+        WriteBool(CONFIG_GLOBAL, CONFIG_SHOW_ACTIVITY_DIALOG, show_activity_dialog);
 
         minimum_backgrond_file_size = ReadLong(CONFIG_GLOBAL, CONFIG_BG_DOWNLOAD_SIZE, 1024*1024*1024);
         WriteLong(CONFIG_GLOBAL, CONFIG_BG_DOWNLOAD_SIZE, minimum_backgrond_file_size);
@@ -407,6 +411,7 @@ namespace CONFIG
         WriteBool(CONFIG_HTTP_SERVER, CONFIG_HTTP_SERVER_ENABLED, web_server_enabled);
         WriteBool(CONFIG_GLOBAL, CONFIG_ENABLE_BG_DOWNLOAD, enable_background_download);
         WriteLong(CONFIG_GLOBAL, CONFIG_BG_DOWNLOAD_SIZE, minimum_backgrond_file_size);
+        WriteBool(CONFIG_GLOBAL, CONFIG_SHOW_ACTIVITY_DIALOG, show_activity_dialog);
 
         WriteIniFile(CONFIG_INI_FILE);
         CloseIniFile();

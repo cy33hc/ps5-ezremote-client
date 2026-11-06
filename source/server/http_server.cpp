@@ -53,6 +53,53 @@ bool web_server_enabled = false;
 
 namespace HttpServer
 {
+    // ---------- shared types ----------
+
+    // Progress for cross-pane copies. The copy runs on a worker thread so the
+    // HTTP request can return immediately and the UI can poll for bytes.
+    struct WebTransfer
+    {
+        std::string name;
+        uint64_t loaded = 0;
+        uint64_t total = 0;
+        int state = 0; // 0 running, 1 done, 2 failed
+        std::string error;
+        uint64_t activity_id = 0;
+        // While an upload is in flight, progress is read from the connection's
+        // own counters instead of the shared globals.
+        std::shared_ptr<RemoteClient> held;
+        RemoteClient *client = nullptr;
+        uint64_t base = 0;
+        bool live = false;
+    };
+
+    // Local uploads arrive as chunks in separate requests, so the activity has
+    // to outlive one request; it is closed by the chunk that completes the file.
+    struct LocalUploadState
+    {
+        uint64_t activity_id;
+        uint64_t total;
+        uint64_t received;
+        time_t touched;
+    };
+
+    struct CopyItem
+    {
+        std::string path;
+        bool is_dir = false;
+    };
+
+    struct CopyJob
+    {
+        std::string id;
+        std::string site;
+        std::string dest;
+        std::vector<CopyItem> items;
+        std::set<std::string> skip;
+        bool to_remote = false;
+        uint64_t total = 0;
+    };
+
     std::string dump_headers(const Headers &headers)
     {
         std::string s;
@@ -320,23 +367,8 @@ namespace HttpServer
         return client;
     }
 
-    // Progress for cross-pane copies. The copy runs on a worker thread so the
-    // HTTP request can return immediately and the UI can poll for bytes.
-    struct WebTransfer
-    {
-        std::string name;
-        uint64_t loaded = 0;
-        uint64_t total = 0;
-        int state = 0; // 0 running, 1 done, 2 failed
-        std::string error;
-        uint64_t activity_id = 0;
-        // While an upload is in flight, progress is read from the connection's
-        // own counters instead of the shared globals.
-        std::shared_ptr<RemoteClient> held;
-        RemoteClient *client = nullptr;
-        uint64_t base = 0;
-        bool live = false;
-    };
+    static std::mutex local_upload_mutex;
+    static std::map<std::string, LocalUploadState> local_uploads;
 
     static std::mutex web_transfer_mutex;
     static std::map<std::string, WebTransfer> web_transfers;
@@ -397,23 +429,6 @@ namespace HttpServer
         it->second.state = state;
         it->second.error = error;
     }
-
-    struct CopyItem
-    {
-        std::string path;
-        bool is_dir = false;
-    };
-
-    struct CopyJob
-    {
-        std::string id;
-        std::string site;
-        std::string dest;
-        std::vector<CopyItem> items;
-        std::set<std::string> skip;
-        bool to_remote = false;
-        uint64_t total = 0;
-    };
 
     static std::string CopyItemName(const std::string &path)
     {
@@ -3368,6 +3383,7 @@ namespace HttpServer
             size_t chunk_number = -1;
             size_t total_size = 0;
             size_t currentChunkSize = 0;
+            size_t chunk_bytes = 0;
             FILE *out = nullptr;
             std::string new_file;
             content_reader(
@@ -3419,7 +3435,10 @@ namespace HttpServer
                     else
                     {
                         if (out != nullptr)
+                        {
                             FS::Write(out, data, data_length);
+                            chunk_bytes += data_length;
+                        }
                     }
                     return true;
                 });
@@ -3427,6 +3446,55 @@ namespace HttpServer
             {
                 FS::Close(out);
             }
+
+            if (!new_file.empty())
+            {
+                const uint64_t received = (uint64_t) chunk_number * chunk_size + chunk_bytes;
+                const bool last = total_size == 0 || received >= total_size;
+                const std::string name = new_file.substr(new_file.find_last_of("/") + 1);
+
+                uint64_t activity_id = 0;
+                {
+                    std::lock_guard<std::mutex> lock(local_upload_mutex);
+
+                    // Abandoned uploads would stay Running forever; finish them.
+                    for (std::map<std::string, LocalUploadState>::iterator it = local_uploads.begin(); it != local_uploads.end();)
+                    {
+                        if (time(NULL) - it->second.touched > 120)
+                        {
+                            Activities::Finish(it->second.activity_id, ACTIVITY_CANCELLED);
+                            it = local_uploads.erase(it);
+                        }
+                        else
+                            ++it;
+                    }
+
+                    std::map<std::string, LocalUploadState>::iterator it = local_uploads.find(new_file);
+                    if (chunk_number == 0 || it == local_uploads.end())
+                    {
+                        LocalUploadState state = { Activities::Begin(ACTIVITY_UPLOAD, "Uploading " + name, ACTIVITY_WEB, ACTIVITY_LOCAL), total_size, received, time(NULL) };
+                        activity_id = state.activity_id;
+                        if (last)
+                            local_uploads.erase(new_file);
+                        else
+                            local_uploads[new_file] = state;
+                    }
+                    else
+                    {
+                        activity_id = it->second.activity_id;
+                        it->second.received = received;
+                        it->second.touched = time(NULL);
+                        if (last)
+                            local_uploads.erase(it);
+                    }
+                }
+
+                Activities::Item(activity_id, name);
+                Activities::Progress(activity_id, received, total_size);
+                if (last)
+                    Activities::Finish(activity_id, ACTIVITY_DONE);
+            }
+
             success(res); });
 
         // Download multiple files as ZIP

@@ -1,5 +1,6 @@
 #include <string>
 #include <map>
+#include <atomic>
 #include <mutex>
 #include <shared_mutex>
 #include <json-c/json.h>
@@ -4056,12 +4057,13 @@ namespace HttpServer
 
     void Stop()
     {
-        // Remote sessions are intentionally left to process teardown: stop() does
-        // not join in-flight handlers, so freeing them here could pull a client
-        // out from under a request that is still listing or transferring.
+        static std::atomic<bool> stopped{false};
+        if (stopped.exchange(true))
+            return;
+
         if (svr != nullptr)
+        {
             svr->stop();
-        
-        pthread_cancel(http_server_thid);
+        }
     }
 }

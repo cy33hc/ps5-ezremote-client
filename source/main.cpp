@@ -18,6 +18,7 @@
 #include "textures.h"
 #include "windows.h"
 #include "activity.h"
+#include <signal.h>
 // #include "dbglogger.h"
 
 extern "C"
@@ -320,25 +321,32 @@ int main()
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL2_Init();
 
-	atexit(terminate);
-
 	GUI::RenderLoop(window);
 
 	Activities::Shutdown();
+
 	HttpServer::Stop();
+
 	if (remoteclient != nullptr)
 	{
 		remoteclient->Quit();
 	}
-	sleep(1);
 
 	ImGui_ImplOpenGL2_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
+	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext();
+
 	Textures::Exit();
-    SDL_GL_DeleteContext(gl_context);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+
+	SDL_GL_DeleteContext(gl_context);
+	SDL_DestroyWindow(window);
+	SDL_Quit();
+
+	terminate();
+
+	// _exit() (exit_group) waits for every thread to leave. Something in this
+	// process never does, so it blocks; SIGKILL cannot be deferred.
+	kill(getpid(), SIGKILL);
 
 	_exit(0);
 

@@ -289,12 +289,12 @@ export default function App() {
     };
 
     void load();
-    const timer = window.setInterval(load, bgOpen ? 1500 : 5000);
+    const timer = window.setInterval(load, activityOpen ? 1000 : bgOpen ? 1500 : 3000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [bgOpen, authed, showActivityDialog]);
+  }, [bgOpen, activityOpen, authed, showActivityDialog]);
 
   // Connect the remote pane once a profile is known (and only once per failure).
   useEffect(() => {
@@ -1874,6 +1874,19 @@ function ActivitiesDialog({
                 <p className="mt-1 truncate font-mono text-[11px] text-mist-500" title={item.item}>
                   {item.item}
                 </p>
+              ) : null}
+              {item.state === "Running" && item.total > 0 ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-abyss-700">
+                    <div
+                      className="h-full rounded-full bg-accent-500 transition-[width] duration-300"
+                      style={{ width: `${Math.min(100, Math.round((item.done / item.total) * 100))}%` }}
+                    />
+                  </div>
+                  <span className="shrink-0 font-mono text-[10px] text-mist-500">
+                    {Math.min(100, Math.round((item.done / item.total) * 100))}%
+                  </span>
+                </div>
               ) : null}
             </li>
           ))}

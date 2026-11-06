@@ -4,7 +4,6 @@
 #include <shared_mutex>
 #include <json-c/json.h>
 #include "json_object_ref.h"
-#include <server/range_parser.h>
 #include "http/httplib.h"
 #include "server/http_server.h"
 #include "actions.h"

@@ -16,7 +16,7 @@ namespace
 
     // Enough to overlap a couple of operations without exhausting the console's
     // session slots.
-    const size_t POOL_MAX_PER_SITE = 4;
+    const size_t POOL_MAX_PER_SITE = 6;
 
     // Live (checked out) connections per site: beyond this, callers wait so a
     // burst of requests cannot exhaust the server's session limit.

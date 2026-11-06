@@ -238,14 +238,6 @@ export async function removeFavorite(index: number): Promise<void> {
   await request("/__local__/favorites/remove", { index });
 }
 
-/** Posts one multipart chunk to /__remote__/upload and surfaces server errors. */
-export async function uploadRemoteChunk(form: FormData): Promise<void> {
-  const response = await fetch("/__remote__/upload", { method: "POST", body: form });
-  const data = (await response.json().catch(() => null)) as { result?: { success?: boolean; error?: string | null } } | null;
-  if (!response.ok) throw new ApiError(`Upload failed (HTTP ${response.status})`);
-  if (data?.result && data.result.success === false) throw new ApiError(data.result.error ?? "Upload failed");
-}
-
 export interface Settings {
   language: string;
   languages: string[];

@@ -107,6 +107,11 @@ export async function extract(item: string, destination: string, folderName: str
   await request("/__local__/extract", { item, destination, folderName });
 }
 
+/** Extracts an archive that lives on the remote server into a local folder. */
+export async function extractRemote(site: string, item: string, destination: string, folderName: string): Promise<void> {
+  await request("/__remote__/extract", { site, item, destination, folderName });
+}
+
 export async function chmod(path: string, rights: string): Promise<void> {
   await request("/__local__/chmod", { path, rights });
 }

@@ -2880,6 +2880,72 @@ namespace HttpServer
             }
         });
 
+        // Extracts an archive that lives on the remote server into a local
+        // folder, mirroring the console's "Extract remote" action.
+        svr->Post("/__remote__/extract", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+
+            const char *item = nullptr;
+            const char *destination = nullptr;
+            const char *folderName = nullptr;
+            std::string site = last_site;
+
+            if (jobj != nullptr)
+            {
+                item = json_object_get_string(json_object_object_get(jobj, "item"));
+                destination = json_object_get_string(json_object_object_get(jobj, "destination"));
+                folderName = json_object_get_string(json_object_object_get(jobj, "folderName"));
+                site = ResolveSite(json_object_get_string(json_object_object_get(jobj, "site")));
+
+                if (item == nullptr || destination == nullptr || folderName == nullptr)
+                {
+                    bad_request(res, "Required item,destination,folderName parameter missing");
+                    return;
+                }
+            }
+            else
+            {
+                bad_request(res, "Invalid payload");
+                return;
+            }
+
+            std::string extract_folder = std::string(destination) + "/" + folderName;
+
+            DirEntry entry;
+            sprintf(entry.name, "%s", "");
+            sprintf(entry.path, "%s", item);
+            entry.isDir = false;
+
+            Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting remote compress files", ACTIVITY_WEB, ACTIVITY_REMOTE);
+            Activities::Item(activity.id, item);
+
+            std::map<std::string, RemoteSettings>::iterator setting = site_settings.find(site);
+            if (setting == site_settings.end())
+            {
+                failed(res, 200, "Unknown site");
+                return;
+            }
+
+            std::shared_ptr<RemoteClient> held = RemotePool::AcquireShared(setting->second);
+            if (held == nullptr)
+            {
+                failed(res, 200, "Could not connect");
+                return;
+            }
+
+            FS::MkDirs(extract_folder);
+            int ret = ZipUtil::Extract(entry, extract_folder, held.get());
+
+            if (ret == 0)
+                failed(res, 200, "Failed to extract file");
+            else if (ret == -1)
+                failed(res, 200, "Unsupported compressed file format");
+            else
+                success(res);
+        });
+
         svr->Post("/__remote__/mkdir", [&](const Request &req, Response &res)
         {
             json_object *jobj = json_tokener_parse(req.body.c_str());

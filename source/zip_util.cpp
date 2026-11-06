@@ -278,11 +278,10 @@ namespace ZipUtil
     /*
      * Extract to a file descriptor
      */
-    static int extract2fd(struct archive *a, const std::string &pathname, int fd, uint64_t total_size)
+    static int extract2fd(struct archive *a, const std::string &pathname, int fd)
     {
         ssize_t len;
         unsigned char *buffer = (unsigned char *)malloc(ARCHIVE_TRANSFER_SIZE);
-        uint64_t extracted = 0;
         prev_tick = Util::GetTick();
 
         /* loop over file contents and write to fd */
@@ -302,9 +301,6 @@ namespace ZipUtil
                 free(buffer);
                 return 0;
             }
-            extracted += len;
-            Activities::ProgressCurrent(extracted, total_size);
-
             if (write(fd, buffer, len) != len)
             {
                 sprintf(status_message, "error write('%s')", pathname.c_str());
@@ -354,7 +350,7 @@ namespace ZipUtil
             return;
         }
 
-        extract2fd(a, path, fd, total_size);
+        extract2fd(a, path, fd);
 
         /* set access and modification time */
         if (close(fd) != 0)
@@ -478,6 +474,9 @@ namespace ZipUtil
             return -1;
         data->offset = data->offset + to_read;
 
+        // Archive-level progress: bytes consumed of the whole archive.
+        Activities::ProgressCurrent(data->offset, data->size);
+
         return to_read;
     }
 
@@ -577,6 +576,11 @@ namespace ZipUtil
         }
 
         FS::MkDirs(basepath.c_str());
+
+        uint64_t archive_total = 0;
+        if (client == nullptr)
+            archive_total = (uint64_t) FS::GetSize(file.path);
+
         for (;;)
         {
             if (Activities::Stopped())
@@ -595,6 +599,9 @@ namespace ZipUtil
                 break;
 
             extract(a, e, basepath);
+
+            if (client == nullptr && archive_total > 0)
+                Activities::ProgressCurrent((uint64_t) archive_filter_bytes(a, 0), archive_total);
         }
 
         archive_read_free(a);

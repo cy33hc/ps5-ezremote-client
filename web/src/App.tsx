@@ -99,12 +99,15 @@ export default function App() {
   const [activityList, setActivityList] = useState<api.Activity[]>([]);
   const [showActivityDialog, setShowActivityDialog] = useState(true);
   const lastActivityIdRef = useRef(0);
-  useEffect(() => {
-    void api
-      .getSettings()
-      .then((loaded) => setShowActivityDialog(loaded.showActivityDialog))
-      .catch(() => {});
+  const loadPreferences = useCallback(async () => {
+    try {
+      const loaded = await api.getSettings();
+      setShowActivityDialog(loaded.showActivityDialog);
+    } catch {
+      // Keep the current value.
+    }
   }, []);
+
   const [activityOpen, setActivityOpen] = useState(false);
   const [exitDialog, setExitDialog] = useState<"stop" | "restart" | null>(null);
   const [remotePkgView, setRemotePkgView] = useState<DirEntry | null>(null);
@@ -113,6 +116,13 @@ export default function App() {
   // swallows that gesture, so only enable dragging for precise pointers.
   const [dragEnabled, setDragEnabled] = useState(false);
   const authed = auth !== null && auth.authenticated;
+
+  // Settings are gated: reading them before login fails, which would leave the
+  // defaults in place for the whole session.
+  useEffect(() => {
+    if (!authed) return;
+    void loadPreferences();
+  }, [authed, loadPreferences]);
   const [bgList, setBgList] = useState<api.BgDownload[]>([]);
   const [ezremoteVersion, setEzremoteVersion] = useState<string | null>(null);
   const [ezMenu, setEzMenu] = useState<{ x: number; y: number } | null>(null);
@@ -251,6 +261,7 @@ export default function App() {
             // Seed the baseline on first poll: existing history is not news.
             const firstPoll = lastActivityIdRef.current === 0;
             lastActivityIdRef.current = newest.id;
+
             // Native-initiated work is surfaced on the console only.
             if (!firstPoll && showActivityDialog && newest.origin !== "Native") setActivityOpen(true);
           }
@@ -1070,6 +1081,24 @@ export default function App() {
     });
   };
 
+  const remoteExtract = (entry: DirEntry) => {
+    if (!serverInfo) return;
+    setPromptState({
+      title: "Extract remote archive",
+      label: "Destination folder (local)",
+      initial: entry.name.replace(/\.[^.]+$/, ""),
+      confirmLabel: "Extract",
+      onSubmit: (value) => {
+        const folder = value.trim();
+        if (!folder) return;
+        void run("Extracting…", async () => {
+          await api.extractRemote(serverInfo.active, joinPath(remotePath, entry.name), path, folder);
+          notify(`Extracted to ${folder}`, "success");
+        });
+      },
+    });
+  };
+
   const remoteMenu = (entry: DirEntry | null): MenuItem[] => {
     const items: MenuItem[] = [];
     if (entry) {
@@ -1089,6 +1118,13 @@ export default function App() {
           });
         if (entry.name.toLowerCase().endsWith(".pkg"))
           items.push({ label: "Package info", icon: "info", onSelect: () => openRemotePkgInfo(entry), disabled: !serverInfo });
+        if (isArchive(entry.name))
+          items.push({
+            label: "Extract to local folder",
+            icon: "archive",
+            onSelect: () => remoteExtract(entry),
+            disabled: !serverInfo || !canRemote(RA.EXTRACT),
+          });
         if (IMAGE_FILE.test(entry.name) && serverInfo)
           items.push({
             label: "Preview image",
@@ -1541,7 +1577,13 @@ export default function App() {
         />
       ) : null}
       {viewer ? <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} /> : null}
-      {settingsOpen ? <SettingsDialog onClose={() => setSettingsOpen(false)} onSaved={() => void loadServerInfo()} /> : null}
+      {settingsOpen ? <SettingsDialog
+          onClose={() => setSettingsOpen(false)}
+          onSaved={() => {
+            void loadServerInfo();
+            void loadPreferences();
+          }}
+        /> : null}
       {serversOpen ? (
         <ServersDialog
           onClose={() => setServersOpen(false)}

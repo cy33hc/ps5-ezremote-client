@@ -49,6 +49,7 @@ add_executable(ezremote_client.elf
   source/server/http_server.cpp
   source/actions.cpp
   source/activity.cpp
+  source/fonts.cpp
   source/remote_pool.cpp
   source/config.cpp
   source/crypt.c

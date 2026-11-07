@@ -365,9 +365,18 @@ export async function bgDownloads(): Promise<BgDownload[]> {
 }
 
 /** Empty string when the ezRemote server is not reachable. */
-export async function ezremoteVersion(): Promise<string> {
-  const data = await request<{ version?: string }>("/__local__/ezremote_server/version");
-  return typeof data.version === "string" ? data.version : "";
+export interface ServerStatus {
+  version: string;
+  /** Console language; the poll doubles as the language signal. */
+  language: string;
+}
+
+export async function ezremoteStatus(): Promise<ServerStatus> {
+  const data = await request<{ version?: string; language?: string }>("/__local__/ezremote_server/version");
+  return {
+    version: typeof data.version === "string" ? data.version : "",
+    language: typeof data.language === "string" ? data.language : "",
+  };
 }
 
 export async function ezremoteStop(): Promise<void> {
@@ -393,16 +402,22 @@ export async function installRemotePackage(site: string, path: string, size: num
 
 export interface Activity {
   id: number;
-  kind: string;
+  /** ACTIVITY_* from activity.h: 0 copy, 1 move, 2 delete, 3 compress, 4 extract, 5 upload, 6 download, 7 install. */
+  kind: number;
+  kindName: string;
   /** Running | Done | Failed | Cancelled */
-  state: string;
+  /** ACTIVITY_* state: 0 running, 1 done, 2 failed, 3 cancelled, 4 partial. */
+  state: number;
+  stateName: string;
   label: string;
   item: string;
   done: number;
   total: number;
   elapsed: number;
   /** "Native" or "Web" */
-  origin: string;
+  /** ACTIVITY_NATIVE = 0, ACTIVITY_WEB = 1. */
+  origin: number;
+  originName: string;
 }
 
 /** Removes finished entries; returns how many were dropped. */

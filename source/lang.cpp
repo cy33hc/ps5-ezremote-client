@@ -110,6 +110,7 @@ char lang_strings[LANG_STRINGS_NUM][LANG_STR_SIZE] = {
 	"Cut",																							  // STR_CUT
 	"Copy",																							  // STR_COPY
 	"Paste",																						  // STR_PASTE
+	"Move",																										  // STR_MOVE
 	"Moving",																						  // STR_MOVING
 	"Copying",																						  // STR_COPYING
 	"Failed to move file",																			  // STR_FAIL_MOVE_MSG
@@ -189,12 +190,48 @@ char lang_strings[LANG_STRINGS_NUM][LANG_STR_SIZE] = {
 	"Minimum background file size (bytes)",                                                           // STR_BG_DOWNLOAD_MIN_SIZE
 	"Background Download Progress",                                                                   // STR_BG_DOWNLOAD_PROGRESS
 	"Show Background Download Progress",                                                              // STR_SHOW_BG_DOWNLOAD_PROGRESS
+	"Running",																									  // STR_STATE_RUNNING
+	"Done",																										  // STR_STATE_DONE
+	"Failed",																									  // STR_STATE_FAILED
+	"Cancelled",																								  // STR_STATE_CANCELLED
+	"Partial",																									  // STR_STATE_PARTIAL
+	"Native",																									  // STR_ORIGIN_NATIVE
+	"Web",																										  // STR_ORIGIN_WEB
+	"Activities",																								  // STR_ACTIVITIES
+	"Clear completed",																						  // STR_CLEAR_COMPLETED
+	"Clear history",																								  // STR_CLEAR_HISTORY
+	"Show activities dialog on new activity",											  // STR_SHOW_ACTIVITIES_DIALOG
 };
 
 bool needs_extended_font = false;
 
 namespace Lang
 {
+	static bool reload_pending = false;
+	static std::string applied_language;
+
+	void RequestReload()
+	{
+		reload_pending = true;
+	}
+
+	void SyncRequest()
+	{
+		if (applied_language != std::string(language))
+			reload_pending = true;
+	}
+
+	bool ApplyPendingReload()
+	{
+		if (!reload_pending)
+			return false;
+
+		reload_pending = false;
+		SetTranslation(0);
+		applied_language = std::string(language);
+		return true;
+	}
+
 	void SetTranslation(int32_t lang_idx)
 	{
 		char langFile[LANG_STR_SIZE * 2];

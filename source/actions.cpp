@@ -335,7 +335,7 @@ namespace Actions
     void *DeleteSelectedLocalFilesThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
-        Activities::Guard activity(ACTIVITY_DELETE, "Deleting local files");
+        Activities::Guard activity(ACTIVITY_DELETE, STR_DELETING);
         std::vector<DirEntry> files = job->files;
         delete job;
         int failed = 0;
@@ -377,7 +377,7 @@ namespace Actions
     void *DeleteSelectedRemotesFilesThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
-        Activities::Guard activity(ACTIVITY_DELETE, "Deleting remote files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
+        Activities::Guard activity(ACTIVITY_DELETE, STR_DELETING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         std::vector<DirEntry> files = job->files;
         delete job;
         int failed = 0;
@@ -565,7 +565,7 @@ namespace Actions
     void *UploadFilesThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
-        Activities::Guard activity(ACTIVITY_UPLOAD, "Uploading files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
+        Activities::Guard activity(ACTIVITY_UPLOAD, STR_UPLOADING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         std::vector<DirEntry> files = job->files;
         delete job;
         int failed = 0;
@@ -815,7 +815,7 @@ namespace Actions
     void *DownloadFilesThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
-        Activities::Guard activity(ACTIVITY_DOWNLOAD, "Downloading files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
+        Activities::Guard activity(ACTIVITY_DOWNLOAD, STR_DOWNLOADING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         std::vector<DirEntry> files = job->files;
         delete job;
         int failed = 0;
@@ -882,7 +882,7 @@ namespace Actions
     void *InstallRemotePkgsThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
-        Activities::Guard activity(ACTIVITY_INSTALL, "Installing remote packages", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
+        Activities::Guard activity(ACTIVITY_INSTALL, STR_INSTALLING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         int failed = 0;
         int success = 0;
         int skipped = 0;
@@ -1102,7 +1102,7 @@ namespace Actions
         SplitPkgInstallData *install_data = (SplitPkgInstallData*) argp;
         FileStream *sp = install_data->split_file;
 
-        Activities::Guard activity(ACTIVITY_INSTALL, "Downloading package for install", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
+        Activities::Guard activity(ACTIVITY_INSTALL, STR_DOWNLOADING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         Activities::Item(activity.id, install_data->path);
 
         /* loop over file contents and write to fd */
@@ -1115,7 +1115,7 @@ namespace Actions
     void *InstallLocalPkgsThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
-        Activities::Guard activity(ACTIVITY_INSTALL, "Installing packages");
+        Activities::Guard activity(ACTIVITY_INSTALL, STR_INSTALLING);
         int failed = 0;
         int success = 0;
         int skipped = 0;
@@ -1238,7 +1238,7 @@ namespace Actions
     void *ExtractZipThread(void *argp)
     {
         ArchiveJob *job = static_cast<ArchiveJob *>(argp);
-        Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting archive");
+        Activities::Guard activity(ACTIVITY_EXTRACT, STR_EXTRACTING);
         std::string target = job->target;
         FS::MkDirs(target);
         std::vector<DirEntry> files = job->files;
@@ -1283,7 +1283,7 @@ namespace Actions
     void *ExtractRemoteZipThread(void *argp)
     {
         ArchiveJob *job = static_cast<ArchiveJob *>(argp);
-        Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting remote archive", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
+        Activities::Guard activity(ACTIVITY_EXTRACT, STR_EXTRACTING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         FS::MkDirs(job->target);
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
@@ -1339,7 +1339,7 @@ namespace Actions
     void *MakeZipThread(void *argp)
     {
         ArchiveJob *job = static_cast<ArchiveJob *>(argp);
-        Activities::Guard activity(ACTIVITY_COMPRESS, "Creating archive");
+        Activities::Guard activity(ACTIVITY_COMPRESS, STR_COMPRESSING);
 
         zipFile zf = zipOpen64(job->target.c_str(), APPEND_STATUS_CREATE);
         if (zf != NULL)
@@ -1794,7 +1794,7 @@ namespace Actions
 
     void *MoveLocalFilesThread(void *argp)
     {
-        Activities::Guard activity(ACTIVITY_MOVE, "Moving local files");
+        Activities::Guard activity(ACTIVITY_MOVE, STR_MOVING);
         TransferJob *job = static_cast<TransferJob *>(argp);
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
@@ -1888,7 +1888,7 @@ namespace Actions
 
     void *CopyLocalFilesThread(void *argp)
     {
-        Activities::Guard activity(ACTIVITY_COPY, "Copying local files");
+        Activities::Guard activity(ACTIVITY_COPY, STR_COPYING);
         TransferJob *job = static_cast<TransferJob *>(argp);
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
@@ -1984,7 +1984,7 @@ namespace Actions
 
     void *MoveRemoteFilesThread(void *argp)
     {
-        Activities::Guard activity(ACTIVITY_MOVE, "Moving remote files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
+        Activities::Guard activity(ACTIVITY_MOVE, STR_MOVING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         TransferJob *job = static_cast<TransferJob *>(argp);
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
@@ -2126,7 +2126,7 @@ namespace Actions
 
     void *CopyRemoteFilesThread(void *argp)
     {
-        Activities::Guard activity(ACTIVITY_COPY, "Copying remote files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
+        Activities::Guard activity(ACTIVITY_COPY, STR_COPYING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         TransferJob *job = static_cast<TransferJob *>(argp);
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;

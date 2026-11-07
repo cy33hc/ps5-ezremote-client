@@ -14,7 +14,7 @@ import { PackageInfoDialog } from "./components/PackageInfoDialog";
 import { PropertiesDialog } from "./components/PropertiesDialog";
 import { ServersDialog } from "./components/ServersDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
-import { cachedLanguage, loadLanguage, observeTranslations, t, tp } from "./i18n";
+import { cachedLanguage, getLanguage, loadLanguage, observeTranslations, t, tp } from "./i18n";
 import { Toasts } from "./components/Toasts";
 import type { Toast, ToastTone } from "./components/Toasts";
 import { breadcrumbs, formatSize, isArchive, isPackage, joinPath } from "./lib/format";
@@ -263,8 +263,17 @@ export default function App() {
     const load = async () => {
       // The status button follows /version alone.
       try {
-        const version = await api.ezremoteVersion();
-        if (!cancelled) setEzremoteVersion(version);
+        const status = await api.ezremoteStatus();
+        if (!cancelled) {
+          setEzremoteVersion(status.version);
+
+          // The same poll carries the language, so a change made on the
+          // console is applied without a reload.
+          if (status.language && status.language !== getLanguage()) {
+            loadLanguage(status.language);
+            refreshTranslations();
+          }
+        }
       } catch {
         if (!cancelled) setEzremoteVersion("");
       }
@@ -281,7 +290,7 @@ export default function App() {
             lastActivityIdRef.current = newest.id;
 
             // Native-initiated work is surfaced on the console only.
-            if (!firstPoll && showActivityDialog && newest.origin !== "Native") setActivityOpen(true);
+            if (!firstPoll && showActivityDialog && newest.origin !== 0) setActivityOpen(true);
           }
         }
       } catch {
@@ -1250,8 +1259,8 @@ export default function App() {
               icon="activity"
               label="Activity"
               onClick={() => setActivityOpen(true)}
-              badge={activityList.filter((item) => item.state === "Running").length}
-              busy={activityList.some((item) => item.state === "Running")}
+              badge={activityList.filter((item) => item.state === 0).length}
+              busy={activityList.some((item) => item.state === 0)}
             />
             <HeaderButton
               icon="download"
@@ -1545,7 +1554,7 @@ export default function App() {
       {exitDialog ? (
         <ExitConfirmDialog
           mode={exitDialog}
-          running={activityList.filter((item) => item.state === "Running")}
+          running={activityList.filter((item) => item.state === 0)}
           onCancel={() => setExitDialog(null)}
           onConfirm={() => {
             const mode = exitDialog;
@@ -1874,7 +1883,7 @@ function ExitConfirmDialog({
           <ul className="mt-2 space-y-1">
             {running.slice(0, 5).map((item) => (
               <li key={item.id} className="truncate text-xs text-rose-200/80">
-                {item.kind} · {item.label}
+                {t(ACTIVITY_KINDS[item.kind] ?? item.kindName)} · {item.label}
                 {item.item ? <span className="text-rose-200/50"> — {item.item}</span> : null}
               </li>
             ))}
@@ -1887,6 +1896,15 @@ function ExitConfirmDialog({
     </Modal>
   );
 }
+
+// ACTIVITY_NATIVE = 0, ACTIVITY_WEB = 1 (source/activity.h).
+const ACTIVITY_ORIGINS = ["Native", "Web"];
+
+// Order must match ACTIVITY_* state enum in source/activity.h.
+const ACTIVITY_STATES = ["Running", "Done", "Failed", "Cancelled", "Partial"];
+
+// Order must match ACTIVITY_* in source/activity.h.
+const ACTIVITY_KINDS = ["Copy", "Move", "Delete", "Compress", "Extract", "Upload", "Download", "Install"];
 
 function ActivitiesDialog({
   activities,
@@ -1936,12 +1954,12 @@ function ActivitiesDialog({
               <div className="flex items-center gap-3">
                 <span className="min-w-0 flex-1 truncate text-sm text-mist-100">
                   <span className="mr-1.5 rounded border border-abyss-600 px-1 py-px text-[10px] uppercase tracking-wide text-mist-500">
-                    {item.origin}
+                    {t(ACTIVITY_ORIGINS[item.origin] ?? item.originName)}
                   </span>
-                  <span className="text-mist-500">{item.kind} · </span>
+                  <span className="text-mist-500">{t(ACTIVITY_KINDS[item.kind] ?? item.kindName)} · </span>
                   {item.label}
                 </span>
-                <span className={`shrink-0 text-xs ${label[item.state] ?? "text-mist-500"}`}>{item.state}</span>
+                <span className={`shrink-0 text-xs ${label[ACTIVITY_STATES[item.state]] ?? "text-mist-500"}`}>{t(ACTIVITY_STATES[item.state] ?? item.stateName)}</span>
                 <span className="shrink-0 font-mono text-xs text-mist-500">{item.elapsed}s</span>
               </div>
               {item.item ? (
@@ -1949,7 +1967,7 @@ function ActivitiesDialog({
                   {item.item}
                 </p>
               ) : null}
-              {item.state === "Running" && item.total > 0 ? (
+              {item.state === 0 && item.total > 0 ? (
                 <div className="mt-2 flex items-center gap-2">
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-abyss-700">
                     <div

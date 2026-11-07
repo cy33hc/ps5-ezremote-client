@@ -720,7 +720,7 @@ namespace HttpServer
         std::string failed_items;
         uint64_t loaded = 0;
 
-        Activities::Guard activity(ACTIVITY_COPY, job->to_remote ? "Uploading to remote" : "Downloading to local", ACTIVITY_WEB, ACTIVITY_REMOTE);
+        Activities::Guard activity(ACTIVITY_COPY, job->to_remote ? STR_UPLOADING : STR_DOWNLOADING, ACTIVITY_WEB, ACTIVITY_REMOTE);
 
         {
             std::lock_guard<std::mutex> lock(web_transfer_mutex);
@@ -1030,7 +1030,7 @@ namespace HttpServer
 
         svr->Post("/__local__/move", [&](const Request &req, Response &res)
         {
-            Activities::Guard activity(ACTIVITY_MOVE, "Moving local files", ACTIVITY_WEB);
+            Activities::Guard activity(ACTIVITY_MOVE, STR_MOVING, ACTIVITY_WEB);
 
             const json_object *items;
             const char *newPath;
@@ -1090,7 +1090,7 @@ namespace HttpServer
 
         svr->Post("/__local__/copy", [&](const Request &req, Response &res)
         {
-            Activities::Guard activity(ACTIVITY_COPY, "Copying local files", ACTIVITY_WEB);
+            Activities::Guard activity(ACTIVITY_COPY, STR_COPYING, ACTIVITY_WEB);
 
             const json_object *items;
             const char *newPath;
@@ -1183,7 +1183,7 @@ namespace HttpServer
 
         svr->Post("/__local__/remove", [&](const Request &req, Response &res)
         {
-            Activities::Guard activity(ACTIVITY_DELETE, "Deleting local files", ACTIVITY_WEB);
+            Activities::Guard activity(ACTIVITY_DELETE, STR_DELETING, ACTIVITY_WEB);
 
             json_object *items;
             json_object *jobj = json_tokener_parse(req.body.c_str());
@@ -1228,7 +1228,7 @@ namespace HttpServer
 
         svr->Post("/__local__/install", [&](const Request &req, Response &res)
         {
-            Activities::Guard activity(ACTIVITY_INSTALL, "Installing local packages", ACTIVITY_WEB);
+            Activities::Guard activity(ACTIVITY_INSTALL, STR_INSTALLING, ACTIVITY_WEB);
             json_object *items;
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
@@ -1764,6 +1764,9 @@ namespace HttpServer
             json_object *result = json_object_new_object();
             JsonObjectRef result_ref(result);
             json_object_object_add(result, "version", json_object_new_string(version.c_str()));
+            // The page polls this each cycle; it doubles as the language signal
+            // so a change on the console is picked up without a reload.
+            json_object_object_add(result, "language", json_object_new_string(language));
             const char *result_str = json_object_to_json_string(result);
             res.status = 200;
             res.set_content(result_str, strlen(result_str), "application/json");
@@ -1800,14 +1803,19 @@ namespace HttpServer
             {
                 json_object *item = json_object_new_object();
                 json_object_object_add(item, "id", json_object_new_uint64(list[i].id));
-                json_object_object_add(item, "kind", json_object_new_string(Activities::KindName(list[i].kind)));
-                json_object_object_add(item, "state", json_object_new_string(Activities::StateName(list[i].state)));
+                // Numeric kind: stable across languages, each UI maps it to its
+                // own translated label. kindName stays for logs and debugging.
+                json_object_object_add(item, "kind", json_object_new_int(list[i].kind));
+                json_object_object_add(item, "kindName", json_object_new_string(Activities::KindName(list[i].kind)));
+                json_object_object_add(item, "state", json_object_new_int(list[i].state));
+                json_object_object_add(item, "stateName", json_object_new_string(Activities::StateName(list[i].state)));
                 json_object_object_add(item, "label", json_object_new_string(list[i].label.c_str()));
                 json_object_object_add(item, "item", json_object_new_string(list[i].item.c_str()));
                 json_object_object_add(item, "done", json_object_new_uint64(list[i].done));
                 json_object_object_add(item, "total", json_object_new_uint64(list[i].total));
                 json_object_object_add(item, "elapsed", json_object_new_uint64(((list[i].finished > 0 ? list[i].finished : now) - list[i].started) / 1000000));
-                json_object_object_add(item, "origin", json_object_new_string(Activities::OriginName(list[i].origin)));
+                json_object_object_add(item, "origin", json_object_new_int(list[i].origin));
+                json_object_object_add(item, "originName", json_object_new_string(Activities::OriginName(list[i].origin)));
                 json_object_array_add(result, item);
             }
 
@@ -2269,7 +2277,7 @@ namespace HttpServer
         // Remote actions, gated in the UI by RemoteClient::SupportedActions().
         svr->Post("/__remote__/copy", [&](const Request &req, Response &res)
         {
-            Activities::Guard activity(ACTIVITY_COPY, "Copying remote files", ACTIVITY_WEB, ACTIVITY_REMOTE);
+            Activities::Guard activity(ACTIVITY_COPY, STR_COPYING, ACTIVITY_WEB, ACTIVITY_REMOTE);
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *items = nullptr;
@@ -2340,7 +2348,7 @@ namespace HttpServer
 
         svr->Post("/__remote__/move", [&](const Request &req, Response &res)
         {
-            Activities::Guard activity(ACTIVITY_MOVE, "Moving remote files", ACTIVITY_WEB, ACTIVITY_REMOTE);
+            Activities::Guard activity(ACTIVITY_MOVE, STR_MOVING, ACTIVITY_WEB, ACTIVITY_REMOTE);
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *items = nullptr;
@@ -3064,7 +3072,7 @@ namespace HttpServer
             sprintf(entry.path, "%s", item);
             entry.isDir = false;
 
-            Activities::Guard activity(ACTIVITY_EXTRACT, "Extracting remote compress files", ACTIVITY_WEB, ACTIVITY_REMOTE);
+            Activities::Guard activity(ACTIVITY_EXTRACT, STR_EXTRACTING, ACTIVITY_WEB, ACTIVITY_REMOTE);
             Activities::Item(activity.id, item);
 
             std::map<std::string, RemoteSettings>::iterator setting = site_settings.find(site);
@@ -3180,7 +3188,7 @@ namespace HttpServer
 
         svr->Post("/__remote__/remove", [&](const Request &req, Response &res)
         {
-            Activities::Guard activity(ACTIVITY_DELETE, "Deleting remote files", ACTIVITY_WEB, ACTIVITY_REMOTE);
+            Activities::Guard activity(ACTIVITY_DELETE, STR_DELETING, ACTIVITY_WEB, ACTIVITY_REMOTE);
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
             json_object *files = nullptr;

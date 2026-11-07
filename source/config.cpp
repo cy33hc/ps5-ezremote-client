@@ -414,6 +414,11 @@ namespace CONFIG
         WriteBool(CONFIG_GLOBAL, CONFIG_SHOW_ACTIVITY_DIALOG, show_activity_dialog);
 
         WriteIniFile(CONFIG_INI_FILE);
+
+        // A language change needs the strings and, sometimes, the glyphs
+        // rebuilt; the UI applies it at the end of a frame. Both front ends
+        // save through here, so the switch behaves the same in each.
+        Lang::SyncRequest();
         CloseIniFile();
 
         if (!FS::FolderExists(temp_folder))

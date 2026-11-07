@@ -493,7 +493,7 @@ namespace Windows
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
-            ImGui::Text("Activities");
+            ImGui::Text("%s", lang_strings[STR_ACTIVITIES]);
             ImGui::EndTooltip();
         }
 
@@ -1843,11 +1843,13 @@ namespace Windows
             char datetime_str[32];
 
             SetModalMode(true);
-            ImGui::OpenPopup(lang_strings[STR_BG_DOWNLOAD_PROGRESS]);
+            char progress_id[128];
+            snprintf(progress_id, sizeof(progress_id), "%s##bg_dl_progress", lang_strings[STR_BG_DOWNLOAD_PROGRESS]);
+            ImGui::OpenPopup(progress_id);
 
             ImGui::SetNextWindowPos(ImVec2(345, 320));
             ImGui::SetNextWindowSizeConstraints(ImVec2(1260, 80), ImVec2(1260, 500), NULL, NULL);
-            if (ImGui::BeginPopupModal(lang_strings[STR_BG_DOWNLOAD_PROGRESS], NULL, ImGuiWindowFlags_AlwaysAutoResize))
+            if (ImGui::BeginPopupModal(progress_id, NULL, ImGuiWindowFlags_AlwaysAutoResize))
             {
                 ImGui::Columns(4, "bg_download_progress##Columns", true);
                 
@@ -1883,7 +1885,9 @@ namespace Windows
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
 
                 char id[128];
-                if (ImGui::Button("Clear history##bg_dl_clear", ImVec2(150, 0)))
+                char clear_history_id[128];
+                snprintf(clear_history_id, sizeof(clear_history_id), "%s##bg_dl_clear", lang_strings[STR_CLEAR_HISTORY]);
+                if (ImGui::Button(clear_history_id, ImVec2(150, 0)))
                 {
                     Actions::ClearDownloadHistory();
                 }
@@ -1987,11 +1991,15 @@ namespace Windows
         ImVec4 *colors = style->Colors;
 
         SetModalMode(true);
-        ImGui::OpenPopup("Activities##activities");
+        // The popup id carries the translated title, so language changes need a
+        // matching id on both OpenPopup and BeginPopupModal.
+        char activities_id[128];
+        snprintf(activities_id, sizeof(activities_id), "%s##activities", lang_strings[STR_ACTIVITIES]);
+        ImGui::OpenPopup(activities_id);
 
         ImGui::SetNextWindowPos(ImVec2(340, 260));
         ImGui::SetNextWindowSizeConstraints(ImVec2(1240, 140), ImVec2(1240, 620), NULL, NULL);
-        if (ImGui::BeginPopupModal("Activities##activities", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        if (ImGui::BeginPopupModal(activities_id, NULL, ImGuiWindowFlags_AlwaysAutoResize))
         {
             const bool appearing = ImGui::IsWindowAppearing();
             std::vector<Activity> list = Activities::Snapshot();
@@ -2063,7 +2071,9 @@ namespace Windows
             // 190 + gap 10 + 190, centred in the 1240 px window.
             ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 390.0f) * 0.5f);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
-            if (ImGui::Button("Clear completed##activities_clear", ImVec2(190, 0)))
+            char clear_id[128];
+            snprintf(clear_id, sizeof(clear_id), "%s##activities_clear", lang_strings[STR_CLEAR_COMPLETED]);
+            if (ImGui::Button(clear_id, ImVec2(190, 0)))
             {
                 Activities::ClearFinished();
             }
@@ -2124,6 +2134,8 @@ namespace Windows
                         const bool is_selected = strcmp(langs[n].c_str(), language) == 0;
                         if (ImGui::Selectable(langs[n].c_str(), is_selected))
                         {
+                            // Applied when the dialog saves, through
+                            // CONFIG::SaveGlobalConfig.
                             sprintf(language, "%s", langs[n].c_str());
                         }
 
@@ -2177,7 +2189,7 @@ namespace Windows
                 ImGui::Separator();
 
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 15);
-                ImGui::Text("Show activities dialog on new activity");
+                ImGui::Text("%s", lang_strings[STR_SHOW_ACTIVITIES_DIALOG]);
                 ImGui::SameLine();
                 ImGui::SetCursorPosX(805);
                 ImGui::Checkbox("##show_activity_dialog", &show_activity_dialog);

@@ -73,6 +73,9 @@ namespace Activities
     bool ShutdownRequested();
 
     uint64_t Begin(int kind, const std::string &label, int origin = ACTIVITY_NATIVE, int scope = ACTIVITY_LOCAL);
+    // Same, but the label is a lang.h string id (STR_*), resolved through
+    // lang_strings so the console and the web show it translated.
+    uint64_t Begin(int kind, int label_id, int origin, int scope);
 
     // Overwrite policy for the calling thread; jobs keep their own snapshot so
     // one operation cannot change what another does with existing files.
@@ -119,6 +122,13 @@ namespace Activities
 
         Guard(int kind, const std::string &label, int origin = ACTIVITY_NATIVE, int scope = ACTIVITY_LOCAL)
             : id(Begin(kind, label, origin, scope)), previous(activity_current_id)
+        {
+            SnapshotOverwrite();
+            activity_current_id = id;
+        }
+
+        Guard(int kind, int label_id, int origin = ACTIVITY_NATIVE, int scope = ACTIVITY_LOCAL)
+            : id(Begin(kind, label_id, origin, scope)), previous(activity_current_id)
         {
             SnapshotOverwrite();
             activity_current_id = id;

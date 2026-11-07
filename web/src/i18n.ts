@@ -52,7 +52,13 @@ export function loadLanguage(language: string): void {
   for (const key of Object.keys(english)) {
     const value = localized[key];
     const from = english[key];
-    if (value && from && value !== from) next[normalise(from)] = value;
+    if (!value || !from || value === from) continue;
+
+    // Two keys can share an English value (e.g. STR_INSTALL_FAILED and
+    // STR_STATE_FAILED). The console's INI order comes first, so it wins;
+    // this keeps the lookup deterministic instead of last-writer-wins.
+    const id = normalise(from);
+    if (!(id in next)) next[id] = value;
   }
   dictionary = next;
   rememberLanguage(currentLanguage);

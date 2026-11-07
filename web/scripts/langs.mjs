@@ -40,6 +40,20 @@ if (existsSync(overridesPath)) {
   for (const [language, entries] of Object.entries(overrides)) {
     tables[language] = { ...(tables[language] ?? {}), ...entries };
   }
+
+  // The web looks strings up by their English text, so two keys with the same
+  // value collapse into one. Report them here instead of discovering it in the
+  // UI; the first key wins, which keeps the console's wording in charge.
+  const byText = new Map();
+  for (const [key, value] of Object.entries(tables.English ?? {})) {
+    const text = String(value).trim().toLowerCase();
+    if (!byText.has(text)) byText.set(text, []);
+    byText.get(text).push(key);
+  }
+
+  for (const [text, keys] of byText) {
+    if (keys.length > 1) console.warn(`duplicate English text ${JSON.stringify(text)}: ${keys.join(", ")}`);
+  }
 }
 
 writeFileSync(output, JSON.stringify(tables), "utf8");

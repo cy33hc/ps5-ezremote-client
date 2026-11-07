@@ -2,6 +2,7 @@
 #include <mutex>
 
 #include "activity.h"
+#include "lang.h"
 #include "util.h"
 
 thread_local uint64_t activity_current_id = 0;
@@ -37,6 +38,11 @@ namespace
 
 namespace Activities
 {
+    uint64_t Begin(int kind, int label_id, int origin, int scope)
+    {
+        return Begin(kind, std::string(lang_strings[label_id]), origin, scope);
+    }
+
     uint64_t Begin(int kind, const std::string &label, int origin, int scope)
     {
         std::lock_guard<std::mutex> lock(activity_mutex);
@@ -281,24 +287,26 @@ namespace Activities
 
     const char *KindName(int kind)
     {
+        // Localised for the console; the web reads the numeric kind and applies
+        // its own dictionary, so this never reaches the API as an identifier.
         switch (kind)
         {
         case ACTIVITY_COPY:
-            return "Copy";
+            return lang_strings[STR_COPY];
         case ACTIVITY_MOVE:
-            return "Move";
+            return lang_strings[STR_MOVE];
         case ACTIVITY_DELETE:
-            return "Delete";
+            return lang_strings[STR_DELETE];
         case ACTIVITY_COMPRESS:
-            return "Compress";
+            return lang_strings[STR_COMPRESS];
         case ACTIVITY_EXTRACT:
-            return "Extract";
+            return lang_strings[STR_EXTRACT];
         case ACTIVITY_UPLOAD:
-            return "Upload";
+            return lang_strings[STR_UPLOAD];
         case ACTIVITY_DOWNLOAD:
-            return "Download";
+            return lang_strings[STR_DOWNLOAD];
         case ACTIVITY_INSTALL:
-            return "Install";
+            return lang_strings[STR_INSTALL];
         default:
             return "Activity";
         }
@@ -306,7 +314,7 @@ namespace Activities
 
     const char *OriginName(int origin)
     {
-        return origin == ACTIVITY_WEB ? "Web" : "Native";
+        return origin == ACTIVITY_WEB ? lang_strings[STR_ORIGIN_WEB] : lang_strings[STR_ORIGIN_NATIVE];
     }
 
     const char *StateName(int state)
@@ -314,17 +322,17 @@ namespace Activities
         switch (state)
         {
         case ACTIVITY_RUNNING:
-            return "Running";
+            return lang_strings[STR_STATE_RUNNING];
         case ACTIVITY_DONE:
-            return "Done";
+            return lang_strings[STR_STATE_DONE];
         case ACTIVITY_FAILED:
-            return "Failed";
+            return lang_strings[STR_STATE_FAILED];
         case ACTIVITY_PARTIAL:
-            return "Partial";
+            return lang_strings[STR_STATE_PARTIAL];
         case ACTIVITY_CANCELLED:
-            return "Cancelled";
+            return lang_strings[STR_STATE_CANCELLED];
         default:
-            return "Unknown";
+            return lang_strings[STR_STATE_FAILED];
         }
     }
 }

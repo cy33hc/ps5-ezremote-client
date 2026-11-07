@@ -6,6 +6,8 @@
 #include "SDL2/SDL_opengl.h"
 #include "imgui_impl_sdl.h"
 #include "imgui_impl_opengl2.h"
+#include "lang.h"
+#include "fonts.h"
 
 bool done = false;
 int gui_mode = GUI_MODE_BROWSER;
@@ -40,6 +42,16 @@ namespace GUI
 				glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 				ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 				SDL_GL_SwapWindow(window);
+
+				// Language table swaps happen here, on the UI thread, once the
+				// frame is presented. Languages need different glyphs, so the
+				// font atlas is rebuilt with the backend device objects.
+				if (Lang::ApplyPendingReload())
+				{
+					ImGui_ImplOpenGL2_DestroyDeviceObjects();
+					Fonts::Load();
+					ImGui_ImplOpenGL2_CreateDeviceObjects();
+				}
 			}
 			else if (gui_mode == GUI_MODE_IME)
 			{

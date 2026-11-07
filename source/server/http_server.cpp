@@ -2620,6 +2620,8 @@ namespace HttpServer
             JsonObjectRef result_ref(result);
             json_object_object_add(result, "required", json_object_new_boolean(WebAuthRequired()));
             json_object_object_add(result, "authenticated", json_object_new_boolean(WebSessionValid(req)));
+            // The sign-in screen needs the language before settings are readable.
+            json_object_object_add(result, "language", json_object_new_string(language));
             const char *result_str = json_object_to_json_string(result);
             res.status = 200;
             res.set_content(result_str, strlen(result_str), "application/json");

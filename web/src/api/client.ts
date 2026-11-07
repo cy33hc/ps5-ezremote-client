@@ -273,6 +273,8 @@ export type SettingsPatch = Partial<
 export interface AuthStatus {
   required: boolean;
   authenticated: boolean;
+  /** Console language, so the sign-in screen can be translated too. */
+  language?: string;
 }
 
 export async function authStatus(): Promise<AuthStatus> {

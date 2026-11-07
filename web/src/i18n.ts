@@ -15,6 +15,25 @@ function normalise(text: string): string {
   return text.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+const CACHE_KEY = "ezremote.language";
+
+/** Last language seen, so the sign-in screen can translate before any request. */
+export function cachedLanguage(): string | null {
+  try {
+    return localStorage.getItem(CACHE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberLanguage(language: string): void {
+  try {
+    localStorage.setItem(CACHE_KEY, language);
+  } catch {
+    // Storage may be unavailable; translations still work for this session.
+  }
+}
+
 /** Builds the English → localized lookup for one language. */
 export function loadLanguage(language: string): void {
   currentLanguage = language && language !== "Default" ? language : "English";
@@ -36,6 +55,15 @@ export function loadLanguage(language: string): void {
     if (value && from && value !== from) next[normalise(from)] = value;
   }
   dictionary = next;
+  rememberLanguage(currentLanguage);
+}
+
+/** Small handle for diagnosing translations from the browser console. */
+if (typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__i18n = () => ({
+    language: currentLanguage,
+    entries: Object.keys(dictionary).length,
+  });
 }
 
 export function getLanguage(): string {
@@ -111,4 +139,16 @@ export function observeTranslations(): () => void {
   observer.observe(document.body, { childList: true, subtree: true, characterData: true });
   translateDom();
   return () => observer.disconnect();
+}
+
+/**
+ * Translates a template and fills {name} placeholders. The template is looked up
+ * first, so translations may reorder or drop placeholders.
+ */
+export function tp(template: string, values: Record<string, string | number>): string {
+  const text = t(template);
+  return text.replace(/\{(\w+)\}/g, (_match, key: string) => {
+    const value = values[key];
+    return value === undefined ? `{${key}}` : String(value);
+  });
 }

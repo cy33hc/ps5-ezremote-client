@@ -14,7 +14,7 @@ import { PackageInfoDialog } from "./components/PackageInfoDialog";
 import { PropertiesDialog } from "./components/PropertiesDialog";
 import { ServersDialog } from "./components/ServersDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
-import { loadLanguage, observeTranslations, t } from "./i18n";
+import { cachedLanguage, loadLanguage, observeTranslations, t, tp } from "./i18n";
 import { Toasts } from "./components/Toasts";
 import type { Toast, ToastTone } from "./components/Toasts";
 import { breadcrumbs, formatSize, isArchive, isPackage, joinPath } from "./lib/format";
@@ -125,16 +125,22 @@ export default function App() {
   // Settings are gated: reading them before login fails, which would leave the
   // defaults in place for the whole session.
   useEffect(() => {
-    if (!authed) return;
-    void loadPreferences();
-  }, [authed, loadPreferences]);
+    if (!auth) return;
+    // Before login only the language is available; settings need a session.
+    const language = auth.language ?? cachedLanguage();
+    if (language) {
+      loadLanguage(language);
+      refreshTranslations();
+    }
+    if (authed) void loadPreferences();
+  }, [auth, authed, loadPreferences]);
 
   // React keeps English in its virtual tree, so the rendered DOM is translated
   // after each commit and re-translated when a dialog opens.
   useEffect(() => {
-    if (!authed) return;
+    if (!auth) return;
     return observeTranslations();
-  }, [authed, refreshTranslations]);
+  }, [auth, refreshTranslations]);
   const [bgList, setBgList] = useState<api.BgDownload[]>([]);
   const [ezremoteVersion, setEzremoteVersion] = useState<string | null>(null);
   const [ezMenu, setEzMenu] = useState<{ x: number; y: number } | null>(null);
@@ -439,7 +445,7 @@ export default function App() {
 
         void run("Creating folder…", async () => {
           await api.createFolder(joinPath(path, name));
-          notify(`Created ${name}`, "success");
+          notify(tp("Created {name}", { name }), "success");
           refresh();
         });
       },
@@ -461,7 +467,7 @@ export default function App() {
         if (!name || name === entry.name) return;
         void run("Renaming…", async () => {
           await api.rename(joinPath(path, entry.name), joinPath(path, name));
-          notify(`Renamed to ${name}`, "success");
+          notify(tp("Renamed to {name}", { name }), "success");
         });
       },
     });
@@ -523,7 +529,7 @@ export default function App() {
         if (!folder) return;
         void run("Extracting…", async () => {
           await api.extract(joinPath(path, entry.name), path, folder);
-          notify(`Extracted to ${folder}`, "success");
+          notify(tp("Extracted to {folder}", { folder }), "success");
         });
       },
     });
@@ -545,7 +551,7 @@ export default function App() {
 
         void run("Creating file…", async () => {
           await api.createLocalFile(joinPath(path, name));
-          notify(`Created ${name}`, "success");
+          notify(tp("Created {name}", { name }), "success");
           refresh();
         });
       },
@@ -613,7 +619,7 @@ export default function App() {
           }
           void run("Compressing…", async () => {
             await api.compress(localSelected.map((entry) => joinPath(path, entry.name)), dir, file);
-            notify(`Created ${file}`, "success");
+            notify(tp("Created {name}", { name: file }), "success");
             refresh();
           });
         },
@@ -649,13 +655,13 @@ export default function App() {
   const copySelection = () => {
     if (localSelected.length === 0) return;
     setClipboard({ mode: "copy", items: localSelected.map((entry) => joinPath(path, entry.name)) });
-    notify(`Copied ${localSelected.length} item${localSelected.length > 1 ? "s" : ""}`, "info");
+    notify(tp(localSelected.length > 1 ? "Copied {n} items" : "Copied {n} item", { n: localSelected.length }), "info");
   };
 
   const cutSelection = () => {
     if (localSelected.length === 0) return;
     setClipboard({ mode: "cut", items: localSelected.map((entry) => joinPath(path, entry.name)) });
-    notify(`Cut ${localSelected.length} item${localSelected.length > 1 ? "s" : ""}`, "info");
+    notify(tp(localSelected.length > 1 ? "Cut {n} items" : "Cut {n} item", { n: localSelected.length }), "info");
   };
 
   const pasteClipboard = () => {
@@ -682,7 +688,7 @@ export default function App() {
         await api.move(items, path);
       }
       if (mode === "cut") setClipboard(null);
-      notify(`Pasted ${items.length} item${items.length > 1 ? "s" : ""}`, "success");
+      notify(tp(items.length > 1 ? "Pasted {n} items" : "Pasted {n} item", { n: items.length }), "success");
       refresh();
     });
   };
@@ -705,7 +711,7 @@ export default function App() {
           const response = await fetch("/__local__/upload", { method: "POST", body: form });
           if (!response.ok) throw new Error(`Upload failed (HTTP ${response.status})`);
         }
-        notify(`Uploaded ${file.name}`, "success");
+        notify(tp("Uploaded {name}", { name: file.name }), "success");
       } catch (error) {
         failed = true;
         notify(error instanceof Error ? error.message : "Upload failed", "error");
@@ -804,7 +810,13 @@ export default function App() {
   const copyRemoteItems = (mode: "copy" | "cut") => {
     if (remoteSelected.length === 0) return;
     setRemoteClipboard({ mode, items: remoteSelected.map((entry) => joinPath(remotePath, entry.name)) });
-    notify(`${mode === "copy" ? "Copied" : "Cut"} ${remoteSelected.length} item${remoteSelected.length > 1 ? "s" : ""}`, "info");
+    notify(
+      tp(
+        `${mode === "copy" ? "Copied" : "Cut"} {n} item${remoteSelected.length > 1 ? "s" : ""}`,
+        { n: remoteSelected.length },
+      ),
+      "info",
+    );
   };
 
   const pasteRemoteItems = () => {
@@ -1088,10 +1100,10 @@ export default function App() {
       }
       if (failed === 0) {
         setRemotePkgView(null);
-        notify(`${packageCount} package${packageCount > 1 ? "s" : ""} installing`, "success");
+        notify(tp(packageCount > 1 ? "{n} packages installing" : "{n} package installing", { n: packageCount }), "success");
       }
       else if (failed < packageCount)
-        notify(`${packageCount - failed} of ${packageCount} packages installing`, "info");
+        notify(tp("{done} of {total} packages installing", { done: packageCount - failed, total: packageCount }), "info");
     });
   };
 
@@ -1107,7 +1119,7 @@ export default function App() {
         if (!folder) return;
         void run("Extracting…", async () => {
           await api.extractRemote(serverInfo.active, joinPath(remotePath, entry.name), path, folder);
-          notify(`Extracted to ${folder}`, "success");
+          notify(tp("Extracted to {folder}", { folder }), "success");
         });
       },
     });
@@ -1361,7 +1373,12 @@ export default function App() {
 
       <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-abyss-600 px-4 py-2 text-xs text-mist-500">
         <span className="font-medium text-mist-300">{activePane === "local" ? "Local" : "Remote"}</span>
-        <span>{activePane === "local" ? localSelected.length : remoteSelected.length} selected</span>
+        <span>
+          {(() => {
+            const count = activePane === "local" ? localSelected.length : remoteSelected.length;
+            return tp(count === 1 ? "{n} selected" : "{n} selected", { n: count });
+          })()}
+        </span>
         <span>{formatSize(String(activePane === "local" ? localBytes : remoteBytes))}</span>
         <span className="truncate font-mono text-mist-500/70">{activePane === "local" ? path : remotePath || "not connected"}</span>
         {busy ? (
@@ -1622,7 +1639,7 @@ export default function App() {
               // Always start at the site's defaultDirectory: probing the old
               // folder can crash some clients when the path is not valid.
               await loadRemote("", updated.active);
-              notify(`Reconnected to ${updated.active}`, "info");
+              notify(tp("Reconnected to {site}", { site: updated.active }), "info");
             })()
           }
         />
@@ -2177,7 +2194,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
           disabled={!password || busy}
           className="mt-4 w-full rounded-lg bg-accent-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-accent-600 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-accent-500"
         >
-          {busy ? "Signing in…" : "Sign in"}
+          {busy ? t("Signing in…") : t("Sign in")}
         </button>
       </div>
     </div>

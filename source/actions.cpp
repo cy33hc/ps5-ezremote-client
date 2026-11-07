@@ -932,6 +932,7 @@ namespace Actions
                             FileStream *sp = CreateFileStream(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
                             
                             install_data->archive_entry = entry;
+                            install_data->activity_id = activity.id;
                             install_data->split_file = sp;
                             install_data->stop_write_thread = false;
 
@@ -985,9 +986,15 @@ namespace Actions
         ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) argp;
         FileStream *sp = install_data->split_file;
 
-        Activities::Guard activity(ACTIVITY_INSTALL, "Extracting package for install");
+        // Runs inside the install that owns it, so progress belongs there.
+        const uint64_t activity_id = install_data->activity_id;
+        uint64_t written = 0;
+        uint64_t total = 0;
         if (install_data->archive_entry != nullptr)
-            Activities::Item(activity.id, install_data->archive_entry->filename);
+        {
+            Activities::Item(activity_id, install_data->archive_entry->filename);
+            total = (uint64_t) archive_entry_size(install_data->archive_entry->entry);
+        }
 
         /* loop over file contents and write to fd */
         sp->Open();
@@ -1009,6 +1016,10 @@ namespace Actions
                 sprintf(status_message, "error write('%s')", install_data->archive_entry->filename.c_str());
                 break;;
             }
+
+            written += len;
+            if (total > 0)
+                Activities::Progress(activity_id, written, total);
         }
 
         sp->Close();
@@ -1100,6 +1111,7 @@ namespace Actions
                             FileStream *sp = CreateFileStream(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
                             
                             install_data->archive_entry = entry;
+                            install_data->activity_id = activity.id;
                             install_data->split_file = sp;
                             install_data->stop_write_thread = false;
 

@@ -828,7 +828,9 @@ namespace INSTALLER
 		}
 		ret = 1;
 	finish:
-		ret = pthread_create(&bk_clean_thid, NULL, CleanArchivePkgDataThread, pkg_data);
+		// The cleanup thread's status is not the install result: keep the value
+		// set by the install path above (1 = installed, 0 = failed).
+		pthread_create(&bk_clean_thid, NULL, CleanArchivePkgDataThread, pkg_data);
 		RemoveArchivePkgInstallData(hash);
 		return ret;
 	}

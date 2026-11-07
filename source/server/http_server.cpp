@@ -1252,7 +1252,53 @@ namespace HttpServer
                 if (item == nullptr)
                     continue;
                 Activities::Item(activity.id, item);
-                if (!INSTALLER::InstallLocalPkg(item))
+
+                std::string lower = Util::ToLower(std::string(item));
+                bool is_archive = Util::EndsWith(lower, ".zip") || Util::EndsWith(lower, ".rar") ||
+                                  Util::EndsWith(lower, ".7z") || Util::EndsWith(lower, ".tar.xz") ||
+                                  Util::EndsWith(lower, ".tar.gz");
+
+                if (!is_archive)
+                {
+                    if (!INSTALLER::InstallLocalPkg(item))
+                        failed_items += (std::string(item) + ",");
+                    continue;
+                }
+
+                ArchiveEntry *entry = ZipUtil::GetPackageEntry(item, nullptr);
+                if (entry == nullptr)
+                {
+                    failed_items += (std::string(item) + ",");
+                    continue;
+                }
+
+                bool installed = false;
+                while (entry != nullptr)
+                {
+                    Activities::Item(activity.id, entry->filename);
+
+                    ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) malloc(sizeof(ArchivePkgInstallData));
+                    memset(install_data, 0, sizeof(ArchivePkgInstallData));
+
+                    std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
+                    FileStream *sp = CreateFileStream(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
+
+                    install_data->archive_entry = entry;
+                    install_data->activity_id = activity.id;
+                    install_data->split_file = sp;
+                    install_data->stop_write_thread = false;
+
+                    pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);
+
+                    if (INSTALLER::InstallArchivePkg(entry->filename, install_data) != 0)
+                        installed = true;
+
+                    ArchiveEntry *previous = entry;
+                    entry = ZipUtil::GetNextPackageEntry(entry);
+                    free(previous);
+                }
+
+                if (!installed)
                     failed_items += (std::string(item) + ",");
             }
 
@@ -1537,6 +1583,57 @@ namespace HttpServer
             if (held == nullptr)
             {
                 failed(res, 200, "Could not connect");
+                return;
+            }
+
+            // An archive on the remote holds its packages; install them the way
+            // the console does, streaming each entry out of the archive.
+            std::string lower = Util::ToLower(std::string(path));
+            bool is_archive = Util::EndsWith(lower, ".zip") || Util::EndsWith(lower, ".rar") ||
+                              Util::EndsWith(lower, ".7z") || Util::EndsWith(lower, ".tar.xz") ||
+                              Util::EndsWith(lower, ".tar.gz");
+
+            if (is_archive)
+            {
+                Activities::Guard activity(ACTIVITY_INSTALL, "Installing from remote archive", ACTIVITY_WEB, ACTIVITY_REMOTE);
+
+                ArchiveEntry *entry = ZipUtil::GetPackageEntry(path, held.get());
+                if (entry == nullptr)
+                {
+                    failed(res, 200, "No package found in this archive");
+                    return;
+                }
+
+                int installed = 0;
+                while (entry != nullptr)
+                {
+                    Activities::Item(activity.id, entry->filename);
+
+                    ArchivePkgInstallData *install_data = (ArchivePkgInstallData*) malloc(sizeof(ArchivePkgInstallData));
+                    memset(install_data, 0, sizeof(ArchivePkgInstallData));
+
+                    std::string install_pkg_path = std::string(temp_folder) + "/" + entry->filename;
+                    FileStream *sp = CreateFileStream(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
+
+                    install_data->archive_entry = entry;
+                    install_data->activity_id = activity.id;
+                    install_data->split_file = sp;
+                    install_data->stop_write_thread = false;
+
+                    pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);
+
+                    if (INSTALLER::InstallArchivePkg(entry->filename, install_data) != 0)
+                        installed++;
+
+                    ArchiveEntry *previous = entry;
+                    entry = ZipUtil::GetNextPackageEntry(entry);
+                    free(previous);
+                }
+
+                if (installed == 0)
+                    failed(res, 200, "Failed to install the package in this archive");
+                else
+                    success(res);
                 return;
             }
 
@@ -3829,6 +3926,7 @@ namespace HttpServer
                     FileStream *sp = CreateFileStream(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE);
                     
                     install_data->archive_entry = entry;
+                    install_data->activity_id = activity.id;
                     install_data->split_file = sp;
                     install_data->stop_write_thread = false;
 

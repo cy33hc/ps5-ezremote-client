@@ -147,6 +147,7 @@ struct ArchivePkgInstallData
     ArchiveEntry *archive_entry;
     pthread_t thread;
     bool stop_write_thread;
+    uint64_t activity_id; // progress is reported to the calling install
 };
 
 struct SplitPkgInstallData

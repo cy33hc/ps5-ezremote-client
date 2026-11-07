@@ -482,9 +482,11 @@ export default function App() {
   };
 
   const installSelection = () => {
-    const packages = localSelected.filter((entry) => isPackage(entry.name)).map((entry) => joinPath(path, entry.name));
+    const packages = localSelected
+      .filter((entry) => isPackage(entry.name) || isArchive(entry.name))
+      .map((entry) => joinPath(path, entry.name));
     if (packages.length === 0) {
-      notify("Select a .pkg file to install", "error");
+      notify("Select a .pkg file, .zip, .rar or .7z archive to install", "error");
       return;
     }
     void run(`Installing ${packages.length} package${packages.length > 1 ? "s" : ""}…`, async () => {
@@ -1001,7 +1003,7 @@ export default function App() {
         items.push({ separator: true });
         if (IMAGE_FILE.test(entry.name))
           items.push({ label: "Preview image", icon: "image", onSelect: () => setViewer({ src: api.downloadFileUrl(joinPath(path, entry.name)), name: entry.name }) });
-        if (isPackage(entry.name)) {
+        if (isPackage(entry.name) || isArchive(entry.name)) {
           items.push({ label: "Install Package", icon: "install", onSelect: installSelection });
           items.push({ label: "Package info", icon: "package", onSelect: openPackageInfo });
         }
@@ -1108,7 +1110,7 @@ export default function App() {
           items.push({ label: "Edit", icon: "text", onSelect: remoteEditFile, disabled: !canRemote(RA.EDIT) });
         const targets =
           remoteSelected.length > 1 && remoteSelected.some((item) => item.name === entry.name) ? remoteSelected : [entry];
-        const packages = targets.filter((item) => item.type !== "dir" && item.name.toLowerCase().endsWith(".pkg"));
+        const packages = targets.filter((item) => item.type !== "dir" && (item.name.toLowerCase().endsWith(".pkg") || isArchive(item.name)));
         if (packages.length > 0)
           items.push({
             label: packages.length > 1 ? `Install ${packages.length} packages` : "Install package",

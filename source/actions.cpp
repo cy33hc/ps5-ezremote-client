@@ -338,13 +338,26 @@ namespace Actions
         Activities::Guard activity(ACTIVITY_DELETE, "Deleting local files");
         std::vector<DirEntry> files = job->files;
         delete job;
+        int failed = 0;
+        int total = 0;
+
 
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             sprintf(activity_message, "%s %s", lang_strings[STR_DELETING], it->path);
             Activities::Item(activity.id, it->path);
-            FS::RmRecursive(it->path);
+            total++;
+            if (FS::RmRecursive(it->path) <= 0)
+                failed++;
         }
+        if (failed > 0)
+        {
+            if (failed < total)
+                activity.partial(status_message);
+            else
+                activity.fail(status_message);
+        }
+
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
     }
@@ -367,6 +380,9 @@ namespace Actions
         Activities::Guard activity(ACTIVITY_DELETE, "Deleting remote files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         std::vector<DirEntry> files = job->files;
         delete job;
+        int failed = 0;
+        int total = 0;
+
 
         // Own connection for the duration of this operation.
         RemoteClient *client = RemotePool::Acquire(*remote_settings);
@@ -379,14 +395,20 @@ namespace Actions
                 Activities::Item(activity.id, it->path);
                 if (it->isDir)
                 {
+                    total++;
                     if (!client->Rmdir(it->path, true))
+                    {
+                        failed++;
                         healthy = false;
+                    }
                 }
                 else
                 {
                     sprintf(activity_message, "%s %s", lang_strings[STR_DELETING], it->path);
+                    total++;
                     if (!client->Delete(it->path))
                     {
+                        failed++;
                         healthy = false;
                         sprintf(status_message, "%s - %s", lang_strings[STR_FAILED], client->LastResponse());
                     }
@@ -399,6 +421,14 @@ namespace Actions
             sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
             healthy = false;
             Disconnect();
+        }
+
+        if (failed > 0)
+        {
+            if (failed < total)
+                activity.partial(status_message);
+            else
+                activity.fail(status_message);
         }
 
         RemotePool::Release(client, healthy);
@@ -538,6 +568,9 @@ namespace Actions
         Activities::Guard activity(ACTIVITY_UPLOAD, "Uploading files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         std::vector<DirEntry> files = job->files;
         delete job;
+        int failed = 0;
+        int total = 0;
+
 
         RemoteClient *client = RemotePool::Acquire(*remote_settings);
 
@@ -550,17 +583,29 @@ namespace Actions
                 {
                     char new_dir[512];
                     sprintf(new_dir, "%s%s%s", remote_directory, FS::hasEndSlash(remote_directory) ? "" : "/", it->name);
-                    Upload(*it, new_dir, client);
+                    total++;
+                    if (Upload(*it, new_dir, client) == 0)
+                        failed++;
                 }
                 else
                 {
-                    Upload(*it, remote_directory, client);
+                    total++;
+                    if (Upload(*it, remote_directory, client) == 0)
+                        failed++;
                 }
             }
         }
         else
         {
             sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
+        }
+
+        if (failed > 0)
+        {
+            if (failed < total)
+                activity.partial(status_message);
+            else
+                activity.fail(status_message);
         }
 
         RemotePool::Release(client, true);
@@ -773,6 +818,9 @@ namespace Actions
         Activities::Guard activity(ACTIVITY_DOWNLOAD, "Downloading files", ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         std::vector<DirEntry> files = job->files;
         delete job;
+        int failed = 0;
+        int total = 0;
+
 
         RemoteClient *client = RemotePool::Acquire(*remote_settings);
 
@@ -785,17 +833,29 @@ namespace Actions
                 {
                     char new_dir[512];
                     sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", it->name);
-                    Download(*it, new_dir, client);
+                    total++;
+                    if (Download(*it, new_dir, client) == 0)
+                        failed++;
                 }
                 else
                 {
-                    Download(*it, local_directory, client);
+                    total++;
+                    if (Download(*it, local_directory, client) == 0)
+                        failed++;
                 }
             }
         }
         else
         {
             sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
+        }
+
+        if (failed > 0)
+        {
+            if (failed < total)
+                activity.partial(status_message);
+            else
+                activity.fail(status_message);
         }
 
         RemotePool::Release(client, true);
@@ -958,6 +1018,14 @@ namespace Actions
             sprintf(status_message, "%s %s = %d, %s = %d, %s = %d", lang_strings[STR_INSTALL],
                     lang_strings[STR_INSTALL_SUCCESS], success, lang_strings[STR_INSTALL_FAILED], failed,
                     lang_strings[STR_INSTALL_SKIPPED], skipped);
+
+            if (failed > 0)
+            {
+                if (success > 0)
+                    activity.partial(status_message);
+                else
+                    activity.fail(status_message);
+            }
         }
     finish:
         RemotePool::Release(client, true);
@@ -1137,6 +1205,14 @@ namespace Actions
             sprintf(status_message, "%s %s = %d, %s = %d, %s = %d", lang_strings[STR_INSTALL],
                     lang_strings[STR_INSTALL_SUCCESS], success, lang_strings[STR_INSTALL_FAILED], failed,
                     lang_strings[STR_INSTALL_SKIPPED], skipped);
+
+            if (failed > 0)
+            {
+                if (success > 0)
+                    activity.partial(status_message);
+                else
+                    activity.fail(status_message);
+            }
         }
         multi_selected_local_files.clear();
         return NULL;
@@ -1719,6 +1795,9 @@ namespace Actions
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
         delete job;
+
+        int failed = 0;
+        int total = 0;
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (Activities::Stopped())
@@ -1738,13 +1817,25 @@ namespace Actions
                 }
                 char new_dir[512];
                 sprintf(new_dir, "%s%s%s", target.c_str(), FS::hasEndSlash(target.c_str()) ? "" : "/", it->name);
-                CopyOrMove(*it, new_dir, false);
+                total++;
+                if (CopyOrMove(*it, new_dir, false) == 0)
+                    failed++;
             }
             else
             {
-                CopyOrMove(*it, target.c_str(), false);
+                total++;
+                if (CopyOrMove(*it, target.c_str(), false) == 0)
+                    failed++;
             }
         }
+        if (failed > 0)
+        {
+            if (failed < total)
+                activity.partial(status_message);
+            else
+                activity.fail(status_message);
+        }
+
         local_paste_files.clear();
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
@@ -1798,6 +1889,9 @@ namespace Actions
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
         delete job;
+
+        int failed = 0;
+        int total = 0;
         for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
         {
             if (Activities::Stopped())
@@ -1816,15 +1910,27 @@ namespace Actions
                 std::string name = UniqueLocalName(target.c_str(), it->name);
                 char new_dir[512];
                 sprintf(new_dir, "%s%s%s", target.c_str(), FS::hasEndSlash(target.c_str()) ? "" : "/", name.c_str());
-                CopyOrMove(*it, new_dir, true);
+                total++;
+                if (CopyOrMove(*it, new_dir, true) == 0)
+                    failed++;
             }
             else
             {
                 std::string target = std::string(target.c_str()) +
                     (FS::hasEndSlash(target.c_str()) ? "" : "/") + UniqueLocalName(target.c_str(), it->name);
-                CopyOrMoveLocalFile(it->path, target.c_str(), true);
+                total++;
+                if (CopyOrMoveLocalFile(it->path, target.c_str(), true) == 0)
+                    failed++;
             }
         }
+        if (failed > 0)
+        {
+            if (failed < total)
+                activity.partial(status_message);
+            else
+                activity.fail(status_message);
+        }
+
         local_paste_files.clear();
         selected_action = ACTION_REFRESH_LOCAL_FILES;
         return NULL;
@@ -1879,6 +1985,9 @@ namespace Actions
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
         delete job;
+        int failed = 0;
+        int total = 0;
+
 
         RemoteClient *client = RemotePool::Acquire(*remote_settings);
 
@@ -1908,11 +2017,21 @@ namespace Actions
 
             snprintf(activity_message, 1024, "%s %s", lang_strings[STR_MOVING], it->path);
             Activities::Item(activity.id, it->path);
+            total++;
             int res = CopyOrMoveRemoteFile(it->path, new_path, false, client);
             if (res == 0)
+                failed++;
                 sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
         }
         RemotePool::Release(client, true);
+        if (failed > 0)
+        {
+            if (failed < total)
+                activity.partial(status_message);
+            else
+                activity.fail(status_message);
+        }
+
         remote_paste_files.clear();
         selected_action = ACTION_REFRESH_REMOTE_FILES;
         return NULL;
@@ -2008,6 +2127,9 @@ namespace Actions
         std::vector<DirEntry> files = job->files;
         std::string target = job->target;
         delete job;
+        int failed = 0;
+        int total = 0;
+
 
         RemoteClient *client = RemotePool::Acquire(*remote_settings);
 
@@ -2035,18 +2157,30 @@ namespace Actions
                     sprintf(status_message, "%s", lang_strings[STR_CANT_COPY_TO_SUBDIR_MSG]);
                     continue;
                 }
+                total++;
                 int res = CopyRemotePath(*it, new_path, client);
                 if (res == 0)
+                    failed++;
                     sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
             }
             else
             {
+                total++;
                 int res = CopyRemotePath(*it, target.c_str(), client);
                 if (res == 0)
+                    failed++;
                     sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
             }
         }
         RemotePool::Release(client, true);
+        if (failed > 0)
+        {
+            if (failed < total)
+                activity.partial(status_message);
+            else
+                activity.fail(status_message);
+        }
+
         remote_paste_files.clear();
         selected_action = ACTION_REFRESH_REMOTE_FILES;
         return NULL;

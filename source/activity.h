@@ -46,7 +46,8 @@ enum ActivityState
     ACTIVITY_RUNNING,
     ACTIVITY_DONE,
     ACTIVITY_FAILED,
-    ACTIVITY_CANCELLED
+    ACTIVITY_CANCELLED,
+    ACTIVITY_PARTIAL // some items succeeded, some failed
 };
 
 struct Activity
@@ -79,6 +80,13 @@ namespace Activities
     void SnapshotOverwrite();
     void Item(uint64_t id, const std::string &item);
     void Progress(uint64_t id, uint64_t done, uint64_t total);
+
+    // Marks the activity failed with a message; Guard's destructor will not
+    // overwrite the state afterwards.
+    void Fail(uint64_t id, const std::string &error);
+
+    // Like Fail, but part of the work succeeded.
+    void Partial(uint64_t id, const std::string &error);
     // Report progress for the newest running activity; lets legacy code
     // (fs.cpp / installer.cpp) feed the tracker without knowing the id.
     void ProgressCurrent(uint64_t done, uint64_t total);
@@ -115,6 +123,9 @@ namespace Activities
             SnapshotOverwrite();
             activity_current_id = id;
         }
+
+        void fail(const std::string &error) { Fail(id, error); }
+        void partial(const std::string &error) { Partial(id, error); }
 
         ~Guard()
         {

@@ -1873,6 +1873,7 @@ function ActivitiesDialog({
     Running: "text-amber-400",
     Done: "text-mint-400",
     Failed: "text-rose-400",
+    Partial: "text-orange-400",
     Cancelled: "text-mist-500",
   };
 

@@ -2038,6 +2038,8 @@ namespace Windows
                         color = ImVec4(0.85f, 0.73f, 0.49f, 1.0f);
                     else if (item.state == ACTIVITY_FAILED)
                         color = ImVec4(0.95f, 0.30f, 0.30f, 1.0f);
+                    else if (item.state == ACTIVITY_PARTIAL)
+                        color = ImVec4(0.95f, 0.62f, 0.20f, 1.0f);
                     else if (item.state == ACTIVITY_DONE)
                         color = ImVec4(0.34f, 0.65f, 0.29f, 1.0f);
                     ImGui::TextColored(color, "%s", Activities::StateName(item.state));

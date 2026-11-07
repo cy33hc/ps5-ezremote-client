@@ -796,7 +796,10 @@ namespace HttpServer
         }
 
         if (!failed_items.empty())
+        {
+            activity.fail("Failed: " + failed_items);
             FinishTransfer(job->id, 2, "Failed: " + failed_items);
+        }
         else
             FinishTransfer(job->id, 1, "");
 
@@ -1245,6 +1248,7 @@ namespace HttpServer
             }
 
             std::string failed_items;
+            size_t installed_count = 0;
             size_t len = json_object_array_length(items);
             for (size_t i=0; i < len; i++)
             {
@@ -1262,6 +1266,8 @@ namespace HttpServer
                 {
                     if (!INSTALLER::InstallLocalPkg(item))
                         failed_items += (std::string(item) + ",");
+                    else
+                        installed_count++;
                     continue;
                 }
 
@@ -1300,11 +1306,17 @@ namespace HttpServer
 
                 if (!installed)
                     failed_items += (std::string(item) + ",");
+                else
+                    installed_count++;
             }
 
             if (failed_items.length() > 0)
             {
                 std::string error_msg = std::string("One or more file(s) failed to install. ") + failed_items;
+                if (installed_count > 0)
+                    activity.partial(error_msg);
+                else
+                    activity.fail(error_msg);
                 failed(res, 200, error_msg);
             }
             else
@@ -1631,7 +1643,10 @@ namespace HttpServer
                 }
 
                 if (installed == 0)
+                {
+                    activity.fail("Failed to install the package in this archive");
                     failed(res, 200, "Failed to install the package in this archive");
+                }
                 else
                     success(res);
                 return;
@@ -2270,6 +2285,7 @@ namespace HttpServer
             }
 
             std::string failed_items;
+            size_t failed_count = 0;
             size_t count = json_object_array_length(items);
             for (size_t i = 0; i < count; i++)
             {
@@ -2286,11 +2302,16 @@ namespace HttpServer
 
                 if (client->Copy(source, target) == 0)
                     failed_items += source + ",";
+                failed_count++;
             }
 
 
             if (!failed_items.empty())
             {
+                if (failed_count < count)
+                    activity.partial("Failed to copy: " + failed_items);
+                else
+                    activity.fail("Failed to copy: " + failed_items);
                 failed(res, 200, "Failed to copy: " + failed_items);
                 return;
             }
@@ -2335,6 +2356,7 @@ namespace HttpServer
             }
 
             std::string failed_items;
+            size_t failed_count = 0;
             size_t count = json_object_array_length(items);
             for (size_t i = 0; i < count; i++)
             {
@@ -2351,11 +2373,16 @@ namespace HttpServer
 
                 if (client->Move(source, target) == 0)
                     failed_items += source + ",";
+                failed_count++;
             }
 
 
             if (!failed_items.empty())
             {
+                if (failed_count < count)
+                    activity.partial("Failed to move: " + failed_items);
+                else
+                    activity.fail("Failed to move: " + failed_items);
                 failed(res, 200, "Failed to move: " + failed_items);
                 return;
             }
@@ -3036,9 +3063,15 @@ namespace HttpServer
             int ret = ZipUtil::Extract(entry, extract_folder, held.get());
 
             if (ret == 0)
+            {
+                activity.fail("Failed to extract file");
                 failed(res, 200, "Failed to extract file");
+            }
             else if (ret == -1)
+            {
+                activity.fail("Unsupported compressed file format");
                 failed(res, 200, "Unsupported compressed file format");
+            }
             else
                 success(res);
         });
@@ -3191,11 +3224,13 @@ namespace HttpServer
 
             if (count == 0)
             {
+                activity.fail("Nothing to remove");
                 bad_request(res, "Nothing to remove");
                 return;
             }
             if (!failed_items.empty())
             {
+                activity.fail("Failed to remove: " + failed_items);
                 failed(res, 200, "Failed to remove: " + failed_items);
                 return;
             }
@@ -3301,6 +3336,8 @@ namespace HttpServer
             Activities::Item(activity.id, zip_file);
 
             zipFile zf = zipOpen64(zip_file.c_str(), APPEND_STATUS_CREATE);
+            if (zf == NULL)
+                activity.fail("Failed to create the archive");
             if (zf != NULL)
             {
                 size_t len = json_object_array_length(items);
@@ -3367,6 +3404,11 @@ namespace HttpServer
                 Activities::Item(activity.id, extract_zip_folder);
                 FS::MkDirs(extract_zip_folder);
                 ret = ZipUtil::Extract(entry, extract_zip_folder);
+
+                if (ret == 0)
+                    activity.fail("Failed to extract file");
+                else if (ret == -1)
+                    activity.fail("Unsupported compressed file format");
             }
             if (ret == 0)
                 failed(res, 200, "Failed to extract file");

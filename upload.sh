@@ -16,7 +16,7 @@
 export LC_ALL=C
 
 APPDIR="${1:-ezremote-client}"
-FTP_HOST="${2:-192.168.100.226}"
+FTP_HOST="${2:-192.168.100.116}"
 FTP_PORT="${3:-2121}"
 FTP_DIR="${4:-/data/homebrew/ezremote-client}"
 

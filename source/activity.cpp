@@ -117,6 +117,32 @@ namespace Activities
         return false;
     }
 
+    void Fail(uint64_t id, const std::string &error)
+    {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        Activity *activity = Find(id);
+        if (activity == nullptr || activity->state != ACTIVITY_RUNNING)
+            return;
+
+        activity->state = ACTIVITY_FAILED;
+        activity->finished = Util::GetTick();
+        if (!error.empty())
+            activity->item = error;
+    }
+
+    void Partial(uint64_t id, const std::string &error)
+    {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        Activity *activity = Find(id);
+        if (activity == nullptr || activity->state != ACTIVITY_RUNNING)
+            return;
+
+        activity->state = ACTIVITY_PARTIAL;
+        activity->finished = Util::GetTick();
+        if (!error.empty())
+            activity->item = error;
+    }
+
     void Finish(uint64_t id, int state, const std::string &error)
     {
         std::lock_guard<std::mutex> lock(activity_mutex);
@@ -293,6 +319,8 @@ namespace Activities
             return "Done";
         case ACTIVITY_FAILED:
             return "Failed";
+        case ACTIVITY_PARTIAL:
+            return "Partial";
         case ACTIVITY_CANCELLED:
             return "Cancelled";
         default:

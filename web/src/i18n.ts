@@ -1,0 +1,114 @@
+// Translations are generated from data/assets/langs/*.ini into langs.json, so
+// the web UI never needs a backend call. Entries are looked up by their English
+// text, which lets existing literals be wrapped with t("…") as they are touched.
+
+import tables from "./langs.json";
+
+type Table = Record<string, string>;
+
+const languages = tables as unknown as Record<string, Table>;
+
+let dictionary: Record<string, string> = {};
+let currentLanguage = "English";
+
+function normalise(text: string): string {
+  return text.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/** Builds the English → localized lookup for one language. */
+export function loadLanguage(language: string): void {
+  currentLanguage = language && language !== "Default" ? language : "English";
+
+  const english = languages.English ?? {};
+  const localized = languages[currentLanguage] ?? null;
+
+  if (!localized || currentLanguage === "English") {
+    dictionary = {};
+    return;
+  }
+
+  // Keyed by the normalised English text so casing/spacing differences in the
+  // UI literals still resolve.
+  const next: Record<string, string> = {};
+  for (const key of Object.keys(english)) {
+    const value = localized[key];
+    const from = english[key];
+    if (value && from && value !== from) next[normalise(from)] = value;
+  }
+  dictionary = next;
+}
+
+export function getLanguage(): string {
+  return currentLanguage;
+}
+
+/** Languages present in the generated table, for pickers. */
+export function languageNames(): string[] {
+  return Object.keys(languages).sort();
+}
+
+/** Translates by English text; returns the input unchanged when unknown. */
+export function t(text: string | undefined): string {
+  if (!text) return "";
+  return dictionary[normalise(text)] ?? text;
+}
+
+/** Text nodes and placeholder/title attributes that should never be touched. */
+const SKIP_TAGS = new Set(["INPUT", "TEXTAREA", "CODE", "PRE", "SCRIPT", "STYLE"]);
+
+function translateAttributes(element: Element): void {
+  for (const name of ["title", "placeholder", "aria-label"]) {
+    const value = element.getAttribute(name);
+    if (!value) continue;
+    const translated = t(value);
+    if (translated !== value) element.setAttribute(name, translated);
+  }
+}
+
+function translateNode(node: Node): void {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const raw = node.nodeValue;
+    if (!raw) return;
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+
+    const translated = t(trimmed);
+    if (translated === trimmed) return;
+    node.nodeValue = raw.replace(trimmed, translated);
+    return;
+  }
+
+  if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+  const element = node as Element;
+  if (SKIP_TAGS.has(element.tagName)) return;
+  if (element instanceof HTMLElement && element.dataset.noI18n !== undefined) return;
+
+  translateAttributes(element);
+  for (const child of Array.from(element.childNodes)) translateNode(child);
+}
+
+/**
+ * Translates the rendered DOM in place. React keeps its own English strings in
+ * the virtual tree, so this runs after every commit and on language change,
+ * which gives full coverage without touching every call site.
+ */
+export function translateDom(root: Node = document.body): void {
+  translateNode(root);
+}
+
+/** Watches for re-renders so newly shown dialogs are translated too. */
+export function observeTranslations(): () => void {
+  if (typeof MutationObserver === "undefined") return () => {};
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === "characterData") translateNode(mutation.target);
+      for (const added of Array.from(mutation.addedNodes)) translateNode(added);
+    }
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  translateDom();
+  return () => observer.disconnect();
+}

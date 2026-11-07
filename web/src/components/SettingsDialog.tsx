@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import type { ReactNode } from "react";
 
 import * as api from "../api/client";
@@ -150,7 +151,7 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
               />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={`AllDebrid API key${settings.hasAllDebridKey ? " (stored)" : ""}`}>
+              <Field label={`${t("AllDebrid API key")}${settings.hasAllDebridKey ? ` ${t("(stored)")}` : ""}`}>
                 <input
                   type="password"
                   value={allDebrid}
@@ -159,7 +160,7 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
                   className="input"
                 />
               </Field>
-              <Field label={`RealDebrid API key${settings.hasRealDebridKey ? " (stored)" : ""}`}>
+              <Field label={`${t("RealDebrid API key")}${settings.hasRealDebridKey ? ` ${t("(stored)")}` : ""}`}>
                 <input
                   type="password"
                   value={realDebrid}
@@ -190,7 +191,7 @@ export function SettingsDialog({ onClose, onSaved }: SettingsDialogProps) {
                   className="input font-mono"
                 />
               </Field>
-              <Field label={`Web UI password${settings.hasWebPassword ? " (stored)" : ""}`}>
+              <Field label={`${t("Web UI password")}${settings.hasWebPassword ? ` ${t("(stored)")}` : ""}`}>
                 <input
                   type="password"
                   value={webPassword}
@@ -240,7 +241,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium text-mist-500">{label}</span>
+      <span className="block text-xs font-medium text-mist-500">{t(label)}</span>
       <span className="mt-1 block">{children}</span>
     </label>
   );
@@ -250,7 +251,7 @@ function Check({ label, checked, onChange }: { label: string; checked: boolean; 
   return (
     <label className="flex cursor-pointer items-center gap-2 text-xs text-mist-300">
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="size-3.5 accent-accent-500" />
-      {label}
+      {t(label)}
     </label>
   );
 }

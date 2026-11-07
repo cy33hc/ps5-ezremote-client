@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { t } from "../i18n";
 
 import * as api from "../api/client";
 import { Icon } from "./Icon";
@@ -51,14 +52,14 @@ export function PackageInfoDialog({ item, name, onClose, onInstall, remote }: Pa
       footer={
         <>
           <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs font-medium text-mist-300 hover:bg-white/5">
-            Close
+            {t("Close")}
           </button>
           <button
             type="button"
             onClick={onInstall}
             className="rounded-lg bg-accent-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-600"
           >
-            Install
+            {t("Install")}
           </button>
         </>
       }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 
 import * as api from "./api/client";
@@ -14,6 +14,7 @@ import { PackageInfoDialog } from "./components/PackageInfoDialog";
 import { PropertiesDialog } from "./components/PropertiesDialog";
 import { ServersDialog } from "./components/ServersDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { loadLanguage, observeTranslations, t } from "./i18n";
 import { Toasts } from "./components/Toasts";
 import type { Toast, ToastTone } from "./components/Toasts";
 import { breadcrumbs, formatSize, isArchive, isPackage, joinPath } from "./lib/format";
@@ -98,11 +99,15 @@ export default function App() {
   const [bgOpen, setBgOpen] = useState(false);
   const [activityList, setActivityList] = useState<api.Activity[]>([]);
   const [showActivityDialog, setShowActivityDialog] = useState(true);
+  const [, refreshTranslations] = useReducer((value: number) => value + 1, 0);
   const lastActivityIdRef = useRef(0);
   const loadPreferences = useCallback(async () => {
     try {
       const loaded = await api.getSettings();
       setShowActivityDialog(loaded.showActivityDialog);
+      loadLanguage(loaded.language);
+      // Translations are module state; re-render the tree once they are in.
+      refreshTranslations();
     } catch {
       // Keep the current value.
     }
@@ -123,6 +128,13 @@ export default function App() {
     if (!authed) return;
     void loadPreferences();
   }, [authed, loadPreferences]);
+
+  // React keeps English in its virtual tree, so the rendered DOM is translated
+  // after each commit and re-translated when a dialog opens.
+  useEffect(() => {
+    if (!authed) return;
+    return observeTranslations();
+  }, [authed, refreshTranslations]);
   const [bgList, setBgList] = useState<api.BgDownload[]>([]);
   const [ezremoteVersion, setEzremoteVersion] = useState<string | null>(null);
   const [ezMenu, setEzMenu] = useState<{ x: number; y: number } | null>(null);
@@ -1640,7 +1652,7 @@ function HeaderButton({
       className="relative flex items-center gap-1.5 rounded-lg border border-abyss-600 px-2.5 py-1.5 text-xs font-medium text-mist-300 transition hover:border-white/20 hover:bg-white/5 hover:text-mist-100"
     >
       <Icon name={icon} size={18} className={busy ? "animate-pulse text-accent-200" : undefined} />
-      {label ? <span className="hidden lg:inline">{label}</span> : null}
+      {label ? <span className="hidden lg:inline">{t(label)}</span> : null}
       {badge ? (
         <span className="absolute -top-1.5 -right-1.5 min-w-4 rounded-full bg-accent-500 px-1 text-[10px] font-semibold leading-4 text-white">
           {badge}
@@ -2114,7 +2126,7 @@ function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: Me
             }`}
           >
             {item.icon ? <Icon name={item.icon} size={14} /> : <span className="size-3.5" />}
-            {item.label}
+            {t(item.label)}
           </button>
         ),
       )}

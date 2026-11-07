@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { t } from "../i18n";
 import type { ReactNode } from "react";
 
 import * as api from "../api/client";
@@ -223,7 +224,7 @@ export function ServersDialog({ onClose, onChanged }: ServersDialogProps) {
                   <Field label="Username">
                     <input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} className="input" />
                   </Field>
-                  <Field label={`Password${profile.hasPassword ? " (stored)" : ""}`}>
+                  <Field label={`${t("Password")}${profile.hasPassword ? ` ${t("(stored)")}` : ""}`}>
                     <input
                       type="password"
                       value={form.password}

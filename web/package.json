@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && rm -rf ../data/assets/assets && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "langs": "node scripts/langs.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",

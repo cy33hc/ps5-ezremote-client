@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { t } from "../i18n";
 import type { ReactNode } from "react";
 
 import { Icon } from "./Icon";
@@ -56,7 +57,7 @@ export function Modal({ title, subtitle, onClose, children, footer, width = "max
       }}
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-label={t(title)}
     >
       <div className="flex min-h-full items-center justify-center">
       <div
@@ -67,7 +68,7 @@ export function Modal({ title, subtitle, onClose, children, footer, width = "max
           <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-tight text-mist-100">{title}</h2>
             {/* Wraps instead of truncating: nowrap text widened the whole panel on phones. */}
-            {subtitle ? <p className="mt-0.5 text-sm break-words text-mist-500">{subtitle}</p> : null}
+            {subtitle ? <p className="mt-0.5 text-sm break-words text-mist-500">{typeof subtitle === "string" ? t(subtitle) : subtitle}</p> : null}
           </div>
           {dismissible ? (
             <button

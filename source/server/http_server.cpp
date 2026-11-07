@@ -1279,6 +1279,7 @@ namespace HttpServer
                 }
 
                 bool installed = false;
+                bool archive_failed = false;
                 while (entry != nullptr)
                 {
                     Activities::Item(activity.id, entry->filename);
@@ -1298,16 +1299,18 @@ namespace HttpServer
 
                     if (INSTALLER::InstallArchivePkg(entry->filename, install_data) != 0)
                         installed = true;
+                    else
+                        archive_failed = true;
 
                     ArchiveEntry *previous = entry;
                     entry = ZipUtil::GetNextPackageEntry(entry);
                     free(previous);
                 }
 
-                if (!installed)
-                    failed_items += (std::string(item) + ",");
-                else
+                if (installed)
                     installed_count++;
+                if (!installed || archive_failed)
+                    failed_items += (std::string(item) + ",");
             }
 
             if (failed_items.length() > 0)
@@ -1580,9 +1583,14 @@ namespace HttpServer
                 return;
             }
 
+            const std::string install_target = std::string(path);
+            const std::string install_name = install_target.substr(install_target.find_last_of("/") + 1);
+            Activities::Guard activity(ACTIVITY_INSTALL, "Installing " + install_name, ACTIVITY_WEB, ACTIVITY_REMOTE);
+
             std::map<std::string, RemoteSettings>::iterator it = site_settings.find(site);
             if (it == site_settings.end())
             {
+                activity.fail("Unknown site");
                 failed(res, 200, "Unknown site");
                 return;
             }
@@ -1594,6 +1602,7 @@ namespace HttpServer
             std::shared_ptr<RemoteClient> held = RemotePool::AcquireShared(settings);
             if (held == nullptr)
             {
+                activity.fail("Could not connect");
                 failed(res, 200, "Could not connect");
                 return;
             }
@@ -1607,16 +1616,16 @@ namespace HttpServer
 
             if (is_archive)
             {
-                Activities::Guard activity(ACTIVITY_INSTALL, "Installing from remote archive", ACTIVITY_WEB, ACTIVITY_REMOTE);
-
                 ArchiveEntry *entry = ZipUtil::GetPackageEntry(path, held.get());
                 if (entry == nullptr)
                 {
+                    activity.fail("No package found in this archive");
                     failed(res, 200, "No package found in this archive");
                     return;
                 }
 
                 int installed = 0;
+                int archive_failed = 0;
                 while (entry != nullptr)
                 {
                     Activities::Item(activity.id, entry->filename);
@@ -1636,6 +1645,8 @@ namespace HttpServer
 
                     if (INSTALLER::InstallArchivePkg(entry->filename, install_data) != 0)
                         installed++;
+                    else
+                        archive_failed++;
 
                     ArchiveEntry *previous = entry;
                     entry = ZipUtil::GetNextPackageEntry(entry);
@@ -1646,6 +1657,12 @@ namespace HttpServer
                 {
                     activity.fail("Failed to install the package in this archive");
                     failed(res, 200, "Failed to install the package in this archive");
+                }
+                else if (archive_failed > 0)
+                {
+                    char partial_msg[128];
+                    snprintf(partial_msg, sizeof(partial_msg), "%d of %d packages failed", archive_failed, installed + archive_failed);
+                    activity.partial(partial_msg);
                 }
                 else
                     success(res);
@@ -1668,6 +1685,7 @@ namespace HttpServer
                 size_t root_pos = (scheme_pos == std::string::npos) ? std::string::npos : full_url.find("/", scheme_pos + 3);
                 if (root_pos == std::string::npos)
                 {
+                    activity.fail("Invalid server URL");
                     failed(res, 200, "Invalid server URL");
                     return;
                 }
@@ -1685,6 +1703,7 @@ namespace HttpServer
                 std::string hash = INSTALLER::StoreBgInstallHostData(&settings, target_path, size);
                 if (hash.empty())
                 {
+                    activity.fail("Could not queue the install");
                     failed(res, 200, "Could not queue the install");
                     return;
                 }
@@ -1698,6 +1717,7 @@ namespace HttpServer
 
             if (INSTALLER::InstallRemotePkg(url, &header, title) == 0)
             {
+                activity.fail("Install failed");
                 failed(res, 200, "Install failed");
                 return;
             }
@@ -3865,6 +3885,7 @@ namespace HttpServer
             std::string download_url = filehost->GetDownloadUrl();
             if (download_url.empty())
             {
+                activity.fail(lang_strings[STR_CANT_EXTRACT_URL_MSG]);
                 failed(res, 200, lang_strings[STR_CANT_EXTRACT_URL_MSG]);
                 return;
             }
@@ -3882,6 +3903,7 @@ namespace HttpServer
             
             if (!baseclient->FileExists(path))
             {
+                activity.fail(baseclient->LastResponse());
                 failed(res, 200, baseclient->LastResponse());
                 return;
             }
@@ -3923,12 +3945,15 @@ namespace HttpServer
                     }
                     else
                     {
+                        activity.fail("Could not save host data for background install");
                         failed(res, 200, "Could not save host data for background install");
                     }
                     sleep(2);
 
                     std::string remote_install_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
                     int rc = INSTALLER::InstallRemotePkg(remote_install_url, &header, title);
+                    if (rc == 0)
+                        activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
                 }
                 else if (enable_rpi && use_disk_cache && BE32(header.pkg_magic) == PKG_CNT_MAGIC)
                 {
@@ -3951,6 +3976,7 @@ namespace HttpServer
 
                     if (ret == 0)
                     {
+                        activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
                         failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
                         return;
                     }
@@ -3978,6 +4004,7 @@ namespace HttpServer
 
                     if (ret == 0)
                     {
+                        activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
                         failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
                         free(install_data);
                         return;
@@ -3985,6 +4012,7 @@ namespace HttpServer
                 }
                 else
                 {
+                    activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
                     failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
                     return;
                 }

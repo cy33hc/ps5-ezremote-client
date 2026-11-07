@@ -998,13 +998,15 @@ namespace Actions
 
                             int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
 
-                            INSTALLER::InstallArchivePkg(entry->filename, install_data);
+                            if (INSTALLER::InstallArchivePkg(entry->filename, install_data) != 0)
+                                success++;
+                            else
+                                failed++;
 
                             ArchiveEntry *previos = entry;
                             entry = ZipUtil::GetNextPackageEntry(entry);
                             free(previos);
                         }
-                        success++;
                     }
                     else
                         skipped++;
@@ -1185,13 +1187,15 @@ namespace Actions
 
                             int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
 
-                            INSTALLER::InstallArchivePkg(entry->filename, install_data);
+                            if (INSTALLER::InstallArchivePkg(entry->filename, install_data) != 0)
+                                success++;
+                            else
+                                failed++;
 
                             ArchiveEntry *previous = entry;
                             entry = ZipUtil::GetNextPackageEntry(entry);
                             free(previous);
                         }
-                        success++;
                     }
                     else
                         skipped++;

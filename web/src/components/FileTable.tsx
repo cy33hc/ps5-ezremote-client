@@ -1,5 +1,6 @@
 import type { DirEntry } from "../api/client";
 import { formatDate, formatSize, isArchive, isPackage } from "../lib/format";
+import { t } from "../i18n";
 import { Icon } from "./Icon";
 import type { IconName } from "./Icon";
 
@@ -52,7 +53,7 @@ function SortButton({
       onClick={() => onSort(column)}
       className={`flex items-center gap-1 transition hover:text-mist-100 ${active ? "text-mist-100" : "text-mist-500"} ${className ?? ""}`}
     >
-      {label}
+      {t(label)}
       {active ? <Icon name={sort.dir === "asc" ? "sortAsc" : "sortDesc"} size={13} /> : null}
     </button>
   );

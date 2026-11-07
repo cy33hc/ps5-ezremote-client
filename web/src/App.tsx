@@ -1730,7 +1730,7 @@ function Panel({
             active ? "bg-title text-white" : "bg-abyss-800 text-mist-500"
           }`}
         >
-          {label}
+          {t(label)}
         </span>
         <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5 text-xs">
           {crumbs.length === 0 ? <span className="truncate text-mist-500">not connected</span> : null}
@@ -1766,8 +1766,8 @@ function Panel({
         <button
           type="button"
           onClick={onRefresh}
-          title={`Refresh ${label} pane`}
-          aria-label={`Refresh ${label} pane`}
+          title={`${t("Refresh")} ${t(label)}`}
+          aria-label={`${t("Refresh")} ${t(label)}`}
           className="rounded-md p-1 text-mist-500 transition hover:bg-white/10 hover:text-mist-100"
         >
           <Icon name="refresh" size={14} />
@@ -1777,7 +1777,7 @@ function Panel({
       <input
         value={filter}
         onChange={(event) => onFilter(event.target.value)}
-        placeholder="Filter…"
+        placeholder={t("Filter…")}
         className="w-full rounded-lg border border-abyss-600 bg-abyss-800 px-2.5 py-1 text-xs text-mist-100 placeholder:text-mist-500/70 focus:border-accent-500/60 focus:outline-none"
       />
 

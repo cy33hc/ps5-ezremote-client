@@ -128,7 +128,7 @@ export function ServersDialog({ onClose, onChanged }: ServersDialogProps) {
 
   return (
     <Modal
-      title="Servers"
+      title={t("Servers")}
       width="max-w-4xl"
       panelClassName="min-h-[22rem] sm:min-h-0 [@media(max-height:520px)]:min-h-[30rem]"
       onClose={onClose}
@@ -165,7 +165,7 @@ export function ServersDialog({ onClose, onChanged }: ServersDialogProps) {
         <>
         <div className="mb-3 flex items-start gap-2 rounded-lg border border-abyss-600 bg-abyss-800 px-3 py-2">
           <p className={`min-w-0 flex-1 text-sm text-mist-300 ${showInfo ? "" : "truncate"}`}>
-            Profiles stored on the console. The active site is used for remote connections and installs.
+            {t("Profiles stored on the console. The active site is used for remote connections and installs.")}
           </p>
           <button
             type="button"

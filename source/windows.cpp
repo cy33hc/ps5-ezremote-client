@@ -310,11 +310,13 @@ namespace Windows
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 4);
         bool is_connected = remoteclient != nullptr && remoteclient->IsConnected();
 
+        sprintf(id, "%s###connectbutton", is_connected ? lang_strings[STR_DISCONNECT] : lang_strings[STR_CONNECT]);
+        // Focus the button as the window opens, so the first tap or Enter
+        // connects without moving around the UI.
         if (ImGui::IsWindowAppearing())
         {
-            ImGui::SetItemDefaultFocus();
+            ImGui::SetKeyboardFocusHere();
         }
-        sprintf(id, "%s###connectbutton", is_connected ? lang_strings[STR_DISCONNECT] : lang_strings[STR_CONNECT]);
         if (ImGui::Button(id, ImVec2(200, 0)))
         {
             selected_action = is_connected ? ACTION_DISCONNECT : ACTION_CONNECT;

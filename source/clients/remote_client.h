@@ -60,6 +60,9 @@ public:
     virtual int Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping=false) = 0;
     virtual int Mkdir(const std::string &path) = 0;
     virtual int Rmdir(const std::string &path, bool recursive) = 0;
+    // True when one Rmdir(recursive) removes the whole tree server-side, so a
+    // cancellation cannot be honoured mid-tree anyway.
+    virtual bool RecursiveDeleteIsAtomic() { return false; }
     virtual int Size(const std::string &path, uint64_t *size) = 0;
     virtual int Get(const std::string &outputfile, const std::string &path, uint64_t offset=0) = 0;
     virtual int Get(FileStream *split_file, const std::string &path, uint64_t offset=0) = 0;

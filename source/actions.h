@@ -128,6 +128,10 @@ namespace Actions
     // Installs one remote .pkg the way the console does: download to a temp
     // file, stream it while installing (disk cache), or hand the URL to the
     // installer, depending on the site's RPI / disk-cache settings.
+    // Removes a remote folder tree entry by entry, so a deep delete can be
+    // cancelled between files instead of inside one opaque Rmdir call.
+    bool DeleteRemoteTree(RemoteClient *client, const std::string &path, int depth = 0);
+
     int InstallRemotePkgFile(RemoteSettings *settings, RemoteClient *client, const std::string &path,
                              pkg_header *header, uint64_t file_size);
     void CreateLocalFile(char *filename);

@@ -371,7 +371,8 @@ namespace Actions
             if (FS::RmRecursive(it->path) <= 0)
                 failed++;
         }
-        if (failed > 0)
+        // A cancelled delete is not a failure.
+        if (failed > 0 && !Activities::Stopped())
         {
             if (failed < total)
                 activity.partial(status_message);
@@ -417,10 +418,13 @@ namespace Actions
                 if (it->isDir)
                 {
                     total++;
-                    if (!client->Rmdir(it->path, true))
+                    if (!DeleteRemoteTree(client, it->path))
                     {
-                        failed++;
-                        healthy = false;
+                        if (!Activities::Stopped())
+                        {
+                            failed++;
+                            healthy = false;
+                        }
                     }
                 }
                 else
@@ -444,7 +448,8 @@ namespace Actions
             Disconnect();
         }
 
-        if (failed > 0)
+        // A cancelled delete is not a failure.
+        if (failed > 0 && !Activities::Stopped())
         {
             if (failed < total)
                 activity.partial(status_message);
@@ -2076,7 +2081,8 @@ namespace Actions
                 sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
         }
         RemotePool::Release(client, true);
-        if (failed > 0)
+        // A cancelled delete is not a failure.
+        if (failed > 0 && !Activities::Stopped())
         {
             if (failed < total)
                 activity.partial(status_message);
@@ -2226,7 +2232,8 @@ namespace Actions
             Activities::Item(activity.id, it->path);
         }
         RemotePool::Release(client, true);
-        if (failed > 0)
+        // A cancelled delete is not a failure.
+        if (failed > 0 && !Activities::Stopped())
         {
             if (failed < total)
                 activity.partial(status_message);
@@ -2306,6 +2313,48 @@ namespace Actions
         int result = INSTALLER::InstallLocalPkg(local_file, header, true);
         Activities::SetCancellable(true);
         return result;
+    }
+
+    bool DeleteRemoteTree(RemoteClient *client, const std::string &path, int depth)
+    {
+        if (Activities::Stopped())
+            return false;
+
+        // Guard against a symlinked loop.
+        if (depth > 64)
+            return false;
+
+        // WebDAV and friends delete the whole collection in one request, so
+        // walking it would only add round-trips.
+        if (client->RecursiveDeleteIsAtomic())
+            return client->Rmdir(path, true);
+
+        std::vector<DirEntry> entries = client->ListDir(path);
+        for (size_t i = 0; i < entries.size(); i++)
+        {
+            if (!entries[i].selectable)
+                continue;
+
+            if (strcmp(entries[i].name, ".") == 0 || strcmp(entries[i].name, "..") == 0)
+                continue;
+
+            if (Activities::Stopped())
+                return false;
+
+            if (entries[i].isDir)
+            {
+                if (!DeleteRemoteTree(client, entries[i].path, depth + 1))
+                    return false;
+            }
+            else
+            {
+                snprintf(activity_message, 1024, "%s %s", lang_strings[STR_DELETING], entries[i].path);
+                if (!client->Delete(entries[i].path))
+                    return false;
+            }
+        }
+
+        return client->Rmdir(path, false);
     }
 
     int InstallRemotePkgFile(RemoteSettings *settings, RemoteClient *client, const std::string &path,

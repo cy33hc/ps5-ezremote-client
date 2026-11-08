@@ -13,6 +13,7 @@ public:
     int Connect(const std::string &url, const std::string &user, const std::string &pass, bool send_ping=false);
     int Mkdir(const std::string &path);
     int Rmdir(const std::string &path, bool recursive);
+    bool RecursiveDeleteIsAtomic() { return true; }
     int Rename(const std::string &src, const std::string &dst);
     int Delete(const std::string &path);
     int Copy(const std::string &from, const std::string &to);

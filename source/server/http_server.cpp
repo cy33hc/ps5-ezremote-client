@@ -2598,6 +2598,9 @@ namespace HttpServer
             size_t count = json_object_array_length(items);
             for (size_t i = 0; i < count; i++)
             {
+                if (Activities::Stopped())
+                    break;
+
                 const char *item = json_object_get_string(json_object_array_get_idx(items, i));
                 if (item == nullptr)
                     continue;
@@ -2610,12 +2613,16 @@ namespace HttpServer
                 target += CopyItemName(source);
 
                 if (client->Copy(source, target) == 0)
-                    failed_items += source + ",";
+                {
+                    if (!Activities::Stopped())
+                        failed_items += source + ",";
+                }
                 failed_count++;
             }
 
 
-            if (!failed_items.empty())
+            // A cancelled copy is not a failure.
+            if (!failed_items.empty() && !Activities::Stopped())
             {
                 if (failed_count < count)
                     activity.partial("Failed to copy: " + failed_items);
@@ -2669,6 +2676,9 @@ namespace HttpServer
             size_t count = json_object_array_length(items);
             for (size_t i = 0; i < count; i++)
             {
+                if (Activities::Stopped())
+                    break;
+
                 const char *item = json_object_get_string(json_object_array_get_idx(items, i));
                 if (item == nullptr)
                     continue;
@@ -2681,12 +2691,16 @@ namespace HttpServer
                 target += CopyItemName(source);
 
                 if (client->Move(source, target) == 0)
-                    failed_items += source + ",";
+                {
+                    if (!Activities::Stopped())
+                        failed_items += source + ",";
+                }
                 failed_count++;
             }
 
 
-            if (!failed_items.empty())
+            // A cancelled copy/move is not a failure.
+            if (!failed_items.empty() && !Activities::Stopped())
             {
                 if (failed_count < count)
                     activity.partial("Failed to move: " + failed_items);
@@ -3536,8 +3550,11 @@ namespace HttpServer
                     if (item == nullptr)
                         continue;
                     count++;
-                    if (!client->Rmdir(item, true))
-                        failed_items += std::string(item) + ",";
+                    if (!Actions::DeleteRemoteTree(client, item))
+                    {
+                        if (!Activities::Stopped())
+                            failed_items += std::string(item) + ",";
+                    }
                 }
             }
 
@@ -3548,7 +3565,8 @@ namespace HttpServer
                 bad_request(res, "Nothing to remove");
                 return;
             }
-            if (!failed_items.empty())
+            // A cancel mid-tree is not a failure.
+            if (!failed_items.empty() && !Activities::Stopped())
             {
                 activity.fail("Failed to remove: " + failed_items);
                 failed(res, 200, "Failed to remove: " + failed_items);

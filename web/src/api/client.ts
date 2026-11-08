@@ -425,7 +425,7 @@ export async function remotePkgInfo(site: string, path: string): Promise<RemoteP
 }
 
 export async function installRemotePackage(site: string, path: string, size: number): Promise<void> {
-  await request("/__local__/install_bg", { site, path, size });
+  await request("/__remote__/install_pkg", { site, path, size });
 }
 
 export interface Activity {

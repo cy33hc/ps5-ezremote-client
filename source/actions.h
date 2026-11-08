@@ -125,6 +125,11 @@ namespace Actions
     void *CopyRemoteFilesThread(void *argp);
     void CopyRemoteFiles();
     int DownloadAndInstallPkg(const std::string &filename, pkg_header *header, RemoteClient *client);
+    // Installs one remote .pkg the way the console does: download to a temp
+    // file, stream it while installing (disk cache), or hand the URL to the
+    // installer, depending on the site's RPI / disk-cache settings.
+    int InstallRemotePkgFile(RemoteSettings *settings, RemoteClient *client, const std::string &path,
+                             pkg_header *header, uint64_t file_size);
     void CreateLocalFile(char *filename);
     void CreateRemoteFile(char *filename);
     void *ExtractArchivePkg(void *argp);

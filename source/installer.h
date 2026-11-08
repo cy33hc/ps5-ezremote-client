@@ -171,6 +171,9 @@ namespace INSTALLER
 
     bool canInstallRemotePkg(const std::string &url);
     std::string getRemoteUrl(const std::string path, uint64_t size, bool encodeUrl = false);
+    // Same, for a specific site instead of the active one; the web UI can
+    // install for a site that is not the console's current selection.
+    std::string getRemoteUrl(RemoteSettings *settings, RemoteClient *client, const std::string path, uint64_t size, bool encodeUrl = false);
     int InstallRemotePkg(const std::string &path, pkg_header *header, std::string title);
     int InstallLocalPkg(const std::string &path, pkg_header *header, bool remove_after_install = false);
     int InstallLocalPkg(const std::string &path);

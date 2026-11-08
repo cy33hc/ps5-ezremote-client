@@ -1842,7 +1842,7 @@ namespace HttpServer
 
             success(res); });
 
-        svr->Post("/__local__/install_bg", [&](const Request &req, Response &res)
+        svr->Post("/__remote__/install_pkg", [&](const Request &req, Response &res)
         {
             json_object *jobj = json_tokener_parse(req.body.c_str());
             JsonObjectRef jobj_ref(jobj);
@@ -1953,55 +1953,15 @@ namespace HttpServer
                 return;
             }
 
-            bool anonymous = strlen(settings.username) == 0 && strlen(settings.password) == 0 &&
-                (settings.type == CLIENT_TYPE_WEBDAV ||
-                 (settings.type == CLIENT_TYPE_HTTP_SERVER &&
-                  strcmp(settings.http_server_type, HTTP_SERVER_ARCHIVEORG) != 0 &&
-                  strcmp(settings.http_server_type, HTTP_SERVER_GITHUB) != 0));
-
-            std::string url;
-            if (anonymous)
-            {
-                // No credentials: stream straight from the server, as
-                // INSTALLER::getRemoteUrl does for this case.
-                std::string full_url = WebDAVClient::GetHttpUrl(std::string(settings.server) + path);
-                size_t scheme_pos = full_url.find("://");
-                size_t root_pos = (scheme_pos == std::string::npos) ? std::string::npos : full_url.find("/", scheme_pos + 3);
-                if (root_pos == std::string::npos)
-                {
-                    activity.fail("Invalid server URL");
-                    failed(res, 200, "Invalid server URL");
-                    return;
-                }
-                url = full_url.substr(0, root_pos) + httplib::detail::encode_url(full_url.substr(root_pos));
-            }
-            else
-            {
-                std::string target_path(path);
-                if (settings.type == CLIENT_TYPE_HTTP_SERVER &&
-                    strcmp(settings.http_server_type, HTTP_SERVER_GITHUB) == 0)
-                {
-                    target_path = static_cast<GithubClient *>(held.get())->GetRedirectUrl(target_path);
-                }
-
-                std::string hash = INSTALLER::StoreBgInstallHostData(&settings, target_path, size);
-                if (hash.empty())
-                {
-                    activity.fail("Could not queue the install");
-                    failed(res, 200, "Could not queue the install");
-                    return;
-                }
-                url = "http://localhost:" + std::to_string(http_int_server_port) + "/bg_install/" + hash;
-            }
+            // Same decision as the console: RPI off downloads first, disk
+            // cache streams into the installer, otherwise the installer fetches
+            // through the proxy.
+            if (size == 0)
+                held->Size(path, &size);
 
             pkg_header header;
             memset(&header, 0, sizeof(header));
-            std::string title;
-            title = INSTALLER::GetRemotePkgTitle(held.get(), path, &header);
-
-            Activities::SetCancellable(false);
-            int remote_install = INSTALLER::InstallRemotePkg(url, &header, title);
-            Activities::SetCancellable(true);
+            int remote_install = Actions::InstallRemotePkgFile(&settings, held.get(), path, &header, size);
 
             if (remote_install == 0)
             {
@@ -4266,6 +4226,24 @@ namespace HttpServer
 
             if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
             {
+                if (!enable_rpi)
+                {
+                    // Same as the console's InstallLocalUrlPkgThread: fetch the
+                    // package to a temp file, then install the local copy.
+                    int rc = Actions::DownloadAndInstallPkg(path, &header, baseclient);
+                    delete baseclient;
+
+                    if (rc == 0)
+                    {
+                        activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
+                        failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
+                        return;
+                    }
+
+                    success(res);
+                    return;
+                }
+
                 if (enable_rpi && !use_disk_cache)
                 {
                     json_object *history_item_obj = json_object_new_object();
@@ -4329,6 +4307,9 @@ namespace HttpServer
                     ret = INSTALLER::InstallSplitPkg(download_url, install_data, true);
                     Activities::SetCancellable(true);
 
+                    if (Activities::Stopped())
+                        FS::Rm(install_pkg_path.c_str());
+
                     if (ret == 0)
                     {
                         activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
@@ -4358,6 +4339,9 @@ namespace HttpServer
                     Activities::SetCancellable(false);
                     ret = INSTALLER::InstallArchivePkg(entry->filename, install_data, true);
                     Activities::SetCancellable(true);
+
+                    if (Activities::Stopped())
+                        FS::Rm(install_pkg_path.c_str());
 
                     if (ret == 0)
                     {

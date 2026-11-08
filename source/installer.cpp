@@ -228,19 +228,24 @@ namespace INSTALLER
 
 	std::string getRemoteUrl(const std::string path, uint64_t size, bool encodeUrl)
 	{
+		return getRemoteUrl(remote_settings, remoteclient, path, size, encodeUrl);
+	}
+
+	std::string getRemoteUrl(RemoteSettings *settings, RemoteClient *client, const std::string path, uint64_t size, bool encodeUrl)
+	{
 		std::string _path = path;
 
-		if ( strlen(remote_settings->username) == 0 &&
-		     strlen(remote_settings->password) == 0 &&
-			 ( remote_settings->type == CLIENT_TYPE_WEBDAV ||
-			   ( remote_settings->type == CLIENT_TYPE_HTTP_SERVER &&
-				 strcmp(remote_settings->http_server_type, HTTP_SERVER_ARCHIVEORG) != 0 &&
-			     strcmp(remote_settings->http_server_type, HTTP_SERVER_GITHUB) != 0
+		if ( strlen(settings->username) == 0 &&
+		     strlen(settings->password) == 0 &&
+			 ( settings->type == CLIENT_TYPE_WEBDAV ||
+			   ( settings->type == CLIENT_TYPE_HTTP_SERVER &&
+				 strcmp(settings->http_server_type, HTTP_SERVER_ARCHIVEORG) != 0 &&
+			     strcmp(settings->http_server_type, HTTP_SERVER_GITHUB) != 0
 			   )
 			 )
 		   )
 		{
-			std::string full_url = WebDAVClient::GetHttpUrl(remote_settings->server + path);
+			std::string full_url = WebDAVClient::GetHttpUrl(settings->server + path);
 			size_t scheme_pos = full_url.find("://");
 			if (scheme_pos == std::string::npos)
 				return "";
@@ -257,13 +262,13 @@ namespace INSTALLER
 		}
 		else
 		{
-			if (remote_settings->type == CLIENT_TYPE_HTTP_SERVER && strcmp(remote_settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
+			if (settings->type == CLIENT_TYPE_HTTP_SERVER && strcmp(settings->http_server_type, HTTP_SERVER_GITHUB) == 0)
 			{
-				GithubClient *tmp_client = (GithubClient*) remoteclient;
+				GithubClient *tmp_client = (GithubClient*) client;
 				_path = tmp_client->GetRedirectUrl(path);
 			}
 
-			std::string hash = StoreBgInstallHostData(remote_settings, _path, size);
+			std::string hash = StoreBgInstallHostData(settings, _path, size);
 			std::string full_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
 			return full_url;
 		}

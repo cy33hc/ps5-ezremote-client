@@ -941,70 +941,12 @@ namespace Actions
                     {
                         if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
                         {
-                            uint64_t file_size;
+                            uint64_t file_size = 0;
                             client->Size(it->path, &file_size);
-                            if (!remote_settings->enable_rpi)
-                            {
-                                if (DownloadAndInstallPkg(it->path, &header, client) == 0)
-                                    failed++;
-                                else
-                                    success++;
-                            }
+                            if (InstallRemotePkgFile(remote_settings, client, it->path, &header, file_size) == 0)
+                                failed++;
                             else
-                            {
-                                if (remote_settings->enable_disk_cache)
-                                {
-                                    SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
-                                    memset(install_data, 0, sizeof(SplitPkgInstallData));
-
-                                    uint64_t tick = Util::GetTick();
-                                    std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(tick) + ".pkg";
-                                    FileStream *sp = CreateFileStream(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
-
-                                    install_data->split_file = sp;
-                                    install_data->remote_client = INSTALLER::GetRemoteClient(remote_settings);
-                                    install_data->path = it->path;
-                                    client->Size(it->path, &install_data->size);
-                                    install_data->stop_write_thread = false;
-                                    install_data->delete_client = true;
-
-                                    int ret = pthread_create(&install_data->thread, NULL, DownloadSplitPkg, install_data);
-
-                                    // Streaming install hands off to the system
-                                    // installer; only the download is cancellable.
-                                    Activities::SetCancellable(false);
-                                    int split_result = INSTALLER::InstallSplitPkg(it->path, install_data, false);
-                                    Activities::SetCancellable(true);
-                                    if (split_result == 0)
-                                        failed++;
-                                    else
-                                        success++;
-
-                                    // Cancelled while the package was being
-                                    // streamed: drop the temporary file.
-                                    if (Activities::Stopped())
-                                        FS::Rm(install_pkg_path.c_str());
-                                }
-                                else
-                                {
-                                    std::string url = INSTALLER::getRemoteUrl(it->path, file_size, true);
-                                    std::string title = INSTALLER::GetRemotePkgTitle(client, it->path, &header);
-                                    // Direct installer: the transfer is done,
-                                    // so this phase cannot be interrupted.
-                                    Activities::SetCancellable(false);
-                                    int direct_result = INSTALLER::InstallRemotePkg(url, &header, title);
-                                    Activities::SetCancellable(true);
-                                    if (direct_result == 0)
-                                        failed++;
-                                    else
-                                        success++;
-
-                                    if (it != files.end())
-                                    {
-                                        sleep(1);
-                                    }
-                                }
-                            }
+                                success++;
                         }
                         else
                             skipped++;
@@ -1493,6 +1435,14 @@ namespace Actions
 
         int is_performed = tmp_client.Get(filename, path);
 
+        // Cancelled: drop the partial package and stop, whatever Get reported.
+        if (Activities::Stopped())
+        {
+            tmp_client.Quit();
+            FS::Rm(filename);
+            return NULL;
+        }
+
         if (is_performed == 0)
         {
             sprintf(status_message, "%s - %s", lang_strings[STR_FAILED], tmp_client.LastResponse());
@@ -1500,13 +1450,6 @@ namespace Actions
             return NULL;
         }
         tmp_client.Quit();
-
-        // Cancelled during the download: do not install a truncated package.
-        if (Activities::Stopped())
-        {
-            FS::Rm(filename);
-            return NULL;
-        }
 
         FILE *in = FS::OpenRead(filename);
         if (in == NULL)
@@ -2341,16 +2284,17 @@ namespace Actions
 
         Activities::ProgressCurrent(0, 0);
 
-        if (ret == 0)
-            return 0;
-
-        // Cancelled during the download: never hand a truncated package to the
-        // installer, which would fail or, worse, half-install.
+        // A cancel leaves a truncated package behind whatever the client
+        // reports, so check it before the failure return: some clients abort
+        // with 0, others close cleanly and return 1.
         if (Activities::Stopped())
         {
             FS::Rm(local_file);
             return 0;
         }
+
+        if (ret == 0)
+            return 0;
 
         sprintf(activity_message, "%s %s", lang_strings[STR_INSTALLING], filename.c_str());
 
@@ -2362,6 +2306,51 @@ namespace Actions
         int result = INSTALLER::InstallLocalPkg(local_file, header, true);
         Activities::SetCancellable(true);
         return result;
+    }
+
+    int InstallRemotePkgFile(RemoteSettings *settings, RemoteClient *client, const std::string &path,
+                             pkg_header *header, uint64_t file_size)
+    {
+        // No RPI: pull the package down first, then install the local copy.
+        if (!settings->enable_rpi)
+            return DownloadAndInstallPkg(path, header, client);
+
+        // Disk cache: stream it into the installer instead of buffering it all.
+        if (settings->enable_disk_cache)
+        {
+            SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
+            memset(install_data, 0, sizeof(SplitPkgInstallData));
+
+            std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
+            FileStream *sp = CreateFileStream(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
+
+            install_data->split_file = sp;
+            install_data->remote_client = INSTALLER::GetRemoteClient(settings);
+            install_data->path = path;
+            client->Size(path, &install_data->size);
+            install_data->stop_write_thread = false;
+            install_data->delete_client = true;
+
+            pthread_create(&install_data->thread, NULL, DownloadSplitPkg, install_data);
+
+            Activities::SetCancellable(false);
+            int ret = INSTALLER::InstallSplitPkg(path, install_data, false);
+            Activities::SetCancellable(true);
+
+            if (Activities::Stopped())
+                FS::Rm(install_pkg_path.c_str());
+
+            return ret;
+        }
+
+        // RPI: let the installer fetch the package itself through the proxy.
+        std::string url = INSTALLER::getRemoteUrl(settings, client, path, file_size, true);
+        std::string title = INSTALLER::GetRemotePkgTitle(client, path, header);
+
+        Activities::SetCancellable(false);
+        int ret = INSTALLER::InstallRemotePkg(url, header, title);
+        Activities::SetCancellable(true);
+        return ret;
     }
 
     void CreateLocalFile(char *filename)

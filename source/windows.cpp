@@ -114,6 +114,7 @@ int confirm_transfer_state = -1;
 int overwrite_type = OVERWRITE_PROMPT;
 
 int confirm_state = CONFIRM_NONE;
+int confirm_kind = CONFIRM_KIND_YESNO;
 char confirm_message[256];
 ACTIONS action_to_take = ACTION_NONE;
 
@@ -1237,6 +1238,7 @@ namespace Windows
             ImGui::PushID("Delete##settings");
             if (ImGui::Selectable(lang_strings[STR_DELETE], false, getSelectableFlag(REMOTE_ACTION_DELETE) | ImGuiSelectableFlags_DontClosePopups, ImVec2(220, 0)))
             {
+                confirm_kind = CONFIRM_KIND_YESNO;
                 confirm_state = CONFIRM_WAIT;
                 sprintf(confirm_message, "%s", lang_strings[STR_DEL_CONFIRM_MSG]);
                 if (local_browser_selected)
@@ -1483,15 +1485,20 @@ namespace Windows
                 ImVec2(confirm_viewport->Pos.x + confirm_viewport->Size.x * 0.5f,
                        confirm_viewport->Pos.y + confirm_viewport->Size.y * 0.5f),
                 ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSizeConstraints(ImVec2(980, 100), ImVec2(980, 200), NULL, NULL);
+            // The yes/no prompt only needs room for two small buttons.
+            bool overwrite_prompt = confirm_kind != CONFIRM_KIND_YESNO;
+            float dialog_width = overwrite_prompt ? 980.0f : 640.0f;
+            ImGui::SetNextWindowSizeConstraints(ImVec2(dialog_width, 100), ImVec2(dialog_width, 200), NULL, NULL);
             if (ImGui::BeginPopupModal(lang_strings[STR_CONFIRM], NULL, ImGuiWindowFlags_AlwaysAutoResize))
             {
-                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 960);
+                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + dialog_width - 20.0f);
                 ImGui::Text("%s", confirm_message);
                 ImGui::PopTextWrapPos();
                 ImGui::NewLine();
                 // Buttons are 140 + 140 + 190 + 140 wide, three gaps between.
-                float buttons_width = 610.0f + ImGui::GetStyle().ItemSpacing.x * 3.0f;
+                float buttons_width = overwrite_prompt
+                    ? 610.0f + ImGui::GetStyle().ItemSpacing.x * 3.0f
+                    : 200.0f + ImGui::GetStyle().ItemSpacing.x;
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
                                      (ImGui::GetContentRegionAvail().x - buttons_width) * 0.5f);
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
@@ -1501,37 +1508,59 @@ namespace Windows
                 {
                     ImGui::SetKeyboardFocusHere();
                 }
-                if (ImGui::Button(lang_strings[STR_SKIP], ImVec2(140, 0)))
+
+                if (confirm_kind == CONFIRM_KIND_YESNO)
                 {
-                    confirm_state = CONFIRM_NO;
-                    selected_action = ACTION_NONE;
-                    SetModalMode(false);
-                    ImGui::CloseCurrentPopup();
+                    if (ImGui::Button(lang_strings[STR_NO], ImVec2(100, 0)))
+                    {
+                        confirm_state = CONFIRM_NO;
+                        selected_action = ACTION_NONE;
+                        SetModalMode(false);
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button(lang_strings[STR_YES], ImVec2(100, 0)))
+                    {
+                        confirm_state = CONFIRM_YES;
+                        selected_action = action_to_take;
+                        SetModalMode(false);
+                        ImGui::CloseCurrentPopup();
+                    }
                 }
-                ImGui::SameLine();
-                if (ImGui::Button(lang_strings[STR_OVERWRITE], ImVec2(140, 0)))
+                else
                 {
-                    confirm_state = CONFIRM_YES;
-                    selected_action = action_to_take;
-                    SetModalMode(false);
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button(lang_strings[STR_ALWAYS_OVERWRITE], ImVec2(190, 0)))
-                {
-                    confirm_state = CONFIRM_ALL;
-                    selected_action = action_to_take;
-                    SetModalMode(false);
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button(lang_strings[STR_CANCEL], ImVec2(140, 0)))
-                {
-                    // Stop the whole activity, not just this file.
-                    confirm_state = CONFIRM_CANCEL;
-                    selected_action = ACTION_NONE;
-                    SetModalMode(false);
-                    ImGui::CloseCurrentPopup();
+                    if (ImGui::Button(lang_strings[STR_SKIP], ImVec2(140, 0)))
+                    {
+                        confirm_state = CONFIRM_NO;
+                        selected_action = ACTION_NONE;
+                        SetModalMode(false);
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button(lang_strings[STR_OVERWRITE], ImVec2(140, 0)))
+                    {
+                        confirm_state = CONFIRM_YES;
+                        selected_action = action_to_take;
+                        SetModalMode(false);
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button(lang_strings[STR_ALWAYS_OVERWRITE], ImVec2(190, 0)))
+                    {
+                        confirm_state = CONFIRM_ALL;
+                        selected_action = action_to_take;
+                        SetModalMode(false);
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button(lang_strings[STR_CANCEL], ImVec2(140, 0)))
+                    {
+                        // Stop the whole activity, not just this file.
+                        confirm_state = CONFIRM_CANCEL;
+                        selected_action = ACTION_NONE;
+                        SetModalMode(false);
+                        ImGui::CloseCurrentPopup();
+                    }
                 }
                 ImGui::EndPopup();
             }

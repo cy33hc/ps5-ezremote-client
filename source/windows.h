@@ -34,6 +34,10 @@ extern char remote_filter[];
 extern char activity_message[];
 extern char confirm_message[];
 extern int confirm_state;
+// Which button set the confirmation dialog shows.
+#define CONFIRM_KIND_YESNO 0
+#define CONFIRM_KIND_OVERWRITE 1
+extern int confirm_kind;
 extern int overwrite_type;
 extern ACTIONS action_to_take;
 extern char extract_zip_folder[];

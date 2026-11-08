@@ -322,6 +322,7 @@ namespace Actions
     static void PromptOverwrite(const char *dest)
     {
         std::lock_guard<std::mutex> lock(confirm_mutex);
+        confirm_kind = CONFIRM_KIND_OVERWRITE;
         sprintf(confirm_message, "%s %s?", lang_strings[STR_OVERWRITE], dest);
         confirm_state = CONFIRM_WAIT;
         action_to_take = selected_action;

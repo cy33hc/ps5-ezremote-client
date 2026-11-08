@@ -2477,7 +2477,9 @@ function urlFileName(url: string): string {
 
 const URL_OPTIONS_KEY = "ezremote.urlOptions";
 
-function loadUrlOptions(): { alldebrid: boolean; realdebrid: boolean; rpi: boolean; diskCache: boolean } {
+type DebridChoice = "none" | "alldebrid" | "realdebrid";
+
+function loadUrlOptions(): { debrid: DebridChoice; rpi: boolean; diskCache: boolean } {
   try {
     const raw = window.localStorage.getItem(URL_OPTIONS_KEY);
     if (raw) {
@@ -2487,14 +2489,21 @@ function loadUrlOptions(): { alldebrid: boolean; realdebrid: boolean; rpi: boole
         rpi: boolean;
         diskCache: boolean;
       }>;
-      const alldebrid = parsed.alldebrid === true;
-      const realdebrid = !alldebrid && parsed.realdebrid === true;
-      return { alldebrid, realdebrid, rpi: parsed.rpi === true, diskCache: parsed.diskCache === true };
+      const debrid: DebridChoice =
+        parsed.alldebrid === true ? "alldebrid" : parsed.realdebrid === true ? "realdebrid" : "none";
+      const rpi = parsed.rpi === true;
+      // The disk cache is only meaningful with RPI, so a stale pair cannot
+      // bring it back on its own.
+      return { debrid, rpi, diskCache: rpi && parsed.diskCache === true };
     }
   } catch {
     // Ignore unreadable or malformed values.
   }
-  return { alldebrid: false, realdebrid: false, rpi: false, diskCache: false };
+
+  // Nothing stored yet: the console keeps these separately from any site, in
+  // install_pkg_url, where RPI starts on and everything else off. A site's
+  // own RPI / disk-cache switches only affect installing from that site.
+  return { debrid: "none", rpi: true, diskCache: false };
 }
 
 function UrlDialog({
@@ -2514,8 +2523,8 @@ function UrlDialog({
   const [dest, setDest] = useState(defaultDest);
   const [fileName, setFileName] = useState(() => urlFileName(initialUrl));
   const [fileNameEdited, setFileNameEdited] = useState(false);
-  const [alldebrid, setAlldebrid] = useState(() => loadUrlOptions().alldebrid);
-  const [realdebrid, setRealdebrid] = useState(() => loadUrlOptions().realdebrid);
+  // Only one file host can be used at a time; "none" keeps it a plain link.
+  const [debrid, setDebrid] = useState<DebridChoice>(() => loadUrlOptions().debrid);
   const [rpi, setRpi] = useState(() => loadUrlOptions().rpi);
   const [diskCache, setDiskCache] = useState(() => loadUrlOptions().diskCache);
   const [working, setWorking] = useState(false);
@@ -2529,11 +2538,19 @@ function UrlDialog({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(URL_OPTIONS_KEY, JSON.stringify({ alldebrid, realdebrid, rpi, diskCache }));
+      window.localStorage.setItem(
+        URL_OPTIONS_KEY,
+        JSON.stringify({
+          alldebrid: debrid === "alldebrid",
+          realdebrid: debrid === "realdebrid",
+          rpi,
+          diskCache,
+        }),
+      );
     } catch {
       // Storage can be unavailable in private modes.
     }
-  }, [alldebrid, realdebrid, rpi, diskCache]);
+  }, [debrid, rpi, diskCache]);
 
   const canSubmit = Boolean(url.trim()) && (isInstall || Boolean(fileName.trim()));
 
@@ -2557,7 +2574,14 @@ function UrlDialog({
         target = joinPath(folder, name);
       }
 
-      await onSubmit({ url: url.trim(), dest: target, alldebrid, realdebrid, diskCache, rpi });
+      await onSubmit({
+        url: url.trim(),
+        dest: target,
+        alldebrid: debrid === "alldebrid",
+        realdebrid: debrid === "realdebrid",
+        diskCache,
+        rpi,
+      });
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Request failed");
@@ -2612,23 +2636,28 @@ function UrlDialog({
           </div>
         ) : null}
         <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1">
-          <Checkbox
+          {/* One host at a time; clicking the active one clears it. */}
+          <Radio
             label="AllDebrid"
-            checked={alldebrid}
-            onChange={(value) => {
-              setAlldebrid(value);
-              if (value) setRealdebrid(false);
-            }}
+            checked={debrid === "alldebrid"}
+            onSelect={() => setDebrid(debrid === "alldebrid" ? "none" : "alldebrid")}
           />
-          <Checkbox
+          <Radio
             label="RealDebrid"
-            checked={realdebrid}
-            onChange={(value) => {
-              setRealdebrid(value);
-              if (value) setAlldebrid(false);
-            }}
+            checked={debrid === "realdebrid"}
+            onSelect={() => setDebrid(debrid === "realdebrid" ? "none" : "realdebrid")}
           />
-          {isInstall ? <Checkbox label="RPI" checked={rpi} onChange={setRpi} /> : null}
+          {isInstall ? (
+            <Checkbox
+              label="RPI"
+              checked={rpi}
+              onChange={(value) => {
+                setRpi(value);
+                // Disk cache only applies to the streaming path RPI selects.
+                if (!value) setDiskCache(false);
+              }}
+            />
+          ) : null}
           {isInstall ? (
             // Only meaningful with RPI: the streaming path is chosen there.
             <Checkbox label="Disk cache" checked={diskCache} onChange={setDiskCache} disabled={!rpi} />
@@ -2642,6 +2671,22 @@ function UrlDialog({
         ) : null}
       </div>
     </Modal>
+  );
+}
+
+function Radio({ label, checked, onSelect }: { label: string; checked: boolean; onSelect: () => void }) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-xs text-mist-300">
+      <input
+        type="radio"
+        checked={checked}
+        // A click on the active radio clears it, so "none" stays reachable.
+        onClick={onSelect}
+        onChange={() => {}}
+        className="size-3.5 accent-accent-500"
+      />
+      {label}
+    </label>
   );
 }
 

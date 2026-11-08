@@ -203,7 +203,7 @@ namespace HttpServer
         {
             if (!overwrite && FS::FileExists(dest.c_str()))
                 return true;
-            return FS::Copy(src, dest.c_str()) > 0;
+            return FS::Copy(src, dest.c_str(), Activities::Stopped);
         }
 
         if (FS::FileExists(dest.c_str()))
@@ -242,12 +242,17 @@ namespace HttpServer
         if (!overwrite && FS::FileExists(dest.c_str()))
             return true;
 
+        if (Activities::Stopped())
+            return false;
+
         if (rename(src.c_str(), dest.c_str()) == 0)
             return true;
 
         if (!FS::IsFolder(src))
         {
-            if (FS::Copy(src, dest.c_str()) <= 0)
+            // Cross-device move: the source is only removed once the copy
+            // finished, so cancelling leaves it intact.
+            if (FS::Copy(src, dest.c_str(), Activities::Stopped) <= 0)
                 return false;
             FS::Rm(src.c_str());
             return true;

@@ -483,6 +483,11 @@ namespace FS
 
     bool Copy(const std::string &from, const std::string &to)
     {
+        return Copy(from, to, nullptr);
+    }
+
+    bool Copy(const std::string &from, const std::string &to, bool (*cancelled)())
+    {
         MkDirs(to, true);
         if (from.compare(to) == 0)
             return true;
@@ -536,6 +541,15 @@ namespace FS
 
             copied += bytes_read;
             Activities::ProgressCurrent(copied, total_size);
+
+            if (cancelled != nullptr && cancelled())
+            {
+                delete[] buf;
+                fclose(src);
+                fclose(dest);
+                // Like Explorer: keep what was copied so far, drop the rest.
+                return false;
+            }
         } while (copied < total_size);
 
         delete[] buf;
@@ -546,20 +560,32 @@ namespace FS
 
     bool Move(const std::string &from, const std::string &to)
     {
+        return Move(from, to, nullptr);
+    }
+
+    bool Move(const std::string &from, const std::string &to, bool (*cancelled)())
+    {
         if (from.compare(to) == 0)
             return true;
 
         errno = 0;
         int ret = rename(from.c_str(), to.c_str());
-        if (ret != 0 && (errno == EXDEV || errno == EEXIST))
-        {
-            bool res = Copy(from, to);
-            if (res)
-                Rm(from);
-            else
-                return res;
-        }
+        if (ret == 0)
+            return true;
 
+        if (errno != EXDEV && errno != EEXIST)
+            return true;
+
+        // Different filesystem: copy, then drop the source. A cancel leaves the
+        // source untouched and only abandons the destination copy.
+        if (cancelled != nullptr && cancelled())
+            return false;
+
+        bool res = Copy(from, to, cancelled);
+        if (!res)
+            return false;
+
+        Rm(from);
         return true;
     }
 }

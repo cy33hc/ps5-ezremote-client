@@ -1724,9 +1724,9 @@ namespace Actions
         {
             prev_tick = Util::GetTick();
             if (isCopy)
-                return FS::Copy(src, dest);
+                return FS::Copy(src, dest, Activities::Stopped);
             else
-                return FS::Move(src, dest);
+                return FS::Move(src, dest, Activities::Stopped);
         }
 
         return 1;
@@ -1856,7 +1856,8 @@ namespace Actions
             }
             Activities::Item(activity.id, it->path);
         }
-        if (failed > 0)
+        // A cancelled copy aborts mid-file; that is not a failure.
+        if (failed > 0 && !Activities::Stopped())
         {
             if (failed < total)
                 activity.partial(status_message);
@@ -1978,7 +1979,8 @@ namespace Actions
             }
             Activities::Item(activity.id, it->path);
         }
-        if (failed > 0)
+        // A cancelled copy aborts mid-file; that is not a failure.
+        if (failed > 0 && !Activities::Stopped())
         {
             if (failed < total)
                 activity.partial(status_message);

@@ -30,7 +30,8 @@ function toForm(profile: ServerProfile): FormState {
     httpServerType: profile.httpServerType,
     defaultDirectory: profile.defaultDirectory || "/",
     enableRpi: profile.enableRpi,
-    enableDiskCache: profile.enableDiskCache,
+    // A stored profile can predate the dependency; never show it enabled.
+    enableDiskCache: profile.enableRpi && profile.enableDiskCache,
   };
 }
 
@@ -97,7 +98,7 @@ export function ServersDialog({ onClose, onChanged }: ServersDialogProps) {
         httpServerType: form.httpServerType,
         defaultDirectory: form.defaultDirectory.trim() || "/",
         enableRpi: form.enableRpi,
-        enableDiskCache: form.enableDiskCache,
+        enableDiskCache: form.enableRpi && form.enableDiskCache,
       });
       await load(profile.name);
       onChanged();
@@ -260,10 +261,19 @@ export function ServersDialog({ onClose, onChanged }: ServersDialogProps) {
                 </Field>
 
                 <div className="flex flex-wrap gap-x-5 gap-y-2 pt-1">
-                  <Check label="Enable RPI" checked={form.enableRpi} onChange={(value) => setForm({ ...form, enableRpi: value })} />
+                  <Check
+                    label="Enable RPI"
+                    checked={form.enableRpi}
+                    onChange={(value) =>
+                      // The disk cache only applies to the streaming path RPI
+                      // enables, so it cannot outlive it.
+                      setForm({ ...form, enableRpi: value, enableDiskCache: value ? form.enableDiskCache : false })
+                    }
+                  />
                   <Check
                     label="Disk cache"
-                    checked={form.enableDiskCache}
+                    checked={form.enableDiskCache && form.enableRpi}
+                    disabled={!form.enableRpi}
                     onChange={(value) => setForm({ ...form, enableDiskCache: value })}
                   />
                 </div>
@@ -295,10 +305,30 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+function Check({
+  label,
+  checked,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-xs text-mist-300">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="size-3.5 accent-accent-500" />
+    <label
+      className={`flex items-center gap-2 text-xs ${
+        disabled ? "cursor-default text-mist-500/60" : "cursor-pointer text-mist-300"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="size-3.5 accent-accent-500 disabled:opacity-40"
+      />
       {label}
     </label>
   );

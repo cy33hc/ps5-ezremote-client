@@ -616,7 +616,8 @@ namespace Actions
             sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
         }
 
-        if (failed > 0)
+        // A cancelled transfer aborts mid-file; that is not a failure.
+        if (failed > 0 && !Activities::Stopped())
         {
             if (failed < total)
                 activity.partial(status_message);
@@ -868,7 +869,8 @@ namespace Actions
             sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
         }
 
-        if (failed > 0)
+        // A cancelled transfer aborts mid-file; that is not a failure.
+        if (failed > 0 && !Activities::Stopped())
         {
             if (failed < total)
                 activity.partial(status_message);
@@ -968,16 +970,31 @@ namespace Actions
 
                                     int ret = pthread_create(&install_data->thread, NULL, DownloadSplitPkg, install_data);
 
-                                    if (INSTALLER::InstallSplitPkg(it->path, install_data, false) == 0)
+                                    // Streaming install hands off to the system
+                                    // installer; only the download is cancellable.
+                                    Activities::SetCancellable(false);
+                                    int split_result = INSTALLER::InstallSplitPkg(it->path, install_data, false);
+                                    Activities::SetCancellable(true);
+                                    if (split_result == 0)
                                         failed++;
                                     else
                                         success++;
+
+                                    // Cancelled while the package was being
+                                    // streamed: drop the temporary file.
+                                    if (Activities::Stopped())
+                                        FS::Rm(install_pkg_path.c_str());
                                 }
                                 else
                                 {
                                     std::string url = INSTALLER::getRemoteUrl(it->path, file_size, true);
                                     std::string title = INSTALLER::GetRemotePkgTitle(client, it->path, &header);
-                                    if (INSTALLER::InstallRemotePkg(url, &header, title) == 0)
+                                    // Direct installer: the transfer is done,
+                                    // so this phase cannot be interrupted.
+                                    Activities::SetCancellable(false);
+                                    int direct_result = INSTALLER::InstallRemotePkg(url, &header, title);
+                                    Activities::SetCancellable(true);
+                                    if (direct_result == 0)
                                         failed++;
                                     else
                                         success++;
@@ -1016,10 +1033,18 @@ namespace Actions
 
                             int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
 
-                            if (INSTALLER::InstallArchivePkg(entry->filename, install_data) != 0)
+                            Activities::SetCancellable(false);
+                            int archive_result = INSTALLER::InstallArchivePkg(entry->filename, install_data);
+                            Activities::SetCancellable(true);
+                            if (archive_result != 0)
                                 success++;
                             else
                                 failed++;
+
+                            // Cancelled while extracting: drop the temporary
+                            // package the stream was filling.
+                            if (Activities::Stopped())
+                                FS::Rm(install_pkg_path.c_str());
 
                             ArchiveEntry *previos = entry;
                             entry = ZipUtil::GetNextPackageEntry(entry);
@@ -1039,7 +1064,8 @@ namespace Actions
                     lang_strings[STR_INSTALL_SUCCESS], success, lang_strings[STR_INSTALL_FAILED], failed,
                     lang_strings[STR_INSTALL_SKIPPED], skipped);
 
-            if (failed > 0)
+            // A cancelled install (download phase) is not a failure.
+            if (failed > 0 && !Activities::Stopped())
             {
                 if (success > 0)
                     activity.partial(status_message);
@@ -1121,6 +1147,9 @@ namespace Actions
         FileStream *sp = install_data->split_file;
 
         Activities::Guard activity(ACTIVITY_INSTALL, STR_DOWNLOADING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
+        // The installer is already reading this stream, so stopping it midway
+        // would corrupt the install; the download cannot be cancelled here.
+        Activities::SetCancellable(false);
         Activities::Item(activity.id, install_data->path);
 
         /* loop over file contents and write to fd */
@@ -1163,7 +1192,10 @@ namespace Actions
                     {
                         if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
                         {
-                            if ((ret = INSTALLER::InstallLocalPkg(it->path, &header)) <= 0)
+                            Activities::SetCancellable(false);
+                            ret = INSTALLER::InstallLocalPkg(it->path, &header);
+                            Activities::SetCancellable(true);
+                            if (ret <= 0)
                             {
                                 if (ret == -1)
                                 {
@@ -1205,10 +1237,18 @@ namespace Actions
 
                             int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
 
-                            if (INSTALLER::InstallArchivePkg(entry->filename, install_data) != 0)
+                            Activities::SetCancellable(false);
+                            int archive_result = INSTALLER::InstallArchivePkg(entry->filename, install_data);
+                            Activities::SetCancellable(true);
+                            if (archive_result != 0)
                                 success++;
                             else
                                 failed++;
+
+                            // Cancelled while extracting: drop the temporary
+                            // package the stream was filling.
+                            if (Activities::Stopped())
+                                FS::Rm(install_pkg_path.c_str());
 
                             ArchiveEntry *previous = entry;
                             entry = ZipUtil::GetNextPackageEntry(entry);
@@ -1228,7 +1268,8 @@ namespace Actions
                     lang_strings[STR_INSTALL_SUCCESS], success, lang_strings[STR_INSTALL_FAILED], failed,
                     lang_strings[STR_INSTALL_SKIPPED], skipped);
 
-            if (failed > 0)
+            // A cancelled install (download phase) is not a failure.
+            if (failed > 0 && !Activities::Stopped())
             {
                 if (success > 0)
                     activity.partial(status_message);
@@ -1460,6 +1501,13 @@ namespace Actions
         }
         tmp_client.Quit();
 
+        // Cancelled during the download: do not install a truncated package.
+        if (Activities::Stopped())
+        {
+            FS::Rm(filename);
+            return NULL;
+        }
+
         FILE *in = FS::OpenRead(filename);
         if (in == NULL)
         {
@@ -1472,7 +1520,10 @@ namespace Actions
         if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
         {
             int ret;
-            if ((ret = INSTALLER::InstallLocalPkg(filename, &header, true)) != 1)
+            Activities::SetCancellable(false);
+            ret = INSTALLER::InstallLocalPkg(filename, &header, true);
+            Activities::SetCancellable(true);
+            if (ret != 1)
             {
                 if (ret == -1)
                 {
@@ -2293,10 +2344,24 @@ namespace Actions
         if (ret == 0)
             return 0;
 
+        // Cancelled during the download: never hand a truncated package to the
+        // installer, which would fail or, worse, half-install.
+        if (Activities::Stopped())
+        {
+            FS::Rm(local_file);
+            return 0;
+        }
+
         sprintf(activity_message, "%s %s", lang_strings[STR_INSTALLING], filename.c_str());
 
         Activities::Item(activity_current_id, std::string(lang_strings[STR_INSTALLING]) + " " + filename);
-        return INSTALLER::InstallLocalPkg(local_file, header, true);
+
+        // The install hands off to the system installer and cannot be stopped;
+        // the download above still could be.
+        Activities::SetCancellable(false);
+        int result = INSTALLER::InstallLocalPkg(local_file, header, true);
+        Activities::SetCancellable(true);
+        return result;
     }
 
     void CreateLocalFile(char *filename)

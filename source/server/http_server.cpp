@@ -683,12 +683,20 @@ namespace HttpServer
             {
                 if (!entries[i].selectable)
                     continue;
+
+                if (Activities::Stopped())
+                    return false;
+
                 std::string target = dest + "/" + entries[i].name;
                 if (!CopyLocalToRemote(client, job, entries[i].path, target, loaded, failed))
                     ok = false;
             }
             return ok;
         }
+
+        // Stop before starting another file once the user cancelled.
+        if (Activities::Stopped())
+            return false;
 
         UpdateTransfer(job->id, *loaded, job->total, CopyItemName(src));
         SetTransferLive(job->id, client, *loaded, true);
@@ -697,6 +705,11 @@ namespace HttpServer
 
         if (put_result == 0)
         {
+            // A cancelled upload is not a failure; the partial file stays on
+            // the remote side, the way an interrupted Explorer copy leaves one.
+            if (Activities::Stopped())
+                return false;
+
             *failed += src + ",";
             return false;
         }
@@ -813,6 +826,10 @@ namespace HttpServer
 
         if (ret != 1)
         {
+            // Cancelled: keep what arrived, the way Explorer does, and stop.
+            if (Activities::Stopped())
+                return false;
+
             FS::Rm(dest);
             *failed += src + ",";
             return false;
@@ -890,6 +907,9 @@ namespace HttpServer
 
             for (size_t i = 0; i < job->items.size(); i++)
             {
+                if (Activities::Stopped())
+                    break;
+
                 const CopyItem &item = job->items[i];
                 std::string target = job->dest;
                 if (target.empty() || target[target.size() - 1] != '/')
@@ -903,7 +923,7 @@ namespace HttpServer
             }
         }
 
-        if (!failed_items.empty())
+        if (!failed_items.empty() && !Activities::Stopped())
         {
             activity.fail("Failed: " + failed_items);
             FinishTransfer(job->id, 2, "Failed: " + failed_items);
@@ -1519,7 +1539,10 @@ namespace HttpServer
 
                 if (!is_archive)
                 {
-                    if (!INSTALLER::InstallLocalPkg(item))
+                    Activities::SetCancellable(false);
+                    bool installed = INSTALLER::InstallLocalPkg(item);
+                    Activities::SetCancellable(true);
+                    if (!installed)
                         failed_items += (std::string(item) + ",");
                     else
                         installed_count++;
@@ -1552,7 +1575,10 @@ namespace HttpServer
 
                     pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);
 
-                    if (INSTALLER::InstallArchivePkg(entry->filename, install_data) != 0)
+                    Activities::SetCancellable(false);
+                    int archive_result = INSTALLER::InstallArchivePkg(entry->filename, install_data);
+                    Activities::SetCancellable(true);
+                    if (archive_result != 0)
                         installed = true;
                     else
                         archive_failed = true;
@@ -1898,7 +1924,10 @@ namespace HttpServer
 
                     pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);
 
-                    if (INSTALLER::InstallArchivePkg(entry->filename, install_data) != 0)
+                    Activities::SetCancellable(false);
+                    int archive_result = INSTALLER::InstallArchivePkg(entry->filename, install_data);
+                    Activities::SetCancellable(true);
+                    if (archive_result != 0)
                         installed++;
                     else
                         archive_failed++;
@@ -1970,7 +1999,11 @@ namespace HttpServer
             std::string title;
             title = INSTALLER::GetRemotePkgTitle(held.get(), path, &header);
 
-            if (INSTALLER::InstallRemotePkg(url, &header, title) == 0)
+            Activities::SetCancellable(false);
+            int remote_install = INSTALLER::InstallRemotePkg(url, &header, title);
+            Activities::SetCancellable(true);
+
+            if (remote_install == 0)
             {
                 activity.fail("Install failed");
                 failed(res, 200, "Install failed");
@@ -2070,6 +2103,8 @@ namespace HttpServer
                 json_object_object_add(item, "total", json_object_new_uint64(list[i].total));
                 json_object_object_add(item, "elapsed", json_object_new_uint64(((list[i].finished > 0 ? list[i].finished : now) - list[i].started) / 1000000));
                 json_object_object_add(item, "origin", json_object_new_int(list[i].origin));
+                // False while a phase cannot be interrupted (the install hand-off).
+                json_object_object_add(item, "cancellable", json_object_new_boolean(list[i].cancellable));
                 json_object_object_add(item, "originName", json_object_new_string(Activities::OriginName(list[i].origin)));
                 json_object_array_add(result, item);
             }
@@ -4267,7 +4302,9 @@ namespace HttpServer
                     sleep(2);
 
                     std::string remote_install_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
+                    Activities::SetCancellable(false);
                     int rc = INSTALLER::InstallRemotePkg(remote_install_url, &header, title);
+                    Activities::SetCancellable(true);
                     if (rc == 0)
                         activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
                 }
@@ -4288,7 +4325,9 @@ namespace HttpServer
 
                     int ret = pthread_create(&install_data->thread, NULL, Actions::DownloadSplitPkg, install_data);
 
+                    Activities::SetCancellable(false);
                     ret = INSTALLER::InstallSplitPkg(download_url, install_data, true);
+                    Activities::SetCancellable(true);
 
                     if (ret == 0)
                     {
@@ -4316,7 +4355,9 @@ namespace HttpServer
 
                     int ret = pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);
 
+                    Activities::SetCancellable(false);
                     ret = INSTALLER::InstallArchivePkg(entry->filename, install_data, true);
+                    Activities::SetCancellable(true);
 
                     if (ret == 0)
                     {

@@ -437,6 +437,8 @@ export interface Activity {
   /** ACTIVITY_* state: 0 running, 1 done, 2 failed, 3 cancelled, 4 partial. */
   state: number;
   stateName: string;
+  /** False while a phase cannot be interrupted (install hand-off). */
+  cancellable: boolean;
   label: string;
   item: string;
   done: number;

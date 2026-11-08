@@ -2068,7 +2068,7 @@ function ActivitiesDialog({
                 </span>
                 <span className={`shrink-0 text-xs ${label[ACTIVITY_STATES[item.state]] ?? "text-mist-500"}`}>{t(ACTIVITY_STATES[item.state] ?? item.stateName)}</span>
                 <span className="shrink-0 font-mono text-xs text-mist-500">{item.elapsed}s</span>
-                {item.state === 0 ? (
+                {item.state === 0 && item.cancellable ? (
                   <button
                     type="button"
                     onClick={() => onCancel(item.id)}

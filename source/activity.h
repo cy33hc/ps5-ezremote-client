@@ -60,6 +60,7 @@ struct Activity
     uint64_t done;
     uint64_t total;
     bool cancel;       // requested by the user
+    bool cancellable;  // false during a phase that cannot be interrupted
     uint64_t started;  // Util::GetTick() when the activity began
     uint64_t finished; // when it ended, 0 while running
     int origin;
@@ -84,6 +85,9 @@ namespace Activities
     void SetOverwriteType(int type);
     void SnapshotOverwrite();
     void Item(uint64_t id, const std::string &item);
+    // Marks the calling thread's activity as interruptible or not, e.g. an
+    // install hands off to the system installer, which cannot be stopped.
+    void SetCancellable(bool cancellable);
     void Progress(uint64_t id, uint64_t done, uint64_t total);
 
     // Marks the activity failed with a message; Guard's destructor will not

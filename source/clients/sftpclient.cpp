@@ -314,6 +314,10 @@ int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint
 
     do
     {
+        // Cancel stops the transfer between chunks, leaving what was written.
+        if (Activities::Stopped())
+            break;
+
         rc = libssh2_sftp_read(sftp_handle, buff, FTP_CLIENT_BUFSIZ);
         if (rc > 0)
         {
@@ -522,6 +526,9 @@ int SFTPClient::Put(const std::string &inputfile, const std::string &path, uint6
 
     while (ok)
     {
+        if (Activities::Stopped())
+            break;
+
         nread = FS::Read(in, buff, FTP_CLIENT_BUFSIZ);
         if (nread <= 0)
         {
@@ -614,6 +621,9 @@ int SFTPClient::PutScp(const std::string &inputfile, const std::string &path, ui
 
     while (ok)
     {
+        if (Activities::Stopped())
+            break;
+
         nread = FS::Read(in, buff, FTP_CLIENT_BUFSIZ);
         if (nread <= 0)
             break;

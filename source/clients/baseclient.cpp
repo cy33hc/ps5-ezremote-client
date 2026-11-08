@@ -8,6 +8,7 @@
 #include "split_file.h"
 #include "util.h"
 #include "windows.h"
+#include "activity.h"
 #include "common.h"
 
 using httplib::DataSink;
@@ -34,21 +35,25 @@ int BaseClient::SocketOptCallback(void* ptr, int fd, uint32_t socktype)
 
 int BaseClient::NothingCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
-    return 0;
+    // Used where progress is not wanted, but a cancel should still stop the
+    // transfer (split-file downloads).
+    return Activities::Stopped() ? 1 : 0;
 }
 
 int BaseClient::DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     CHTTPClient::ProgressFnStruct *progress_data = (CHTTPClient::ProgressFnStruct*) ptr;
     static_cast<BaseClient *>(progress_data->pOwner)->SetTransferredBytes((uint64_t) dNowDownloaded);
-    return 0;
+    // A non-zero return aborts the transfer, which is how a cancel reaches the
+    // HTTP layer.
+    return Activities::Stopped() ? 1 : 0;
 }
 
 int BaseClient::UploadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     CHTTPClient::ProgressFnStruct *progress_data = (CHTTPClient::ProgressFnStruct*) ptr;
     static_cast<BaseClient *>(progress_data->pOwner)->SetTransferredBytes((uint64_t) dNowUploaded);
-    return 0;
+    return Activities::Stopped() ? 1 : 0;
 }
 
 size_t BaseClient::WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data)
@@ -74,6 +79,11 @@ size_t BaseClient::WriteDataSinkCallback(void *pCurlData, size_t usBlockCount, s
 {
     const char* buff = reinterpret_cast<char *>(pCurlData);
     DataSink *out = reinterpret_cast<DataSink*>(pUserData);
+
+    // Cancelling aborts the transfer here: a short write stops curl, which is
+    // how "copy to local" is interrupted mid-file.
+    if (Activities::Stopped())
+        return 0;
 
     if (out->write(buff, usBlockCount*usBlockSize))
         return (usBlockCount * usBlockSize);

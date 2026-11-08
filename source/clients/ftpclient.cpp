@@ -859,6 +859,9 @@ int FtpClient::FtpXfer(const std::string &localfile, const std::string &path, ft
 	{
 		while ((l = fread(dbuf, 1, FTP_CLIENT_BUFSIZ, local)) > 0)
 		{
+			// Cancel closes the data connection instead of finishing the file.
+			if (Activities::Stopped())
+				break;
 			if ((c = FtpWrite(dbuf, l, nData)) < l)
 			{
 				break;
@@ -869,6 +872,8 @@ int FtpClient::FtpXfer(const std::string &localfile, const std::string &path, ft
 	{
 		while ((l = FtpRead(dbuf, FTP_CLIENT_BUFSIZ, nData)) > 0)
 		{
+			if (Activities::Stopped())
+				break;
 			if (fwrite(dbuf, 1, l, local) <= 0)
 			{
 				break;
@@ -1340,6 +1345,9 @@ int FtpClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, 
 
 	do
 	{
+		if (Activities::Stopped())
+			break;
+
 		size_t bytes_to_read = std::min<size_t>(FTP_CLIENT_BUFSIZ, bytes_remaining);
 		count = FtpRead(buf, bytes_to_read, nData);
 		if (count > 0)

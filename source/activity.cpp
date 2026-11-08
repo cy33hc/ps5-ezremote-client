@@ -57,6 +57,7 @@ namespace Activities
         activity.started = Util::GetTick();
         activity.finished = 0;
         activity.cancel = false;
+        activity.cancellable = true;
         activity.origin = origin;
         activity.scope = scope;
         activity_list.push_back(activity);
@@ -207,11 +208,28 @@ namespace Activities
         {
             if (activity_list[i].id == id && activity_list[i].state == ACTIVITY_RUNNING)
             {
+                // A phase that cannot be interrupted refuses the request.
+                if (!activity_list[i].cancellable)
+                    return false;
+
                 activity_list[i].cancel = true;
                 return true;
             }
         }
         return false;
+    }
+
+    void SetCancellable(bool cancellable)
+    {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        for (size_t i = 0; i < activity_list.size(); i++)
+        {
+            if (activity_list[i].id == activity_current_id)
+            {
+                activity_list[i].cancellable = cancellable;
+                return;
+            }
+        }
     }
 
     bool IsCancelled(uint64_t id)

@@ -2249,10 +2249,10 @@ namespace Windows
                     else if (item.state == ACTIVITY_DONE)
                         color = ImVec4(0.34f, 0.65f, 0.29f, 1.0f);
                     ImGui::TextColored(color, "%s", Activities::StateName(item.state));
-                    if (item.state == ACTIVITY_RUNNING)
+                    if (item.state == ACTIVITY_RUNNING && item.cancellable)
                     {
                         ImGui::PushID((int) item.id);
-                        if (ImGui::SmallButton("Cancel"))
+                        if (ImGui::SmallButton(lang_strings[STR_CANCEL]))
                             Activities::Cancel(item.id);
                         ImGui::PopID();
                     }

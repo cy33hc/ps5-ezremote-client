@@ -235,7 +235,7 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 	int count = 0;
 	ResetTransferredBytes();
 	prev_tick = Util::GetTick();
-	while ((count = smb2_read(smb2, in, buff, max_read_size)) != 0)
+	while (!Activities::Stopped() && (count = smb2_read(smb2, in, buff, max_read_size)) != 0)
 	{
 		if (count < 0)
 		{
@@ -274,7 +274,7 @@ int SmbClient::Get(FileStream *split_file, const std::string &ppath, uint64_t of
 	}
 	int count = 0;
 
-	while ((count = smb2_read(smb2, in, buff, max_read_size)) != 0)
+	while (!Activities::Stopped() && (count = smb2_read(smb2, in, buff, max_read_size)) != 0)
 	{
 		if (count < 0)
 		{
@@ -470,7 +470,7 @@ int SmbClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 	int count = 0;
 	ResetTransferredBytes();
 	prev_tick = Util::GetTick();
-	while ((count = FS::Read(in, buff, max_write_size)) > 0)
+	while (!Activities::Stopped() && (count = FS::Read(in, buff, max_write_size)) > 0)
 	{
 		if (count < 0)
 		{

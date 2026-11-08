@@ -217,7 +217,7 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 	int count = 0;
 	ResetTransferredBytes();
 	prev_tick = Util::GetTick();
-	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) > 0)
+	while (!Activities::Stopped() && (count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) > 0)
 	{
 		if (count < 0)
 		{
@@ -249,7 +249,7 @@ int NfsClient::Get(FileStream *split_file, const std::string &ppath, uint64_t of
 
 	void *buff = malloc(BUF_SIZE);
 	int count = 0;
-	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) != 0)
+	while (!Activities::Stopped() && (count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) != 0)
 	{
 		if (count < 0)
 		{
@@ -441,7 +441,7 @@ int NfsClient::Put(const std::string &inputfile, const std::string &ppath, uint6
 	int count = 0;
 	ResetTransferredBytes();
 	prev_tick = Util::GetTick();
-	while ((count = FS::Read(in, buff, BUF_SIZE)) != 0)
+	while (!Activities::Stopped() && (count = FS::Read(in, buff, BUF_SIZE)) != 0)
 	{
 		if (count < 0)
 		{

@@ -295,6 +295,16 @@ export interface AuthStatus {
   language?: string;
 }
 
+/** Console language; this route is public so the sign-in screen can use it. */
+export async function currentLanguage(): Promise<string> {
+  try {
+    const data = await request<{ language?: string }>("/__local__/lang");
+    return typeof data.language === "string" ? data.language : "";
+  } catch {
+    return "";
+  }
+}
+
 export async function authStatus(): Promise<AuthStatus> {
   return request<AuthStatus>("/__local__/auth");
 }

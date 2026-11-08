@@ -15,6 +15,20 @@ function normalise(text: string): string {
   return text.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+/** Text nodes and placeholder/title attributes that should never be touched. */
+const SKIP_TAGS = new Set(["INPUT", "TEXTAREA", "CODE", "PRE", "SCRIPT", "STYLE"]);
+const ATTRIBUTES = ["title", "placeholder", "aria-label"];
+
+// What each node/attribute looked like before we translated it. Without this,
+// switching back to a language whose text equals the source would leave the
+// old translation in place: React sees identical virtual text and never
+// rewrites the node we changed.
+const textSources = new WeakMap<Node, string>();
+const textWritten = new WeakMap<Node, string>();
+const attributeSources = new WeakMap<Element, Record<string, string>>();
+const attributeWritten = new WeakMap<Element, Record<string, string>>();
+
+
 const CACHE_KEY = "ezremote.language";
 
 /** Last language seen, so the sign-in screen can translate before any request. */
@@ -62,12 +76,13 @@ export function loadLanguage(language: string): void {
   }
   dictionary = next;
   rememberLanguage(currentLanguage);
-}
 
-// Prime from the last known language before the first paint: the sign-in
-// screen otherwise waits for /__local__/auth to come back.
-const cached = cachedLanguage();
-if (cached && languages[cached]) loadLanguage(cached);
+  // Re-walk the page so text that is not re-rendered from JSX (plain markup
+  // translated in place) follows the new language, and reverts to the source
+  // when switching back to one that matches it.
+  if (typeof document !== "undefined" && document.body) translateDom();
+
+}
 
 /** Small handle for diagnosing translations from the browser console. */
 if (typeof window !== "undefined") {
@@ -92,28 +107,53 @@ export function t(text: string | undefined): string {
   return dictionary[normalise(text)] ?? text;
 }
 
-/** Text nodes and placeholder/title attributes that should never be touched. */
-const SKIP_TAGS = new Set(["INPUT", "TEXTAREA", "CODE", "PRE", "SCRIPT", "STYLE"]);
+function translateAttribute(element: Element, name: string): void {
+  const current = element.getAttribute(name);
+  if (current === null) return;
+
+  const sources = attributeSources.get(element) ?? {};
+  const written = attributeWritten.get(element) ?? {};
+
+  // Anything other than what we last wrote came from React: new source text.
+  if (written[name] !== current) sources[name] = current;
+
+  const source = sources[name] ?? current;
+  const translated = t(source);
+  const next = translated === source ? source : translated;
+
+  attributeSources.set(element, sources);
+  if (next !== current) {
+    written[name] = next;
+    element.setAttribute(name, next);
+  }
+  attributeWritten.set(element, written);
+}
 
 function translateAttributes(element: Element): void {
-  for (const name of ["title", "placeholder", "aria-label"]) {
-    const value = element.getAttribute(name);
-    if (!value) continue;
-    const translated = t(value);
-    if (translated !== value) element.setAttribute(name, translated);
-  }
+  for (const name of ATTRIBUTES) translateAttribute(element, name);
+}
+
+function translateText(node: Node): void {
+  const current = node.nodeValue;
+  if (!current) return;
+
+  if (textWritten.get(node) !== current) textSources.set(node, current);
+
+  const source = textSources.get(node) ?? current;
+  const trimmed = source.trim();
+  if (!trimmed) return;
+
+  const translated = t(trimmed);
+  const next = translated === trimmed ? source : source.replace(trimmed, translated);
+  if (next === current) return;
+
+  textWritten.set(node, next);
+  node.nodeValue = next;
 }
 
 function translateNode(node: Node): void {
   if (node.nodeType === Node.TEXT_NODE) {
-    const raw = node.nodeValue;
-    if (!raw) return;
-    const trimmed = raw.trim();
-    if (!trimmed) return;
-
-    const translated = t(trimmed);
-    if (translated === trimmed) return;
-    node.nodeValue = raw.replace(trimmed, translated);
+    translateText(node);
     return;
   }
 
@@ -163,3 +203,9 @@ export function tp(template: string, values: Record<string, string | number>): s
     return value === undefined ? `{${key}}` : String(value);
   });
 }
+
+// Prime from the last known language before the first paint: the sign-in
+// screen otherwise waits for a request to come back. Kept at the end of the
+// module so every declaration it can reach is already initialised.
+const cached = cachedLanguage();
+if (cached && languages[cached]) loadLanguage(cached);

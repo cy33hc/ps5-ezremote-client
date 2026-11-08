@@ -2872,6 +2872,15 @@ namespace HttpServer
             res.set_content(result_str, strlen(result_str), "application/json");
         });
 
+        // Unauthenticated on purpose: the sign-in screen has no session yet and
+        // still has to be drawn in the console's language.
+        svr->Get("/__local__/lang", [&](const Request &req, Response &res)
+        {
+            std::string body = "{\"language\":\"" + std::string(language) + "\"}";
+            res.status = 200;
+            res.set_content(body, "application/json");
+        });
+
         svr->Get("/__local__/auth", [&](const Request &req, Response &res)
         {
             json_object *result = json_object_new_object();
@@ -4420,7 +4429,7 @@ namespace HttpServer
                 return Server::HandlerResponse::Unhandled;
 
             const std::string path = req.path;
-            if (path == "/__local__/auth" || path == "/__local__/login")
+            if (path == "/__local__/auth" || path == "/__local__/login" || path == "/__local__/lang")
                 return Server::HandlerResponse::Unhandled;
 
             // /stop shuts the client down, so it needs a session as well.

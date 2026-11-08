@@ -126,13 +126,25 @@ export default function App() {
   // defaults in place for the whole session.
   useEffect(() => {
     if (!auth) return;
-    // Before login only the language is available; settings need a session.
-    const language = auth.language ?? cachedLanguage();
-    if (language) {
-      loadLanguage(language);
-      refreshTranslations();
-    }
-    if (authed) void loadPreferences();
+    let cancelled = false;
+
+    // The language route is public, so the sign-in screen does not have to wait
+    // for a session (or trust a cached value from a previous visit).
+    void (async () => {
+      const fetched = await api.currentLanguage();
+      if (cancelled) return;
+
+      const language = fetched || auth.language || cachedLanguage();
+      if (language) {
+        loadLanguage(language);
+        refreshTranslations();
+      }
+      if (authed) void loadPreferences();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [auth, authed, loadPreferences]);
 
   // React keeps English in its virtual tree, so the rendered DOM is translated
@@ -351,6 +363,10 @@ export default function App() {
   }, [serverInfo, remoteSite, loadRemote]);
 
   useEffect(() => {
+    // No session, no request: the sign-in screen is shown before this can
+    // succeed anyway.
+    if (!authed) return;
+
     let cancelled = false;
     setLoading(true);
     api
@@ -372,7 +388,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [path, reloadKey, notify]);
+  }, [path, reloadKey, notify, authed]);
 
   const activeProfile = useMemo(
     () => serverInfo?.sites.find((site) => site.name === serverInfo.active),

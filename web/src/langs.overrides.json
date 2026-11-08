@@ -126,7 +126,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} paquet en cours d'installation",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} paquets en cours d'installation",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{done} paquets sur {total} en cours d'installation",
-  "STR_DYN_N__SELECTED": "{n} sélectionné(s)"
+  "STR_DYN_N__SELECTED": "{n} sélectionné(s)",
+  "STR_WEB_UPLOAD_TO_PS5": "Envoyer vers la PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Télécharger depuis la PS5"
  },
  "German": {
   "STR_API_KEY": "API-Schlüssel",
@@ -251,7 +253,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} Paket wird installiert",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} Pakete werden installiert",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{done} von {total} Paketen werden installiert",
-  "STR_DYN_N__SELECTED": "{n} ausgewählt"
+  "STR_DYN_N__SELECTED": "{n} ausgewählt",
+  "STR_WEB_UPLOAD_TO_PS5": "Auf PS5 hochladen",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Von PS5 herunterladen"
  },
  "Dutch": {
   "STR_API_KEY": "API-sleutel",
@@ -376,7 +380,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} pakket wordt geïnstalleerd",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} pakketten worden geïnstalleerd",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{done} van {total} pakketten worden geïnstalleerd",
-  "STR_DYN_N__SELECTED": "{n} geselecteerd"
+  "STR_DYN_N__SELECTED": "{n} geselecteerd",
+  "STR_WEB_UPLOAD_TO_PS5": "Naar PS5 uploaden",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Van PS5 downloaden"
  },
  "Spanish": {
   "STR_API_KEY": "Clave API",
@@ -503,7 +509,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} paquete instalándose",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} paquetes instalándose",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{done} de {total} paquetes instalándose",
-  "STR_DYN_N__SELECTED": "{n} seleccionado(s)"
+  "STR_DYN_N__SELECTED": "{n} seleccionado(s)",
+  "STR_WEB_UPLOAD_TO_PS5": "Subir a la PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Descargar de la PS5"
  },
  "Italiano": {
   "STR_API_KEY": "Chiave API",
@@ -629,7 +637,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} pacchetto in installazione",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} pacchetti in installazione",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{done} di {total} pacchetti in installazione",
-  "STR_DYN_N__SELECTED": "{n} selezionato/i"
+  "STR_DYN_N__SELECTED": "{n} selezionato/i",
+  "STR_WEB_UPLOAD_TO_PS5": "Carica sulla PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Scarica dalla PS5"
  },
  "Portuguese_BR": {
   "STR_API_KEY": "Chave de API",
@@ -755,7 +765,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} pacote sendo instalado",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} pacotes sendo instalados",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{done} de {total} pacotes sendo instalados",
-  "STR_DYN_N__SELECTED": "{n} selecionado(s)"
+  "STR_DYN_N__SELECTED": "{n} selecionado(s)",
+  "STR_WEB_UPLOAD_TO_PS5": "Enviar para o PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Baixar do PS5"
  },
  "Russian": {
   "STR_API_KEY": "Ключ API",
@@ -882,7 +894,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "Устанавливается {n} пакет",
   "STR_DYN_N__PACKAGES_INSTALLING": "Устанавливается {n} пакетов",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "Устанавливается {done} из {total} пакетов",
-  "STR_DYN_N__SELECTED": "Выбрано: {n}"
+  "STR_DYN_N__SELECTED": "Выбрано: {n}",
+  "STR_WEB_UPLOAD_TO_PS5": "Загрузить на PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Скачать с PS5"
  },
  "Ukrainian": {
   "STR_API_KEY": "Ключ API",
@@ -1009,7 +1023,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "Встановлюється {n} пакет",
   "STR_DYN_N__PACKAGES_INSTALLING": "Встановлюється {n} пакетів",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "Встановлюється {done} з {total} пакетів",
-  "STR_DYN_N__SELECTED": "Вибрано: {n}"
+  "STR_DYN_N__SELECTED": "Вибрано: {n}",
+  "STR_WEB_UPLOAD_TO_PS5": "Вивантажити на PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Завантажити з PS5"
  },
  "Polish": {
   "STR_API_KEY": "Klucz API",
@@ -1136,7 +1152,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "Instalowanie {n} pakietu",
   "STR_DYN_N__PACKAGES_INSTALLING": "Instalowanie {n} pakietów",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "Instalowanie {done} z {total} pakietów",
-  "STR_DYN_N__SELECTED": "Wybrano: {n}"
+  "STR_DYN_N__SELECTED": "Wybrano: {n}",
+  "STR_WEB_UPLOAD_TO_PS5": "Wyślij na PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Pobierz z PS5"
  },
  "Turkish": {
   "STR_API_KEY": "API anahtarı",
@@ -1263,7 +1281,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} paket kuruluyor",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} paket kuruluyor",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{total} paketten {done} tanesi kuruluyor",
-  "STR_DYN_N__SELECTED": "{n} seçili"
+  "STR_DYN_N__SELECTED": "{n} seçili",
+  "STR_WEB_UPLOAD_TO_PS5": "PS5'e yükle",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "PS5'ten indir"
  },
  "Japanese": {
   "STR_API_KEY": "APIキー",
@@ -1390,7 +1410,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} 件のパッケージをインストール中",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} 件のパッケージをインストール中",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{total} 件中 {done} 件のパッケージをインストール中",
-  "STR_DYN_N__SELECTED": "{n} 件選択中"
+  "STR_DYN_N__SELECTED": "{n} 件選択中",
+  "STR_WEB_UPLOAD_TO_PS5": "PS5 にアップロード",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "PS5 からダウンロード"
  },
  "Korean": {
   "STR_API_KEY": "API 키",
@@ -1517,7 +1539,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n}개 패키지 설치 중",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n}개 패키지 설치 중",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{total}개 중 {done}개 패키지 설치 중",
-  "STR_DYN_N__SELECTED": "{n}개 선택됨"
+  "STR_DYN_N__SELECTED": "{n}개 선택됨",
+  "STR_WEB_UPLOAD_TO_PS5": "PS5에 업로드",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "PS5에서 다운로드"
  },
  "Simplified Chinese": {
   "STR_API_KEY": "API 密钥",
@@ -1644,7 +1668,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "正在安装 {n} 个包",
   "STR_DYN_N__PACKAGES_INSTALLING": "正在安装 {n} 个包",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "正在安装 {total} 个包中的 {done} 个",
-  "STR_DYN_N__SELECTED": "已选择 {n} 项"
+  "STR_DYN_N__SELECTED": "已选择 {n} 项",
+  "STR_WEB_UPLOAD_TO_PS5": "上传到 PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "从 PS5 下载"
  },
  "Traditional Chinese": {
   "STR_API_KEY": "API 金鑰",
@@ -1771,7 +1797,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "正在安裝 {n} 個套件",
   "STR_DYN_N__PACKAGES_INSTALLING": "正在安裝 {n} 個套件",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "正在安裝 {total} 個套件中的 {done} 個",
-  "STR_DYN_N__SELECTED": "已選取 {n} 項"
+  "STR_DYN_N__SELECTED": "已選取 {n} 項",
+  "STR_WEB_UPLOAD_TO_PS5": "上傳到 PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "從 PS5 下載"
  },
  "Indonesian": {
   "STR_API_KEY": "Kunci API",
@@ -1898,7 +1926,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} paket sedang dipasang",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} paket sedang dipasang",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{done} dari {total} paket sedang dipasang",
-  "STR_DYN_N__SELECTED": "{n} dipilih"
+  "STR_DYN_N__SELECTED": "{n} dipilih",
+  "STR_WEB_UPLOAD_TO_PS5": "Unggah ke PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Unduh dari PS5"
  },
  "Vietnamese": {
   "STR_API_KEY": "Khóa API",
@@ -2025,7 +2055,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "Đang cài đặt {n} gói",
   "STR_DYN_N__PACKAGES_INSTALLING": "Đang cài đặt {n} gói",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "Đang cài đặt {done} trong {total} gói",
-  "STR_DYN_N__SELECTED": "Đã chọn {n}"
+  "STR_DYN_N__SELECTED": "Đã chọn {n}",
+  "STR_WEB_UPLOAD_TO_PS5": "Tải lên PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Tải xuống từ PS5"
  },
  "Norwegian": {
   "STR_API_KEY": "API-nøkkel",
@@ -2152,7 +2184,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} pakke installeres",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} pakker installeres",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{done} av {total} pakker installeres",
-  "STR_DYN_N__SELECTED": "{n} valgt"
+  "STR_DYN_N__SELECTED": "{n} valgt",
+  "STR_WEB_UPLOAD_TO_PS5": "Last opp til PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Last ned fra PS5"
  },
  "Romanian": {
   "STR_API_KEY": "Cheie API",
@@ -2279,7 +2313,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "Se instalează {n} pachet",
   "STR_DYN_N__PACKAGES_INSTALLING": "Se instalează {n} pachete",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "Se instalează {done} din {total} pachete",
-  "STR_DYN_N__SELECTED": "{n} selectat(e)"
+  "STR_DYN_N__SELECTED": "{n} selectat(e)",
+  "STR_WEB_UPLOAD_TO_PS5": "Încarcă pe PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Descarcă de pe PS5"
  },
  "Catalan": {
   "STR_API_KEY": "Clau API",
@@ -2406,7 +2442,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "S'està instal·lant {n} paquet",
   "STR_DYN_N__PACKAGES_INSTALLING": "S'estan instal·lant {n} paquets",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "S'estan instal·lant {done} de {total} paquets",
-  "STR_DYN_N__SELECTED": "{n} seleccionat(s)"
+  "STR_DYN_N__SELECTED": "{n} seleccionat(s)",
+  "STR_WEB_UPLOAD_TO_PS5": "Puja a la PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Baixa de la PS5"
  },
  "Croatian": {
   "STR_API_KEY": "API ključ",
@@ -2533,7 +2571,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "Instalira se {n} paket",
   "STR_DYN_N__PACKAGES_INSTALLING": "Instaliraju se {n} paketa",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "Instalira se {done} od {total} paketa",
-  "STR_DYN_N__SELECTED": "Odabrano: {n}"
+  "STR_DYN_N__SELECTED": "Odabrano: {n}",
+  "STR_WEB_UPLOAD_TO_PS5": "Prenesi na PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Preuzmi s PS5"
  },
  "Greek": {
   "STR_API_KEY": "Κλειδί API",
@@ -2660,7 +2700,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "Εγκατάσταση {n} πακέτου",
   "STR_DYN_N__PACKAGES_INSTALLING": "Εγκατάσταση {n} πακέτων",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "Εγκατάσταση {done} από {total} πακέτα",
-  "STR_DYN_N__SELECTED": "Επιλέχθηκαν {n}"
+  "STR_DYN_N__SELECTED": "Επιλέχθηκαν {n}",
+  "STR_WEB_UPLOAD_TO_PS5": "Μεταφόρτωση στο PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Λήψη από το PS5"
  },
  "Hungarian": {
   "STR_API_KEY": "API-kulcs",
@@ -2787,7 +2829,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} csomag telepítése",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} csomag telepítése",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{done} / {total} csomag telepítése",
-  "STR_DYN_N__SELECTED": "{n} kijelölve"
+  "STR_DYN_N__SELECTED": "{n} kijelölve",
+  "STR_WEB_UPLOAD_TO_PS5": "Feltöltés a PS5-re",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Letöltés a PS5-ről"
  },
  "Arabic": {
   "STR_API_KEY": "مفتاح API",
@@ -2914,7 +2958,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "جارٍ تثبيت {n} حزمة",
   "STR_DYN_N__PACKAGES_INSTALLING": "جارٍ تثبيت {n} حزم",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "جارٍ تثبيت {done} من {total} حزمة",
-  "STR_DYN_N__SELECTED": "تم تحديد {n}"
+  "STR_DYN_N__SELECTED": "تم تحديد {n}",
+  "STR_WEB_UPLOAD_TO_PS5": "رفع إلى PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "تنزيل من PS5"
  },
  "Thai": {
   "STR_API_KEY": "คีย์ API",
@@ -3041,7 +3087,9 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "กำลังติดตั้ง {n} แพ็กเกจ",
   "STR_DYN_N__PACKAGES_INSTALLING": "กำลังติดตั้ง {n} แพ็กเกจ",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "กำลังติดตั้ง {done} จาก {total} แพ็กเกจ",
-  "STR_DYN_N__SELECTED": "เลือก {n} รายการ"
+  "STR_DYN_N__SELECTED": "เลือก {n} รายการ",
+  "STR_WEB_UPLOAD_TO_PS5": "อัปโหลดไปยัง PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "ดาวน์โหลดจาก PS5"
  },
  "English": {
   "STR_WEB_APPLY": "Apply",
@@ -3070,6 +3118,20 @@
   "STR_DYN_N__PACKAGE_INSTALLING": "{n} package installing",
   "STR_DYN_N__PACKAGES_INSTALLING": "{n} packages installing",
   "STR_DYN_DONE__OF__TOTAL__PACKAGES_INSTALLING": "{done} of {total} packages installing",
-  "STR_DYN_N__SELECTED": "{n} selected"
+  "STR_DYN_N__SELECTED": "{n} selected",
+  "STR_WEB_UPLOAD_TO_PS5": "Upload to PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Download from PS5"
+ },
+ "Euskera": {
+  "STR_WEB_UPLOAD_TO_PS5": "Igo PS5era",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Jaitsi PS5etik"
+ },
+ "Galego": {
+  "STR_WEB_UPLOAD_TO_PS5": "Subir á PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Descargar da PS5"
+ },
+ "Ryukyuan": {
+  "STR_WEB_UPLOAD_TO_PS5": "Upload to PS5",
+  "STR_WEB_DOWNLOAD_FROM_PS5": "Download from PS5"
  }
 }

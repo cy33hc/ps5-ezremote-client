@@ -1025,12 +1025,12 @@ export default function App() {
     if (entry) {
       if (entry.type === "dir") {
         items.push({ label: "Open", icon: "folder", onSelect: () => setPath(joinPath(path, entry.name)) });
-        items.push({ label: "Upload", icon: "upload", onSelect: () => uploadRef.current?.click() });
+        items.push({ label: "Upload to PS5", icon: "upload", onSelect: () => uploadRef.current?.click() });
         items.push({ label: "Install from URL", icon: "link", onSelect: () => { setUrlPrefill(""); setUrlMode("install"); } });
         items.push({ label: "Download from URL", icon: "link", onSelect: () => { setUrlPrefill(""); setUrlMode("download"); } });
       } else {
-        items.push({ label: "Download", icon: "download", onSelect: downloadSelection });
-        items.push({ label: "Upload", icon: "upload", onSelect: () => uploadRef.current?.click() });
+        items.push({ label: "Download from PS5", icon: "download", onSelect: downloadSelection });
+        items.push({ label: "Upload to PS5", icon: "upload", onSelect: () => uploadRef.current?.click() });
         items.push({ label: "Install from URL", icon: "link", onSelect: () => { setUrlPrefill(""); setUrlMode("install"); } });
         items.push({ label: "Download from URL", icon: "link", onSelect: () => { setUrlPrefill(""); setUrlMode("download"); } });
         items.push({ separator: true });
@@ -1062,7 +1062,7 @@ export default function App() {
 
     items.push({ label: "New folder", icon: "folderPlus", onSelect: newFolder });
     items.push({ label: "New file", icon: "file", onSelect: newLocalFile });
-    items.push({ label: "Upload", icon: "upload", onSelect: () => uploadRef.current?.click() });
+    items.push({ label: "Upload to PS5", icon: "upload", onSelect: () => uploadRef.current?.click() });
     if (clipboard) items.push({ label: "Paste", icon: "paste", onSelect: pasteClipboard });
     items.push({ label: "Refresh", icon: "refresh", onSelect: refresh });
     items.push({ label: "Select all", icon: "selectAll", onSelect: toggleAll(setSelection, localVisible) });

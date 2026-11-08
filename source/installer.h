@@ -196,6 +196,10 @@ namespace INSTALLER
     std::string EzRemoteServerVersion();
     int StartEzRemoteServer();
     std::string StoreBgInstallHostData(RemoteSettings *remote_settings, const std::string &path, uint64_t size);
+    // Same for a file host resolved from a URL: no site profile exists, so the
+    // fields are passed explicitly. Returns the /bg_install hash, "" on failure.
+    std::string StoreFileHostBgData(const std::string &hash, const std::string &host,
+                                    const std::string &path, uint64_t size);
     RemoteClient *GetRemoteClient(int site_idx);
     RemoteClient *GetRemoteClient(RemoteSettings *settings);
 }

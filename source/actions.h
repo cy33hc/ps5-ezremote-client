@@ -128,6 +128,14 @@ namespace Actions
     // Installs one remote .pkg the way the console does: download to a temp
     // file, stream it while installing (disk cache), or hand the URL to the
     // installer, depending on the site's RPI / disk-cache settings.
+    // The three ways a remote package can reach the installer. Shared by the
+    // site-based install and the install-from-URL one, so both behave alike.
+    int InstallPkgByDownload(RemoteClient *client, const std::string &path, pkg_header *header);
+    // Takes ownership of stream_client; cache_key is what InstallSplitPkg hashes.
+    int InstallPkgByStreaming(RemoteClient *stream_client, const std::string &stream_path,
+                              const std::string &cache_key);
+    int InstallPkgByProxy(const std::string &url, pkg_header *header, const std::string &title);
+
     // Removes a remote folder tree entry by entry, so a deep delete can be
     // cancelled between files instead of inside one opaque Rmdir call.
     bool DeleteRemoteTree(RemoteClient *client, const std::string &path, int depth = 0);

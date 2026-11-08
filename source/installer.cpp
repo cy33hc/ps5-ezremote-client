@@ -226,6 +226,38 @@ namespace INSTALLER
 		return hash;
 	}
 
+	std::string StoreFileHostBgData(const std::string &hash, const std::string &host,
+	                                const std::string &path, uint64_t size)
+	{
+		json_object *history_item_obj = json_object_new_object();
+		JsonObjectRef history_item_ref(history_item_obj);
+		json_object_object_add(history_item_obj, "hash", json_object_new_string(hash.c_str()));
+		json_object_object_add(history_item_obj, "url", json_object_new_string(host.c_str()));
+		json_object_object_add(history_item_obj, "path", json_object_new_string(path.c_str()));
+		json_object_object_add(history_item_obj, "username", json_object_new_string(""));
+		json_object_object_add(history_item_obj, "password", json_object_new_string(""));
+		json_object_object_add(history_item_obj, "type", json_object_new_int(CLIENT_TYPE_FILEHOST));
+		json_object_object_add(history_item_obj, "file_size", json_object_new_uint64(size));
+
+		const char *params_str = json_object_to_json_string(history_item_obj);
+
+		CHTTPClient::HttpResponse res;
+		CHTTPClient::HeadersMap headers;
+		CHTTPClient tmp_client([](const std::string &log) {});
+		tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+		tmp_client.SetCertificateFile(CACERT_FILE);
+		headers["Content-Type"] = "application/json";
+
+		std::string store_bg_install_data_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/store_bg_install_data";
+		if (tmp_client.Post(store_bg_install_data_url, headers, params_str, res))
+		{
+			if (!HTTP_SUCCESS(res.iCode))
+				return "";
+		}
+
+		return hash;
+	}
+
 	std::string getRemoteUrl(const std::string path, uint64_t size, bool encodeUrl)
 	{
 		return getRemoteUrl(remote_settings, remoteclient, path, size, encodeUrl);

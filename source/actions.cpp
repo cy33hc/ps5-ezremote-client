@@ -2357,49 +2357,62 @@ namespace Actions
         return client->Rmdir(path, false);
     }
 
+    int InstallPkgByDownload(RemoteClient *client, const std::string &path, pkg_header *header)
+    {
+        return DownloadAndInstallPkg(path, header, client);
+    }
+
+    int InstallPkgByStreaming(RemoteClient *stream_client, const std::string &stream_path,
+                              const std::string &cache_key)
+    {
+        SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
+        memset(install_data, 0, sizeof(SplitPkgInstallData));
+
+        std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
+        FileStream *sp = CreateFileStream(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
+
+        install_data->split_file = sp;
+        install_data->remote_client = stream_client;
+        install_data->path = stream_path;
+        stream_client->Size(stream_path, &install_data->size);
+        install_data->stop_write_thread = false;
+        install_data->delete_client = true;
+
+        pthread_create(&install_data->thread, NULL, DownloadSplitPkg, install_data);
+
+        Activities::SetCancellable(false);
+        int ret = INSTALLER::InstallSplitPkg(cache_key, install_data, false);
+        Activities::SetCancellable(true);
+
+        if (Activities::Stopped())
+            FS::Rm(install_pkg_path.c_str());
+
+        return ret;
+    }
+
+    int InstallPkgByProxy(const std::string &url, pkg_header *header, const std::string &title)
+    {
+        Activities::SetCancellable(false);
+        int ret = INSTALLER::InstallRemotePkg(url, header, title);
+        Activities::SetCancellable(true);
+        return ret;
+    }
+
     int InstallRemotePkgFile(RemoteSettings *settings, RemoteClient *client, const std::string &path,
                              pkg_header *header, uint64_t file_size)
     {
         // No RPI: pull the package down first, then install the local copy.
         if (!settings->enable_rpi)
-            return DownloadAndInstallPkg(path, header, client);
+            return InstallPkgByDownload(client, path, header);
 
         // Disk cache: stream it into the installer instead of buffering it all.
         if (settings->enable_disk_cache)
-        {
-            SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
-            memset(install_data, 0, sizeof(SplitPkgInstallData));
-
-            std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
-            FileStream *sp = CreateFileStream(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
-
-            install_data->split_file = sp;
-            install_data->remote_client = INSTALLER::GetRemoteClient(settings);
-            install_data->path = path;
-            client->Size(path, &install_data->size);
-            install_data->stop_write_thread = false;
-            install_data->delete_client = true;
-
-            pthread_create(&install_data->thread, NULL, DownloadSplitPkg, install_data);
-
-            Activities::SetCancellable(false);
-            int ret = INSTALLER::InstallSplitPkg(path, install_data, false);
-            Activities::SetCancellable(true);
-
-            if (Activities::Stopped())
-                FS::Rm(install_pkg_path.c_str());
-
-            return ret;
-        }
+            return InstallPkgByStreaming(INSTALLER::GetRemoteClient(settings), path, path);
 
         // RPI: let the installer fetch the package itself through the proxy.
         std::string url = INSTALLER::getRemoteUrl(settings, client, path, file_size, true);
         std::string title = INSTALLER::GetRemotePkgTitle(client, path, header);
-
-        Activities::SetCancellable(false);
-        int ret = INSTALLER::InstallRemotePkg(url, header, title);
-        Activities::SetCancellable(true);
-        return ret;
+        return InstallPkgByProxy(url, header, title);
     }
 
     void CreateLocalFile(char *filename)

@@ -4294,7 +4294,7 @@ namespace HttpServer
                 {
                     // Same as the console's InstallLocalUrlPkgThread: fetch the
                     // package to a temp file, then install the local copy.
-                    int rc = Actions::DownloadAndInstallPkg(path, &header, baseclient);
+                    int rc = Actions::InstallPkgByDownload(baseclient, path, &header);
                     delete baseclient;
 
                     if (rc == 0)
@@ -4310,70 +4310,32 @@ namespace HttpServer
 
                 if (enable_rpi && !use_disk_cache)
                 {
-                    json_object *history_item_obj = json_object_new_object();
-                    JsonObjectRef history_item_ref(history_item_obj);
-                    json_object_object_add(history_item_obj, "hash", json_object_new_string(hash.c_str()));
-                    json_object_object_add(history_item_obj, "url", json_object_new_string(host.c_str()));
-                    json_object_object_add(history_item_obj, "path", json_object_new_string(path.c_str()));
-                    json_object_object_add(history_item_obj, "username", json_object_new_string(""));
-                    json_object_object_add(history_item_obj, "password", json_object_new_string(""));
-                    json_object_object_add(history_item_obj, "type", json_object_new_int(CLIENT_TYPE_FILEHOST));
-                    json_object_object_add(history_item_obj, "file_size", json_object_new_uint64(file_size));
-
-                    const char *params_str = json_object_to_json_string(history_item_obj);
-
-                    CHTTPClient::HttpResponse resp;
-                    CHTTPClient::HeadersMap headers;
-                    CHTTPClient tmp_client([](const std::string& log){});
-                    tmp_client.InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
-                    tmp_client.SetCertificateFile(CACERT_FILE);
-                    headers["Content-Type"] = "application/json";
-
-                    std::string store_bg_install_data_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/store_bg_install_data";
-                    if (tmp_client.Post(store_bg_install_data_url, headers, params_str, resp))
-                    {
-                        if (HTTP_SUCCESS(resp.iCode))
-                        {
-                        }
-                    }
-                    else
+                    std::string bg_url;
+                    if (INSTALLER::StoreFileHostBgData(hash, host, path, file_size).empty())
                     {
                         activity.fail("Could not save host data for background install");
                         failed(res, 200, "Could not save host data for background install");
+                        return;
                     }
-                    sleep(2);
 
-                    std::string remote_install_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
-                    Activities::SetCancellable(false);
-                    int rc = INSTALLER::InstallRemotePkg(remote_install_url, &header, title);
-                    Activities::SetCancellable(true);
+                    // The proxy needs a moment before the installer asks for it.
+                    sleep(2);
+                    bg_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
+
+                    int rc = Actions::InstallPkgByProxy(bg_url, &header, title);
+                    delete baseclient;
+
                     if (rc == 0)
+                    {
                         activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
+                        failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
+                        return;
+                    }
                 }
                 else if (enable_rpi && use_disk_cache && BE32(header.pkg_magic) == PKG_CNT_MAGIC)
                 {
-                    SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
-                    memset(install_data, 0, sizeof(SplitPkgInstallData));
-
-                    std::string install_pkg_path = std::string(temp_folder) + "/" + std::to_string(Util::GetTick()) + ".pkg";
-                    FileStream *sp = CreateFileStream(install_pkg_path, INSTALL_ARCHIVE_PKG_SPLIT_SIZE/2);
-
-                    install_data->split_file = sp;
-                    install_data->remote_client = baseclient;
-                    install_data->path = path;
-                    baseclient->Size(path, &install_data->size);
-                    install_data->stop_write_thread = false;
-                    install_data->delete_client = true;
-
-                    int ret = pthread_create(&install_data->thread, NULL, Actions::DownloadSplitPkg, install_data);
-
-                    Activities::SetCancellable(false);
-                    ret = INSTALLER::InstallSplitPkg(download_url, install_data, true);
-                    Activities::SetCancellable(true);
-
-                    if (Activities::Stopped())
-                        FS::Rm(install_pkg_path.c_str());
-
+                    // Takes ownership of baseclient for the streaming thread.
+                    int ret = Actions::InstallPkgByStreaming(baseclient, path, download_url);
                     if (ret == 0)
                     {
                         activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);

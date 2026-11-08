@@ -1499,20 +1499,32 @@ export default function App() {
           initialUrl={urlPrefill}
           defaultDest={path}
           onClose={() => setUrlMode(null)}
-          onSubmit={async (values) => {
+          onSubmit={(values) => {
+            // Fire and forget: the work runs as an activity, so the dialog can
+            // close as soon as it is submitted.
             if (urlMode === "install") {
-              await api.installFromUrl({
-                url: values.url,
-                use_alldebrid: values.alldebrid,
-                use_realdebrid: values.realdebrid,
-                use_disk_cache: values.diskCache,
-                enable_rpi: values.rpi,
+              void run("Installing…", async () => {
+                await api.installFromUrl({
+                  url: values.url,
+                  use_alldebrid: values.alldebrid,
+                  use_realdebrid: values.realdebrid,
+                  use_disk_cache: values.diskCache,
+                  enable_rpi: values.rpi,
+                });
+                notify("Install queued", "success");
               });
-              notify("Install queued", "success");
             } else {
-              await api.downloadFromUrl({ url: values.url, dest: values.dest, use_alldebrid: values.alldebrid, use_realdebrid: values.realdebrid });
-              notify("Download queued", "success");
+              void run("Downloading…", async () => {
+                await api.downloadFromUrl({
+                  url: values.url,
+                  dest: values.dest,
+                  use_alldebrid: values.alldebrid,
+                  use_realdebrid: values.realdebrid,
+                });
+                notify("Download queued", "success");
+              });
             }
+            return Promise.resolve();
           }}
         />
       ) : null}
@@ -2465,19 +2477,24 @@ function urlFileName(url: string): string {
 
 const URL_OPTIONS_KEY = "ezremote.urlOptions";
 
-function loadUrlOptions(): { alldebrid: boolean; realdebrid: boolean; rpi: boolean } {
+function loadUrlOptions(): { alldebrid: boolean; realdebrid: boolean; rpi: boolean; diskCache: boolean } {
   try {
     const raw = window.localStorage.getItem(URL_OPTIONS_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<{ alldebrid: boolean; realdebrid: boolean; rpi: boolean }>;
+      const parsed = JSON.parse(raw) as Partial<{
+        alldebrid: boolean;
+        realdebrid: boolean;
+        rpi: boolean;
+        diskCache: boolean;
+      }>;
       const alldebrid = parsed.alldebrid === true;
       const realdebrid = !alldebrid && parsed.realdebrid === true;
-      return { alldebrid, realdebrid, rpi: parsed.rpi === true };
+      return { alldebrid, realdebrid, rpi: parsed.rpi === true, diskCache: parsed.diskCache === true };
     }
   } catch {
     // Ignore unreadable or malformed values.
   }
-  return { alldebrid: false, realdebrid: false, rpi: false };
+  return { alldebrid: false, realdebrid: false, rpi: false, diskCache: false };
 }
 
 function UrlDialog({
@@ -2500,6 +2517,7 @@ function UrlDialog({
   const [alldebrid, setAlldebrid] = useState(() => loadUrlOptions().alldebrid);
   const [realdebrid, setRealdebrid] = useState(() => loadUrlOptions().realdebrid);
   const [rpi, setRpi] = useState(() => loadUrlOptions().rpi);
+  const [diskCache, setDiskCache] = useState(() => loadUrlOptions().diskCache);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isInstall = mode === "install";
@@ -2511,11 +2529,11 @@ function UrlDialog({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(URL_OPTIONS_KEY, JSON.stringify({ alldebrid, realdebrid, rpi }));
+      window.localStorage.setItem(URL_OPTIONS_KEY, JSON.stringify({ alldebrid, realdebrid, rpi, diskCache }));
     } catch {
       // Storage can be unavailable in private modes.
     }
-  }, [alldebrid, realdebrid, rpi]);
+  }, [alldebrid, realdebrid, rpi, diskCache]);
 
   const canSubmit = Boolean(url.trim()) && (isInstall || Boolean(fileName.trim()));
 
@@ -2539,7 +2557,7 @@ function UrlDialog({
         target = joinPath(folder, name);
       }
 
-      await onSubmit({ url: url.trim(), dest: target, alldebrid, realdebrid, diskCache: false, rpi });
+      await onSubmit({ url: url.trim(), dest: target, alldebrid, realdebrid, diskCache, rpi });
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Request failed");
@@ -2611,6 +2629,10 @@ function UrlDialog({
             }}
           />
           {isInstall ? <Checkbox label="RPI" checked={rpi} onChange={setRpi} /> : null}
+          {isInstall ? (
+            // Only meaningful with RPI: the streaming path is chosen there.
+            <Checkbox label="Disk cache" checked={diskCache} onChange={setDiskCache} disabled={!rpi} />
+          ) : null}
         </div>
         {error ? (
           <p className="flex items-start gap-2 rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-xs text-rose-400">
@@ -2623,10 +2645,30 @@ function UrlDialog({
   );
 }
 
-function Checkbox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+function Checkbox({
+  label,
+  checked,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-xs text-mist-300">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="size-3.5 accent-accent-500" />
+    <label
+      className={`flex items-center gap-2 text-xs ${
+        disabled ? "cursor-default text-mist-500/60" : "cursor-pointer text-mist-300"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="size-3.5 accent-accent-500 disabled:opacity-40"
+      />
       {label}
     </label>
   );

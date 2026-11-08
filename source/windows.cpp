@@ -1477,15 +1477,23 @@ namespace Windows
         if (confirm_state == CONFIRM_WAIT)
         {
             ImGui::OpenPopup(lang_strings[STR_CONFIRM]);
-            ImGui::SetNextWindowPos(ImVec2(680, 350));
-            ImGui::SetNextWindowSizeConstraints(ImVec2(640, 100), ImVec2(640, 200), NULL, NULL);
+            // Centred on the display, whatever its resolution.
+            ImGuiViewport *confirm_viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(
+                ImVec2(confirm_viewport->Pos.x + confirm_viewport->Size.x * 0.5f,
+                       confirm_viewport->Pos.y + confirm_viewport->Size.y * 0.5f),
+                ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSizeConstraints(ImVec2(980, 100), ImVec2(980, 200), NULL, NULL);
             if (ImGui::BeginPopupModal(lang_strings[STR_CONFIRM], NULL, ImGuiWindowFlags_AlwaysAutoResize))
             {
-                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 620);
+                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 960);
                 ImGui::Text("%s", confirm_message);
                 ImGui::PopTextWrapPos();
                 ImGui::NewLine();
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 220);
+                // Buttons are 140 + 140 + 190 + 140 wide, three gaps between.
+                float buttons_width = 610.0f + ImGui::GetStyle().ItemSpacing.x * 3.0f;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                                     (ImGui::GetContentRegionAvail().x - buttons_width) * 0.5f);
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
                 // Overwriting is the destructive answer, so the safe one takes
                 // the focus when the dialog appears.
@@ -1493,18 +1501,35 @@ namespace Windows
                 {
                     ImGui::SetKeyboardFocusHere();
                 }
-                if (ImGui::Button(lang_strings[STR_NO], ImVec2(100, 0)))
+                if (ImGui::Button(lang_strings[STR_SKIP], ImVec2(140, 0)))
                 {
                     confirm_state = CONFIRM_NO;
                     selected_action = ACTION_NONE;
                     SetModalMode(false);
                     ImGui::CloseCurrentPopup();
-                };
+                }
                 ImGui::SameLine();
-                if (ImGui::Button(lang_strings[STR_YES], ImVec2(100, 0)))
+                if (ImGui::Button(lang_strings[STR_OVERWRITE], ImVec2(140, 0)))
                 {
                     confirm_state = CONFIRM_YES;
                     selected_action = action_to_take;
+                    SetModalMode(false);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button(lang_strings[STR_ALWAYS_OVERWRITE], ImVec2(190, 0)))
+                {
+                    confirm_state = CONFIRM_ALL;
+                    selected_action = action_to_take;
+                    SetModalMode(false);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button(lang_strings[STR_CANCEL], ImVec2(140, 0)))
+                {
+                    // Stop the whole activity, not just this file.
+                    confirm_state = CONFIRM_CANCEL;
+                    selected_action = ACTION_NONE;
                     SetModalMode(false);
                     ImGui::CloseCurrentPopup();
                 }

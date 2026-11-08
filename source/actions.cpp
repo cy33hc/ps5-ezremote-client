@@ -332,6 +332,26 @@ namespace Actions
         selected_action = action_to_take;
     }
 
+    // "Always overwrite" covers the rest of this activity only: the thread's
+    // policy is switched, and it dies with the thread. Cancel stops the whole
+    // activity, which the loops notice through Activities::Stopped().
+    static bool OverwriteAllowed()
+    {
+        if (confirm_state == CONFIRM_CANCEL)
+        {
+            Activities::Cancel(activity_current_id);
+            return false;
+        }
+
+        if (confirm_state == CONFIRM_ALL)
+        {
+            Activities::SetOverwriteType(OVERWRITE_ALL);
+            confirm_state = CONFIRM_YES;
+        }
+
+        return confirm_state == CONFIRM_YES;
+    }
+
     void *DeleteSelectedLocalFilesThread(void *argp)
     {
         TransferJob *job = static_cast<TransferJob *>(argp);
@@ -464,7 +484,7 @@ namespace Actions
             confirm_state = CONFIRM_YES;
         }
 
-        if (confirm_state == CONFIRM_YES)
+        if (OverwriteAllowed())
         {
             prev_tick = Util::GetTick();
 
@@ -712,7 +732,7 @@ namespace Actions
             confirm_state = CONFIRM_YES;
         }
 
-        if (confirm_state == CONFIRM_YES)
+        if (OverwriteAllowed())
         {
             prev_tick = Util::GetTick();
 
@@ -1699,7 +1719,7 @@ namespace Actions
             confirm_state = CONFIRM_YES;
         }
 
-        if (confirm_state == CONFIRM_YES)
+        if (OverwriteAllowed())
         {
             prev_tick = Util::GetTick();
             if (isCopy)
@@ -2000,7 +2020,7 @@ namespace Actions
             confirm_state = CONFIRM_YES;
         }
 
-        if (confirm_state == CONFIRM_YES)
+        if (OverwriteAllowed())
         {
             prev_tick = Util::GetTick();
             if (isCopy)

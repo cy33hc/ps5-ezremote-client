@@ -201,6 +201,8 @@ char lang_strings[LANG_STRINGS_NUM][LANG_STR_SIZE] = {
 	"Clear completed",																						  // STR_CLEAR_COMPLETED
 	"Clear history",																								  // STR_CLEAR_HISTORY
 	"Show activities dialog on new activity",											  // STR_SHOW_ACTIVITIES_DIALOG
+	"Skip",																											  // STR_SKIP
+	"Always overwrite",																						  // STR_ALWAYS_OVERWRITE
 };
 
 bool needs_extended_font = false;

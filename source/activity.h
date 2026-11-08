@@ -80,6 +80,8 @@ namespace Activities
     // Overwrite policy for the calling thread; jobs keep their own snapshot so
     // one operation cannot change what another does with existing files.
     int OverwriteType();
+    // Switches this thread's policy, e.g. after "always overwrite".
+    void SetOverwriteType(int type);
     void SnapshotOverwrite();
     void Item(uint64_t id, const std::string &item);
     void Progress(uint64_t id, uint64_t done, uint64_t total);

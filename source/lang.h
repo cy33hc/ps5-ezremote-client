@@ -195,6 +195,8 @@
 	FUNC(STR_CLEAR_COMPLETED)               \
 	FUNC(STR_CLEAR_HISTORY)                 \
 	FUNC(STR_SHOW_ACTIVITIES_DIALOG)        \
+	FUNC(STR_SKIP)                          \
+	FUNC(STR_ALWAYS_OVERWRITE)              \
 
 #define GET_VALUE(x) x,
 #define GET_STRING(x) #x,
@@ -204,7 +206,7 @@ enum
 	FOREACH_STR(GET_VALUE)
 };
 
-#define LANG_STRINGS_NUM 191
+#define LANG_STRINGS_NUM 193
 #define LANG_ID_SIZE 64
 #define LANG_STR_SIZE 384
 extern char lang_identifiers[LANG_STRINGS_NUM][LANG_ID_SIZE];

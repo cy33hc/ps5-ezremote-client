@@ -9,6 +9,8 @@
 #define CONFIRM_WAIT 0
 #define CONFIRM_YES 1
 #define CONFIRM_NO 2
+#define CONFIRM_ALL 3
+#define CONFIRM_CANCEL 4
 
 enum ACTIONS
 {

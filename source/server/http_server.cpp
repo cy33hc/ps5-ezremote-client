@@ -2065,6 +2065,8 @@ namespace HttpServer
                 json_object_object_add(item, "origin", json_object_new_int(list[i].origin));
                 // False while a phase cannot be interrupted (the install hand-off).
                 json_object_object_add(item, "cancellable", json_object_new_boolean(list[i].cancellable));
+                // True once the user asked to stop but the worker has not noticed.
+                json_object_object_add(item, "cancelRequested", json_object_new_boolean(list[i].cancel));
                 json_object_object_add(item, "originName", json_object_new_string(Activities::OriginName(list[i].origin)));
                 json_object_array_add(result, item);
             }
@@ -3771,6 +3773,7 @@ namespace HttpServer
             size_t chunk_bytes = 0;
             FILE *out = nullptr;
             std::string new_file;
+            bool cancel_upload = false;
             content_reader(
                 [&](const MultipartFormData &item)
                 {
@@ -3821,6 +3824,21 @@ namespace HttpServer
                     {
                         if (out != nullptr)
                         {
+                            // Drop the rest of the body once the upload's
+                            // activity was cancelled; the page stops sending.
+                            bool cancelled = false;
+                            {
+                                std::lock_guard<std::mutex> lock(local_upload_mutex);
+                                std::map<std::string, LocalUploadState>::iterator it = local_uploads.find(new_file);
+                                cancelled = it != local_uploads.end() && Activities::IsCancelled(it->second.activity_id);
+                            }
+
+                            if (cancelled)
+                            {
+                                cancel_upload = true;
+                                return true;
+                            }
+
                             FS::Write(out, data, data_length);
                             chunk_bytes += data_length;
                         }
@@ -3830,6 +3848,34 @@ namespace HttpServer
             if (out != nullptr)
             {
                 FS::Close(out);
+            }
+
+            if (cancel_upload)
+            {
+                // Like Explorer, the bytes that arrived stay on disk; a copy,
+                // an extract and an upload all behave the same way now.
+                uint64_t cancelled_id = 0;
+                {
+                    std::lock_guard<std::mutex> lock(local_upload_mutex);
+                    std::map<std::string, LocalUploadState>::iterator it = local_uploads.find(new_file);
+                    if (it != local_uploads.end())
+                    {
+                        cancelled_id = it->second.activity_id;
+                        local_uploads.erase(it);
+                    }
+                }
+
+                if (cancelled_id != 0)
+                    Activities::Finish(cancelled_id, ACTIVITY_CANCELLED);
+
+                json_object *result = json_object_new_object();
+                JsonObjectRef result_ref(result);
+                json_object_object_add(result, "success", json_object_new_boolean(false));
+                json_object_object_add(result, "cancelled", json_object_new_boolean(true));
+                const char *result_str = json_object_to_json_string(result);
+                res.status = 200;
+                res.set_content(result_str, strlen(result_str), "application/json");
+                return;
             }
 
             if (!new_file.empty())

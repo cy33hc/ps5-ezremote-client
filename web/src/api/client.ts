@@ -439,6 +439,8 @@ export interface Activity {
   stateName: string;
   /** False while a phase cannot be interrupted (install hand-off). */
   cancellable: boolean;
+  /** True once the user asked to stop; the worker has not noticed yet. */
+  cancelRequested: boolean;
   label: string;
   item: string;
   done: number;

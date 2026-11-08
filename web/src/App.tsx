@@ -773,10 +773,12 @@ export default function App() {
   const uploadFiles = async (files: FileList) => {
     const chunkSize = 4 * 1024 * 1024;
     let failed = false;
+    let cancelledUpload = false;
     for (const file of Array.from(files)) {
       setBusy(`Uploading ${file.name}…`);
       try {
         const chunks = Math.max(1, Math.ceil(file.size / chunkSize));
+        let cancelled = false;
         for (let index = 0; index < chunks; index += 1) {
           const start = index * chunkSize;
           const form = new FormData();
@@ -787,6 +789,18 @@ export default function App() {
           form.append("file", file.slice(start, Math.min(start + chunkSize, file.size)), file.name);
           const response = await fetch("/__local__/upload", { method: "POST", body: form });
           if (!response.ok) throw new Error(`Upload failed (HTTP ${response.status})`);
+
+          // The console drops the chunk once the activity is cancelled, so stop
+          // sending the rest of this file (and the ones after it).
+          const body = (await response.json().catch(() => null)) as { cancelled?: boolean } | null;
+          if (body?.cancelled) {
+            cancelled = true;
+            break;
+          }
+        }
+        if (cancelled) {
+          cancelledUpload = true;
+          break;
         }
         notify(tp("Uploaded {name}", { name: file.name }), "success");
       } catch (error) {
@@ -796,7 +810,7 @@ export default function App() {
         setBusy(null);
       }
     }
-    if (!failed) refresh();
+    if (!failed || cancelledUpload) refresh();
   };
 
   /* ---------- remote actions ---------- */
@@ -2069,13 +2083,17 @@ function ActivitiesDialog({
                 <span className={`shrink-0 text-xs ${label[ACTIVITY_STATES[item.state]] ?? "text-mist-500"}`}>{t(ACTIVITY_STATES[item.state] ?? item.stateName)}</span>
                 <span className="shrink-0 font-mono text-xs text-mist-500">{item.elapsed}s</span>
                 {item.state === 0 && item.cancellable ? (
-                  <button
-                    type="button"
-                    onClick={() => onCancel(item.id)}
-                    className="shrink-0 rounded-md border border-rose-400/40 px-2 py-0.5 text-[11px] font-medium text-rose-300 transition hover:bg-rose-400/10"
-                  >
-                    {t("Cancel")}
-                  </button>
+                  item.cancelRequested ? (
+                    <span className="shrink-0 text-[11px] text-mist-500">{t("Cancelling…")}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onCancel(item.id)}
+                      className="shrink-0 rounded-md border border-rose-400/40 px-2 py-0.5 text-[11px] font-medium text-rose-300 transition hover:bg-rose-400/10"
+                    >
+                      {t("Cancel")}
+                    </button>
+                  )
                 ) : null}
               </div>
               {item.item ? (

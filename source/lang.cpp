@@ -203,6 +203,7 @@ char lang_strings[LANG_STRINGS_NUM][LANG_STR_SIZE] = {
 	"Show activities dialog on new activity",											  // STR_SHOW_ACTIVITIES_DIALOG
 	"Skip",																											  // STR_SKIP
 	"Always overwrite",																						  // STR_ALWAYS_OVERWRITE
+	"Cancelling…",																								  // STR_CANCELLING
 };
 
 bool needs_extended_font = false;

@@ -2252,8 +2252,15 @@ namespace Windows
                     if (item.state == ACTIVITY_RUNNING && item.cancellable)
                     {
                         ImGui::PushID((int) item.id);
-                        if (ImGui::SmallButton(lang_strings[STR_CANCEL]))
+                        if (item.cancel)
+                        {
+                            // Requested; waiting for the worker to notice.
+                            ImGui::TextDisabled("%s", lang_strings[STR_CANCELLING]);
+                        }
+                        else if (ImGui::SmallButton(lang_strings[STR_CANCEL]))
+                        {
                             Activities::Cancel(item.id);
+                        }
                         ImGui::PopID();
                     }
 

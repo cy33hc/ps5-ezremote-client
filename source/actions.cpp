@@ -449,12 +449,7 @@ namespace Actions
     int UploadFile(const char *src, const char *dest, RemoteClient *client)
     {
         int ret;
-        if (!client->Ping())
-        {
-            client->Quit();
-            sprintf(status_message, "%s", lang_strings[STR_CONNECTION_CLOSE_ERR_MSG]);
-            return 0;
-        }
+        Activities::Item(activity_current_id, src);
 
         if (Activities::OverwriteType() == OVERWRITE_PROMPT && client->FileExists(dest))
         {
@@ -574,7 +569,7 @@ namespace Actions
 
         RemoteClient *client = RemotePool::Acquire(*remote_settings);
 
-        if (client != nullptr)
+        if (client != nullptr && client->Ping())
         {
             for (std::vector<DirEntry>::iterator it = files.begin(); it != files.end(); ++it)
             {
@@ -695,6 +690,8 @@ namespace Actions
     {
         prev_tick = Util::GetTick();
         uint64_t file_size = 0;
+        Activities::Item(activity_current_id, src);
+
         if (!client->Size(src, &file_size))
         {
             client->Quit();
@@ -1259,6 +1256,7 @@ namespace Actions
                     usleep(100000);
                 }
             }
+            Activities::Item(activity.id, it->name);
         }
         multi_selected_local_files.clear();
         selected_action = ACTION_REFRESH_LOCAL_FILES;
@@ -1302,6 +1300,7 @@ namespace Actions
                 {
                     Activities::Item(activity.id, it->name);
                     int ret = ZipUtil::Extract(*it, target.c_str(), client);
+                    Activities::Item(activity.id, it->name);
                     if (ret == 0)
                     {
                         sprintf(status_message, "%s %s", lang_strings[STR_FAILED_TO_EXTRACT], it->name);
@@ -1353,6 +1352,7 @@ namespace Actions
                 
                 Activities::Item(activity.id, it->path);
                 int res = ZipUtil::ZipAddPath(zf, it->path, strlen(local_directory) + 1, Z_DEFAULT_COMPRESSION);
+                Activities::Item(activity.id, it->path);
                 if (res <= 0)
                 {
                     sprintf(status_message, "%s", lang_strings[STR_ERROR_CREATE_ZIP]);
@@ -1684,6 +1684,8 @@ namespace Actions
     int CopyOrMoveLocalFile(const char *src, const char *dest, bool isCopy)
     {
         int ret;
+        Activities::Item(activity_current_id, src);
+
         if (Activities::OverwriteType() == OVERWRITE_PROMPT && FS::FileExists(dest))
         {
             PromptOverwrite(dest);
@@ -1831,6 +1833,7 @@ namespace Actions
                 if (CopyOrMove(*it, target.c_str(), false) == 0)
                     failed++;
             }
+            Activities::Item(activity.id, it->path);
         }
         if (failed > 0)
         {
@@ -1952,6 +1955,7 @@ namespace Actions
                 if (CopyOrMoveLocalFile(it->path, dest.c_str(), true) == 0)
                     failed++;
             }
+            Activities::Item(activity.id, it->path);
         }
         if (failed > 0)
         {
@@ -2049,6 +2053,7 @@ namespace Actions
             Activities::Item(activity.id, it->path);
             total++;
             int res = CopyOrMoveRemoteFile(it->path, new_path, false, client);
+            Activities::Item(activity.id, it->path);
             if (res == 0)
                 failed++;
                 sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
@@ -2201,6 +2206,7 @@ namespace Actions
                     failed++;
                     sprintf(status_message, "%s - %s", it->name, lang_strings[STR_FAIL_COPY_MSG]);
             }
+            Activities::Item(activity.id, it->path);
         }
         RemotePool::Release(client, true);
         if (failed > 0)

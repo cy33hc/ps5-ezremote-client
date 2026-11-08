@@ -401,6 +401,7 @@ namespace ZipUtil
             /* ensure that parent directory exists */
             FS::MkDirs(realpathname, true);
 
+            Activities::Item(activity_current_id, pathname);
             extract_file(a, e, realpathname);
         }
 

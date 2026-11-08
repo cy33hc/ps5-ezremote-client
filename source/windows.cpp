@@ -71,6 +71,11 @@ char remote_filter[32];
 char dialog_editor_text[1024];
 char activity_message[1024];
 int selected_browser = 0;
+// Set when focus leaves the browser panes; the button that receives it depends
+// on whether an activity has appeared since the last time it was looked at.
+static bool focus_connect_button = false;
+static bool focus_activities_button = false;
+static uint64_t last_seen_activity_id = 0;
 int saved_selected_browser;
 bool quit_pending = false;
 bool set_focus_to_local = false;
@@ -299,6 +304,15 @@ namespace Windows
     {
         ImGuiStyle *style = &ImGui::GetStyle();
         ImVec4 *colors = style->Colors;
+
+        // A popup owns the focus while it is open; drop any pending hand-off
+        // instead of pulling it back to the toolbar.
+        if (paused || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
+        {
+            focus_connect_button = false;
+            focus_activities_button = false;
+        }
+
         static char title[64];
         sprintf(title, "ezRemote %s", lang_strings[STR_CONNECTION_SETTINGS]);
         BeginGroupPanel(title, ImVec2(1905, 100));
@@ -311,11 +325,12 @@ namespace Windows
         bool is_connected = remoteclient != nullptr && remoteclient->IsConnected();
 
         sprintf(id, "%s###connectbutton", is_connected ? lang_strings[STR_DISCONNECT] : lang_strings[STR_CONNECT]);
-        // Focus the button as the window opens, so the first tap or Enter
-        // connects without moving around the UI.
-        if (ImGui::IsWindowAppearing())
+        // Focus the button as the window opens, and again when the browser
+        // panes are left, so the first tap or Enter connects from there.
+        if (ImGui::IsWindowAppearing() || focus_connect_button)
         {
             ImGui::SetKeyboardFocusHere();
+            focus_connect_button = false;
         }
         if (ImGui::Button(id, ImVec2(200, 0)))
         {
@@ -488,10 +503,63 @@ namespace Windows
 
         ImGui::SameLine();
         ImGui::SetCursorPosX(1790);
+        if (focus_activities_button)
+        {
+            ImGui::SetKeyboardFocusHere();
+            focus_activities_button = false;
+        }
+
+        // A new activity blinks the button for a moment, since the dialog no
+        // longer opens by itself when that setting is off.
+        static bool activity_seeded = false;
+        static uint64_t last_known_activity_id = 0;
+        static uint64_t flash_until = 0;
+
+        Activity latest_activity;
+        bool have_activity = Activities::Latest(&latest_activity);
+        if (!activity_seeded)
+        {
+            // Adopt whatever already exists at startup without flashing.
+            activity_seeded = true;
+            if (have_activity)
+                last_known_activity_id = latest_activity.id;
+        }
+        else if (have_activity && latest_activity.id != last_known_activity_id)
+        {
+            flash_until = Util::GetTick() + 2500000; // 2.5 s
+            last_known_activity_id = latest_activity.id;
+        }
+
+        // Pulse for as long as any activity runs, plus a short blink for one
+        // that finished before it was noticed.
+        uint64_t activity_now = Util::GetTick();
+        if (flash_until != 0 && activity_now >= flash_until)
+            flash_until = 0;
+
+        bool activity_running = Activities::AnyRunning();
+        bool pulsing = activity_running || (flash_until != 0 && !show_activities);
+
+        if (pulsing)
+        {
+            bool bright = ((int)(ImGui::GetTime() * 2.0) & 1) == 0;
+            ImVec4 idle = ImGui::GetStyle().Colors[ImGuiCol_Button];
+            ImGui::PushStyleColor(ImGuiCol_Button, bright ? ImVec4(0.85f, 0.45f, 0.15f, idle.w) : idle);
+        }
+
         if (ImGui::Button(ICON_FA_CLOCK, ImVec2(35, 0)))
         {
             show_activities = true;
         }
+        if (pulsing)
+            ImGui::PopStyleColor();
+
+        if (show_activities)
+        {
+            Activity latest;
+            if (Activities::Latest(&latest))
+                last_seen_activity_id = latest.id;
+        }
+
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
@@ -501,12 +569,80 @@ namespace Windows
 
         ImGui::SameLine();
         ImGui::SetCursorPosX(1830);
+
+        // Poll now and then so a download that starts in the background can
+        // blink the button, without touching the list the dialog uses.
+        static uint64_t last_bg_poll = 0;
+        static uint64_t bg_flash_until = 0;
+        static std::set<std::string> known_bg_paths;
+        static bool bg_seeded = false;
+
+        if (enable_background_download && Util::GetTick() - last_bg_poll > 2000000)
+        {
+            last_bg_poll = Util::GetTick();
+            Actions::GetBackgroundDownloadProgress();
+
+            std::set<std::string> current;
+            for (size_t i = 0; i < bg_download_progress.size(); i++)
+                current.insert(bg_download_progress[i].path);
+
+            if (!bg_seeded)
+            {
+                bg_seeded = true;
+                known_bg_paths = current;
+            }
+            else if (current.size() > known_bg_paths.size())
+            {
+                // A path we had not seen before just started.
+                for (std::set<std::string>::iterator it = current.begin(); it != current.end(); ++it)
+                {
+                    if (known_bg_paths.find(*it) == known_bg_paths.end())
+                    {
+                        bg_flash_until = Util::GetTick() + 2500000; // 2.5 s
+                        break;
+                    }
+                }
+                known_bg_paths = current;
+            }
+            else if (current.size() < known_bg_paths.size())
+            {
+                // History was cleared; start over without flashing.
+                known_bg_paths = current;
+            }
+        }
+        uint64_t bg_now = Util::GetTick();
+        if (bg_flash_until != 0 && bg_now >= bg_flash_until)
+            bg_flash_until = 0;
+
+        // Pending/Downloading/Resumed are the live states.
+        bool bg_running = false;
+        for (size_t i = 0; i < bg_download_progress.size(); i++)
+        {
+            const std::string &state = bg_download_progress[i].state;
+            if (state == "Pending" || state == "Downloading" || state == "Resumed")
+            {
+                bg_running = true;
+                break;
+            }
+        }
+
+        bool bg_pulsing = bg_running || (bg_flash_until != 0 && !show_bg_download_progress);
+
+        if (bg_pulsing)
+        {
+            bool bright = ((int)(ImGui::GetTime() * 2.0) & 1) == 0;
+            ImVec4 idle = ImGui::GetStyle().Colors[ImGuiCol_Button];
+            ImGui::PushStyleColor(ImGuiCol_Button, bright ? ImVec4(0.25f, 0.55f, 0.90f, idle.w) : idle);
+        }
+
         if (ImGui::Button(ICON_FA_DOWNLOAD, ImVec2(35, 0)))
         {
             Actions::GetBackgroundDownloadProgress();
             show_bg_download_progress = true;
             refresh_bg_download_time = Util::GetTick();
         }
+        if (bg_pulsing)
+            ImGui::PopStyleColor();
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
@@ -1351,6 +1487,12 @@ namespace Windows
                 ImGui::NewLine();
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 220);
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+                // Overwriting is the destructive answer, so the safe one takes
+                // the focus when the dialog appears.
+                if (ImGui::IsWindowAppearing())
+                {
+                    ImGui::SetKeyboardFocusHere();
+                }
                 if (ImGui::Button(lang_strings[STR_NO], ImVec2(100, 0)))
                 {
                     confirm_state = CONFIRM_NO;
@@ -2544,6 +2686,25 @@ namespace Windows
             ConnectionPanel();
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3);
             BrowserPanel();
+
+            // Leaving either browser pane moves the focus to whichever button
+            // matters: the activity one after new work started, otherwise
+            // Connect. Applied next frame, since both are already drawn.
+            static bool browser_was_selected = false;
+            bool browser_selected = selected_browser != 0;
+            // A popup takes the focus on purpose; leave it alone.
+            bool popup_open = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+            if (!paused && !popup_open && browser_was_selected && !browser_selected)
+            {
+                Activity latest;
+                bool unseen = Activities::Latest(&latest) && latest.id != last_seen_activity_id;
+                if (unseen)
+                    focus_activities_button = true;
+                else
+                    focus_connect_button = true;
+            }
+            browser_was_selected = browser_selected;
+
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3);
             StatusPanel();
             ShowActionsDialog();

@@ -2079,6 +2079,35 @@ namespace HttpServer
             res.set_content(result_str, strlen(result_str), "application/json");
         });
 
+        // Cancelling from the browser: the worker is a native thread, so
+        // Activities::Stopped() picks it up inside the transfer loops.
+        svr->Post("/__local__/activities/cancel", [&](const Request &req, Response &res)
+        {
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+            if (jobj == nullptr)
+            {
+                bad_request(res, "Invalid payload");
+                return;
+            }
+
+            json_object *jid = json_object_object_get(jobj, "id");
+            if (jid == nullptr)
+            {
+                bad_request(res, "Required id parameter missing");
+                return;
+            }
+
+            bool cancelled = Activities::Cancel((uint64_t) json_object_get_int64(jid));
+
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "success", json_object_new_boolean(cancelled));
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
+
         svr->Post("/__local__/activities/clear", [&](const Request &req, Response &res)
         {
             int removed = Activities::ClearFinished();
@@ -3646,8 +3675,17 @@ namespace HttpServer
                     if (ret != 1)
                     {
                         zipClose(zf, NULL);
+
+                        // Cancelled: keep the partial archive and answer once.
+                        if (Activities::Stopped())
+                        {
+                            success(res);
+                            return;
+                        }
+
                         FS::Rm(zip_file);
                         failed(res, 200, "Failed to create zip");
+                        return;
                     }
                 }
                 zipClose(zf, NULL);
@@ -3699,12 +3737,16 @@ namespace HttpServer
                 FS::MkDirs(extract_zip_folder);
                 ret = ZipUtil::Extract(entry, extract_zip_folder);
 
-                if (ret == 0)
+                if (ret == 0 && !Activities::Stopped())
                     activity.fail("Failed to extract file");
                 else if (ret == -1)
                     activity.fail("Unsupported compressed file format");
             }
-            if (ret == 0)
+            // A cancelled extraction keeps the files written so far and is not
+            // reported as an error.
+            if (ret == 0 && Activities::Stopped())
+                success(res);
+            else if (ret == 0)
                 failed(res, 200, "Failed to extract file");
             else if (ret == -1)
                 failed(res, 200, "Unsupported compressed file format");

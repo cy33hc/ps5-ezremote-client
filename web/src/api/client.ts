@@ -454,6 +454,11 @@ export async function clearActivities(): Promise<number> {
   return data.removed ?? 0;
 }
 
+/** Asks the console to stop one running activity. */
+export async function cancelActivity(id: number): Promise<void> {
+  await request("/__local__/activities/cancel", { id });
+}
+
 export async function activities(): Promise<Activity[]> {
   const data = await request<Activity[]>("/__local__/activities");
   return Array.isArray(data) ? data : [];

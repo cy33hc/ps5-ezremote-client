@@ -1606,6 +1606,16 @@ export default function App() {
       {activityOpen ? (
         <ActivitiesDialog
           activities={activityList}
+          onCancel={(id) => {
+            void (async () => {
+              try {
+                await api.cancelActivity(id);
+                refresh();
+              } catch (cause) {
+                notify(cause instanceof Error ? cause.message : "Cannot cancel this activity", "error");
+              }
+            })();
+          }}
           onClose={() => setActivityOpen(false)}
           onClear={() => {
             void (async () => {
@@ -2005,10 +2015,12 @@ function ActivitiesDialog({
   activities,
   onClose,
   onClear,
+  onCancel,
 }: {
   activities: api.Activity[];
   onClose: () => void;
   onClear: () => void;
+  onCancel: (id: number) => void;
 }) {
   const rows = [...activities].reverse();
   const label: Record<string, string> = {
@@ -2056,6 +2068,15 @@ function ActivitiesDialog({
                 </span>
                 <span className={`shrink-0 text-xs ${label[ACTIVITY_STATES[item.state]] ?? "text-mist-500"}`}>{t(ACTIVITY_STATES[item.state] ?? item.stateName)}</span>
                 <span className="shrink-0 font-mono text-xs text-mist-500">{item.elapsed}s</span>
+                {item.state === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => onCancel(item.id)}
+                    className="shrink-0 rounded-md border border-rose-400/40 px-2 py-0.5 text-[11px] font-medium text-rose-300 transition hover:bg-rose-400/10"
+                  >
+                    {t("Cancel")}
+                  </button>
+                ) : null}
               </div>
               {item.item ? (
                 <p className="mt-1 truncate font-mono text-[11px] text-mist-500" title={item.item}>

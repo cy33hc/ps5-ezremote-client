@@ -91,6 +91,16 @@ namespace ZipUtil
 
         while (1)
         {
+            // Cancelled mid-file: close the entry so the archive stays readable
+            // and leave the partial archive for the user to delete.
+            if (Activities::Stopped())
+            {
+                free(buf);
+                FS::Close(fd);
+                zipCloseFileInZip(zf);
+                return 0;
+            }
+
             int read = FS::Read(fd, buf, ARCHIVE_TRANSFER_SIZE);
             if (read < 0)
             {
@@ -287,6 +297,14 @@ namespace ZipUtil
         /* loop over file contents and write to fd */
         for (int n = 0;; n++)
         {
+            // Cancelled mid-file: stop here and keep what was written, the way
+            // Explorer leaves a partly extracted file.
+            if (Activities::Stopped())
+            {
+                free(buffer);
+                return 0;
+            }
+
             len = archive_read_data(a, buffer, ARCHIVE_TRANSFER_SIZE);
 
             if (len == 0)

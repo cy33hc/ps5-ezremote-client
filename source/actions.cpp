@@ -1271,7 +1271,7 @@ namespace Actions
             if (!it->isDir)
             {
                 int ret = ZipUtil::Extract(*it, target.c_str());
-                if (ret == 0)
+                if (ret == 0 && !Activities::Stopped())
                 {
                     sprintf(status_message, "%s %s", lang_strings[STR_FAILED_TO_EXTRACT], it->name);
                     usleep(100000);
@@ -1322,7 +1322,7 @@ namespace Actions
                     Activities::Item(activity.id, it->name);
                     int ret = ZipUtil::Extract(*it, target.c_str(), client);
                     Activities::Item(activity.id, it->name);
-                    if (ret == 0)
+                    if (ret == 0 && !Activities::Stopped())
                     {
                         sprintf(status_message, "%s %s", lang_strings[STR_FAILED_TO_EXTRACT], it->name);
                         usleep(100000);
@@ -1374,7 +1374,7 @@ namespace Actions
                 Activities::Item(activity.id, it->path);
                 int res = ZipUtil::ZipAddPath(zf, it->path, strlen(local_directory) + 1, Z_DEFAULT_COMPRESSION);
                 Activities::Item(activity.id, it->path);
-                if (res <= 0)
+                if (res <= 0 && !Activities::Stopped())
                 {
                     sprintf(status_message, "%s", lang_strings[STR_ERROR_CREATE_ZIP]);
                     usleep(1000000);

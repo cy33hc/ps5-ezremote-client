@@ -2211,14 +2211,36 @@ namespace Actions
         sprintf(local_file, "%s/%lu.pkg", temp_folder, tick);
 
         sprintf(activity_message, "%s %s to %s", lang_strings[STR_DOWNLOADING], filename.c_str(), local_file);
+        Activities::Item(activity_current_id, std::string(lang_strings[STR_DOWNLOADING]) + " " + filename);
         uint64_t install_size = 0;
         client->Size(filename, &install_size);
         prev_tick = Util::GetTick();
 
+        // The download is the slow, measurable part: watch the connection so the
+        // activity shows bytes instead of appearing stuck. The install phase that
+        // follows has no byte counter, so progress is cleared afterwards.
+        ProgressWatch *watch = new ProgressWatch{client, activity_current_id, false};
+        pthread_t watch_thid;
+        bool watching = pthread_create(&watch_thid, NULL, ProgressWatchThread, watch) == 0;
+        if (!watching)
+            delete watch;
+
         int ret = client->Get(local_file, filename);
+
+        if (watching)
+        {
+            watch->done = true;
+            pthread_join(watch_thid, NULL);
+        }
+
+        Activities::ProgressCurrent(0, 0);
+
         if (ret == 0)
             return 0;
 
+        sprintf(activity_message, "%s %s", lang_strings[STR_INSTALLING], filename.c_str());
+
+        Activities::Item(activity_current_id, std::string(lang_strings[STR_INSTALLING]) + " " + filename);
         return INSTALLER::InstallLocalPkg(local_file, header, true);
     }
 

@@ -685,6 +685,12 @@ export default function App() {
       (item) => trimSlash(item.substring(0, item.lastIndexOf("/"))) === here,
     );
 
+    // Cutting into the folder the files came from changes nothing.
+    if (mode === "cut" && sameDirectory) {
+      setClipboard(null);
+      return;
+    }
+
     let conflicted = false;
     void run(mode === "copy" ? "Copying…" : "Moving…", async () => {
       if (mode === "copy" && sameDirectory) {
@@ -721,7 +727,25 @@ export default function App() {
 
         await api.copy(items, path, { overwrite: true, skip: skipped });
       } else {
-        await api.move(items, path);
+        // Cut follows the same per-file questions as copy.
+        const conflicts = await api.move(items, path, { probe: true });
+        const skipped: string[] = [];
+        let always = false;
+
+        if (conflicts.length > 0) {
+          conflicted = true;
+          for (let index = 0; index < conflicts.length && !always; index += 1) {
+            const conflict = conflicts[index];
+            const choice = await new Promise<"skip" | "overwrite" | "always">((resolve) => {
+              localAnswer.current = resolve;
+              setLocalAsk({ name: conflict.dest, index, total: conflicts.length });
+            });
+            if (choice === "always") always = true;
+            else if (choice === "skip") skipped.push(conflict.src);
+          }
+        }
+
+        await api.move(items, path, { overwrite: true, skip: skipped });
       }
       if (mode === "cut") setClipboard(null);
       if (!conflicted)

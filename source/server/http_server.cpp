@@ -227,6 +227,54 @@ namespace HttpServer
         return ok;
     }
 
+    // Moves src to dest. A rename handles the common case; when the target
+    // folder already exists the trees are merged instead.
+    static bool MoveTree(const std::string &src, const std::string &dest, const std::set<std::string> &skip, bool overwrite, int depth = 0)
+    {
+        if (depth > 64)
+            return false;
+
+        if (skip.count(TrimSlash(src)) > 0)
+            return true;
+
+        // A file already at the target is kept unless the caller said to take
+        // it; folders always merge.
+        if (!overwrite && FS::FileExists(dest.c_str()))
+            return true;
+
+        if (rename(src.c_str(), dest.c_str()) == 0)
+            return true;
+
+        if (!FS::IsFolder(src))
+        {
+            if (FS::Copy(src, dest.c_str()) <= 0)
+                return false;
+            FS::Rm(src.c_str());
+            return true;
+        }
+
+        FS::MkDirs(dest.c_str());
+
+        int err = 0;
+        std::vector<DirEntry> entries = FS::ListDir(src, &err);
+        if (err)
+            return false;
+
+        bool ok = true;
+        for (size_t i = 0; i < entries.size(); i++)
+        {
+            if (!entries[i].selectable)
+                continue;
+
+            if (!MoveTree(entries[i].path, TrimSlash(dest) + "/" + entries[i].name, skip, overwrite, depth + 1))
+                ok = false;
+        }
+
+        if (ok)
+            FS::RmDir(src.c_str());
+        return ok;
+    }
+
     // Collects the files a copy would overwrite, including those nested inside
     // folders, so the page can ask per file.
     static void ProbeConflicts(const std::string &src, const std::string &dest, std::vector<std::pair<std::string, std::string> > &out, int depth = 0)
@@ -1107,6 +1155,41 @@ namespace HttpServer
                 return;
             }
 
+            // Same contract as /__local__/copy: probe reports nested clashes,
+            // skip leaves decided files where they are.
+            bool overwrite = false;
+            json_object *jobj_overwrite = json_object_object_get(jobj, "overwrite");
+            if (jobj_overwrite != nullptr)
+                overwrite = json_object_get_boolean(jobj_overwrite) != 0;
+
+            bool probe = false;
+            json_object *jobj_probe = json_object_object_get(jobj, "probe");
+            if (jobj_probe != nullptr)
+                probe = json_object_get_boolean(jobj_probe) != 0;
+
+            std::set<std::string> skip;
+            json_object *jobj_skip = json_object_object_get(jobj, "skip");
+            if (jobj_skip != nullptr && json_object_get_type(jobj_skip) == json_type_array)
+            {
+                for (size_t i = 0; i < json_object_array_length(jobj_skip); i++)
+                {
+                    const char *entry = json_object_get_string(json_object_array_get_idx(jobj_skip, i));
+                    if (entry != nullptr)
+                        skip.insert(TrimSlash(entry));
+                }
+            }
+
+            json_object *conflicts = json_object_new_array();
+            JsonObjectRef conflicts_ref(conflicts);
+
+            auto add_conflict = [&](const std::string &src, const std::string &dest)
+            {
+                json_object *entry = json_object_new_object();
+                json_object_object_add(entry, "src", json_object_new_string(src.c_str()));
+                json_object_object_add(entry, "dest", json_object_new_string(dest.c_str()));
+                json_object_array_add(conflicts, entry);
+            };
+
             std::string failed_items;
             size_t len = json_object_array_length(items);
             for (size_t i=0; i < len; i++)
@@ -1121,17 +1204,37 @@ namespace HttpServer
                 sprintf(entry.name, "%s", temp.substr(slash_pos+1).c_str());
                 sprintf(entry.path, "%s", item);
                 entry.isDir = FS::IsFolder(item);
-                std::string new_path = std::string(newPath);
-                if (entry.isDir)
-                    new_path =  new_path + "/" + entry.name;
-                bool ret = CopyOrMove(entry, new_path.c_str(), false);
-                if (!ret)
+                std::string dest_path = TrimSlash(newPath) + "/" + entry.name;
+
+                // Already there: nothing to move.
+                if (TrimSlash(dest_path) == TrimSlash(entry.path))
+                    continue;
+
+                // ...and never move a folder into itself.
+                if (entry.isDir && TrimSlash(dest_path).compare(0, TrimSlash(entry.path).size(), TrimSlash(entry.path)) == 0)
+                    continue;
+
+                if (skip.count(TrimSlash(entry.path)) > 0)
+                    continue;
+
+                if (probe)
+                {
+                    std::vector<std::pair<std::string, std::string> > found;
+                    ProbeConflicts(entry.path, dest_path, found);
+                    for (size_t c = 0; c < found.size(); c++)
+                        add_conflict(found[c].first, found[c].second);
+                    continue;
+                }
+
+                if (!overwrite && (FS::FileExists(dest_path.c_str()) || FS::FolderExists(dest_path.c_str())))
+                {
+                    add_conflict(entry.path, dest_path);
+                    continue;
+                }
+
+                if (!MoveTree(entry.path, dest_path, skip, overwrite))
                 {
                     failed_items += std::string(item) + ",";
-                }
-                if (entry.isDir && ret)
-                {
-                    FS::RmRecursive(item);
                 }
             }
 
@@ -1139,9 +1242,18 @@ namespace HttpServer
             {
                 std::string error_msg = std::string("One or more file(s) failed to move. ") + failed_items;
                 failed(res, 200, error_msg);
+                return;
             }
-            else
-                success(res); });
+
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "success", json_object_new_boolean(true));
+            // Hand ownership to the response; the ref must not free it too.
+            json_object_object_add(result, "conflicts", conflicts_ref.release());
+            const char *result_str = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(result_str, strlen(result_str), "application/json");
+        });
 
         svr->Post("/__local__/copy", [&](const Request &req, Response &res)
         {

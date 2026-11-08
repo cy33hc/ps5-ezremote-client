@@ -112,8 +112,9 @@ export async function copy(items: string[], newPath: string, options: CopyOption
   return Array.isArray(data.conflicts) ? data.conflicts : [];
 }
 
-export async function move(items: string[], newPath: string): Promise<void> {
-  await request("/__local__/move", { items, newPath });
+export async function move(items: string[], newPath: string, options: CopyOptions = {}): Promise<CopyConflict[]> {
+  const data = await request<{ conflicts?: CopyConflict[] }>("/__local__/move", { items, newPath, ...options });
+  return Array.isArray(data.conflicts) ? data.conflicts : [];
 }
 
 export async function install(items: string[]): Promise<void> {

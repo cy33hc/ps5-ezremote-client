@@ -2193,7 +2193,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
     <div className="grid h-full place-items-center bg-abyss-950 p-6">
       <div className="w-full max-w-sm rounded-2xl border border-abyss-600 bg-abyss-900 p-6 shadow-2xl shadow-black/40">
         <h1 className="text-xl font-semibold tracking-tight text-mist-100">ezRemote Client</h1>
-        <p className="mt-1 text-sm text-mist-500">This console is password protected.</p>
+        <p className="mt-1 text-sm text-mist-500">{t("This console is password protected.")}</p>
         <input
           autoFocus
           type="password"
@@ -2202,7 +2202,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
           onKeyDown={(event) => {
             if (event.key === "Enter") void submit();
           }}
-          placeholder="Password"
+          placeholder={t("Password")}
           className="input mt-4"
         />
         {error ? <p className="mt-2 text-xs text-rose-400">{error}</p> : null}

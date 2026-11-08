@@ -64,6 +64,11 @@ export function loadLanguage(language: string): void {
   rememberLanguage(currentLanguage);
 }
 
+// Prime from the last known language before the first paint: the sign-in
+// screen otherwise waits for /__local__/auth to come back.
+const cached = cachedLanguage();
+if (cached && languages[cached]) loadLanguage(cached);
+
 /** Small handle for diagnosing translations from the browser console. */
 if (typeof window !== "undefined") {
   (window as unknown as Record<string, unknown>).__i18n = () => ({

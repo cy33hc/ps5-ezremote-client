@@ -63,9 +63,9 @@ void InitImgui()
 	style.AntiAliasedLinesUseTex = false;
 	style.AntiAliasedLines = true;
 	style.AntiAliasedFill = true;
-	style.WindowRounding = 1.0f;
-	style.FrameRounding = 2.0f;
-	style.GrabRounding = 2.0f;
+	style.WindowRounding = 5.0f;
+	style.FrameRounding = 5.0f;
+	style.GrabRounding = 5.0f;
 
 	ImVec4* colors = style.Colors;
 	const ImVec4 bgColor           = ColorFromBytes(37, 37, 38);

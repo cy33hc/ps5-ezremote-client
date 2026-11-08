@@ -148,6 +148,8 @@ export default function App() {
   const [queuedNotice, setQueuedNotice] = useState<string | null>(null);
   const knownBg = useRef<Set<string> | null>(null);
   const noticeTimer = useRef<number | null>(null);
+  const [localAsk, setLocalAsk] = useState<{ name: string; index: number; total: number } | null>(null);
+  const localAnswer = useRef<((choice: "skip" | "overwrite" | "always") => void) | null>(null);
   const [conflict, setConflict] = useState<{
     toRemote: boolean;
     items: api.CopyItem[];
@@ -676,8 +678,14 @@ export default function App() {
   const pasteClipboard = () => {
     if (!clipboard) return;
     const { mode, items } = clipboard;
-    const sameDirectory = items.every((item) => item.substring(0, item.lastIndexOf("/")) === path);
+    // Trailing slashes differ between listings, so compare normalised paths.
+    const trimSlash = (value: string) => (value.length > 1 ? value.replace(/\/+$/, "") : value);
+    const here = trimSlash(path);
+    const sameDirectory = items.every(
+      (item) => trimSlash(item.substring(0, item.lastIndexOf("/"))) === here,
+    );
 
+    let conflicted = false;
     void run(mode === "copy" ? "Copying…" : "Moving…", async () => {
       if (mode === "copy" && sameDirectory) {
         // Copying beside the originals always collides; mimic Explorer and
@@ -689,15 +697,35 @@ export default function App() {
           taken.add(name.toLowerCase());
           const target = uniqueCopyName(name, taken);
           taken.add(target.toLowerCase());
-          await api.copy([source], path, target);
+          await api.copy([source], path, { singleFilename: target });
         }
       } else if (mode === "copy") {
-        await api.copy(items, path);
+        // Ask per file, then copy once with the skipped ones left out.
+        const conflicts = await api.copy(items, path, { probe: true });
+        const skipped: string[] = [];
+        let always = false;
+
+        if (conflicts.length > 0) {
+          conflicted = true;
+          for (let index = 0; index < conflicts.length && !always; index += 1) {
+            const conflict = conflicts[index];
+            const choice = await new Promise<"skip" | "overwrite" | "always">((resolve) => {
+              localAnswer.current = resolve;
+              setLocalAsk({ name: conflict.dest, index, total: conflicts.length });
+            });
+            // "always" keeps the rest of this transfer, not the next one.
+            if (choice === "always") always = true;
+            else if (choice === "skip") skipped.push(conflict.src);
+          }
+        }
+
+        await api.copy(items, path, { overwrite: true, skip: skipped });
       } else {
         await api.move(items, path);
       }
       if (mode === "cut") setClipboard(null);
-      notify(tp(items.length > 1 ? "Pasted {n} items" : "Pasted {n} item", { n: items.length }), "success");
+      if (!conflicted)
+        notify(tp(items.length > 1 ? "Pasted {n} items" : "Pasted {n} item", { n: items.length }), "success");
       refresh();
     });
   };
@@ -1599,6 +1627,33 @@ export default function App() {
           onSkip={() => resolveConflict("skip")}
           onOverwrite={() => resolveConflict("overwrite")}
           onAlways={() => resolveConflict("always")}
+        />
+      ) : null}
+      {localAsk ? (
+        <ConflictDialog
+          name={localAsk.name}
+          index={localAsk.index}
+          total={localAsk.total}
+          onClose={() => {
+            localAnswer.current?.("skip");
+            localAnswer.current = null;
+            setLocalAsk(null);
+          }}
+          onSkip={() => {
+            localAnswer.current?.("skip");
+            localAnswer.current = null;
+            setLocalAsk(null);
+          }}
+          onOverwrite={() => {
+            localAnswer.current?.("overwrite");
+            localAnswer.current = null;
+            setLocalAsk(null);
+          }}
+          onAlways={() => {
+            localAnswer.current?.("always");
+            localAnswer.current = null;
+            setLocalAsk(null);
+          }}
         />
       ) : null}
       {pkgView ? (

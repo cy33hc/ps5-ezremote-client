@@ -1865,7 +1865,7 @@ namespace Actions
     }
 
     // "name" -> "name (2)", "file.txt" -> "file (2).txt"
-    static std::string UniqueLocalName(const std::string &dir, const std::string &name)
+    std::string UniqueLocalName(const std::string &dir, const std::string &name)
     {
         std::string sep = FS::hasEndSlash(dir.c_str()) ? "" : "/";
         if (!LocalPathExists(dir + sep + name))
@@ -1884,6 +1884,26 @@ namespace Actions
         }
 
         return name;
+    }
+
+    static std::string ParentPath(const std::string &path)
+    {
+        size_t slash = path.find_last_of('/');
+        if (slash == std::string::npos)
+            return path;
+        return slash == 0 ? std::string("/") : path.substr(0, slash);
+    }
+
+    // Copying inside the same folder duplicates the entry, so the name has to
+    // change; copying into another folder keeps it and lets the overwrite policy
+    // decide on collisions.
+    static bool SameFolder(const std::string &target, const std::string &source)
+    {
+        std::string to = target;
+        while (to.size() > 1 && to[to.size() - 1] == '/')
+            to.erase(to.size() - 1);
+
+        return ParentPath(source) == to;
     }
 
     void *CopyLocalFilesThread(void *argp)
@@ -1910,8 +1930,11 @@ namespace Actions
                     sprintf(status_message, "%s", lang_strings[STR_CANT_COPY_TO_SUBDIR_MSG]);
                     continue;
                 }
-                // UniqueLocalName returns the original name when nothing collides.
-                std::string name = UniqueLocalName(target.c_str(), it->name);
+                // Only a same-folder copy needs a new name; elsewhere the
+                // overwrite policy handles collisions.
+                std::string name = SameFolder(target, it->path)
+                    ? UniqueLocalName(target.c_str(), it->name)
+                    : it->name;
                 char new_dir[512];
                 sprintf(new_dir, "%s%s%s", target.c_str(), FS::hasEndSlash(target.c_str()) ? "" : "/", name.c_str());
                 total++;
@@ -1920,10 +1943,13 @@ namespace Actions
             }
             else
             {
-                std::string target = std::string(target.c_str()) +
-                    (FS::hasEndSlash(target.c_str()) ? "" : "/") + UniqueLocalName(target.c_str(), it->name);
+                std::string name = SameFolder(target, it->path)
+                    ? UniqueLocalName(target.c_str(), it->name)
+                    : it->name;
+                std::string dest = std::string(target.c_str()) +
+                    (FS::hasEndSlash(target.c_str()) ? "" : "/") + name;
                 total++;
-                if (CopyOrMoveLocalFile(it->path, target.c_str(), true) == 0)
+                if (CopyOrMoveLocalFile(it->path, dest.c_str(), true) == 0)
                     failed++;
             }
         }

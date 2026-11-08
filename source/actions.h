@@ -116,6 +116,8 @@ namespace Actions
     void MoveLocalFiles();
     void *CopyLocalFilesThread(void *argp);
     void CopyLocalFiles();
+    // "name" -> "name (2)", for copies that land in the folder they came from.
+    std::string UniqueLocalName(const std::string &dir, const std::string &name);
     void *MoveRemoteFilesThread(void *argp);
     void MoveRemoteFiles();
     void *CopyRemoteFilesThread(void *argp);

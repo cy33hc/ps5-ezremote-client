@@ -91,8 +91,25 @@ export async function remove(items: string[]): Promise<void> {
   await request("/__local__/remove", { items });
 }
 
-export async function copy(items: string[], newPath: string, singleFilename?: string): Promise<void> {
-  await request("/__local__/copy", { items, newPath, singleFilename });
+export interface CopyConflict {
+  src: string;
+  dest: string;
+}
+
+export interface CopyOptions {
+  /** Target name for a single item, chosen by the caller. */
+  singleFilename?: string;
+  /** Copy over existing targets instead of reporting them. */
+  overwrite?: boolean;
+  /** Report conflicts without copying anything. */
+  probe?: boolean;
+  /** Source paths to leave alone. */
+  skip?: string[];
+}
+
+export async function copy(items: string[], newPath: string, options: CopyOptions = {}): Promise<CopyConflict[]> {
+  const data = await request<{ conflicts?: CopyConflict[] }>("/__local__/copy", { items, newPath, ...options });
+  return Array.isArray(data.conflicts) ? data.conflicts : [];
 }
 
 export async function move(items: string[], newPath: string): Promise<void> {

@@ -2,6 +2,29 @@
 
 ezRemote Client is an application that allows you to connect the PS5 to remote FTP/SFTP, SMB(Windows Share), NFS, WebDAV, HTTP servers to transfer files. The interface is inspired by Filezilla client which provides a commander like GUI.
 
+**NEW As of version 2.20**<br/>
+**Multi Tasking**
+  - App how supports multi tasking on both Native UI and Web UI
+  - Introduced Activities Dialog to track the progress of the parallel activities
+  - Option to display activity dialog whenever new activity is started
+  - Per-job state — Running / Done / Failed / Partial / Cancelled
+  - Shows per job progress in activity dialog
+  - Cancel any running activity from either Native/WebUI
+
+**Web UI full functional parity with Native UI**
+ - All functions in the Native UI is now available also on the Web UI. Below function were missing in previous release
+   - Install packages from compress files (zip, rar etc...)
+   - Install packages using disk cache
+   - Install packages by first downloading it and then install
+ - All 28 language are now available on the Web UI
+ - The language is now applied immediately after saving the config
+
+**The Cancel function changed to match Windows Explorer behavior**
+ - Previously when you cancel a copy/move/upload/download/extract/compress, it cancels the operation on the files that follow, now the cancel is immediately on the current file and files that follow.  This makes the cancel function work just like in Windows Explorer. Example if you are  copying multiple files and a 1GB file is being copied to another location, if you decide to cancel the copy, previously it will wait until the full 1GB file is copied before cancelling files that follow. Now if you cancel, it will stop right away even if the file was partially copied. Like Windows Explorer, you will need to manually cleanup/delete the partial file
+
+**Reworked overwrite handling**
+ - Native/Web UI dialog now offers Skip / Overwrite / Always overwrite / Cancel
+
 **NEW: As of version 2.19. Revamped the Web UI**
  - Launch "ezRemote Client" remotely from a browser using the following URL. **NOTE: For this, you need to have started ezRemote Server v1.15**
 

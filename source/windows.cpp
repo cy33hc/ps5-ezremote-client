@@ -2248,7 +2248,10 @@ namespace Windows
                         color = ImVec4(0.95f, 0.62f, 0.20f, 1.0f);
                     else if (item.state == ACTIVITY_DONE)
                         color = ImVec4(0.34f, 0.65f, 0.29f, 1.0f);
-                    ImGui::TextColored(color, "%s", Activities::StateName(item.state));
+                    if (item.state == ACTIVITY_CANCELLED && item.items_total > 0)
+                        ImGui::TextColored(color, "%s %u/%u", Activities::StateName(item.state), item.items_done, item.items_total);
+                    else
+                        ImGui::TextColored(color, "%s", Activities::StateName(item.state));
                     if (item.state == ACTIVITY_RUNNING && item.cancellable)
                     {
                         ImGui::PushID((int) item.id);

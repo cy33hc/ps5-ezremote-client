@@ -668,6 +668,7 @@ namespace HttpServer
 
         if (FS::IsFolder(src) == 1)
         {
+            Activities::ItemCurrent(src);
             client->Mkdir(dest);
 
             int err = 0;
@@ -698,18 +699,19 @@ namespace HttpServer
         if (Activities::Stopped())
             return false;
 
+        Activities::ItemCurrent(src);
         UpdateTransfer(job->id, *loaded, job->total, CopyItemName(src));
         SetTransferLive(job->id, client, *loaded, true);
         int put_result = client->Put(src, dest);
         SetTransferLive(job->id, nullptr, *loaded, false);
 
+        // Some clients report success after an aborted upload, so the cancel
+        // flag decides before the result is looked at.
+        if (Activities::Stopped())
+            return false;
+
         if (put_result == 0)
         {
-            // A cancelled upload is not a failure; the partial file stays on
-            // the remote side, the way an interrupted Explorer copy leaves one.
-            if (Activities::Stopped())
-                return false;
-
             *failed += src + ",";
             return false;
         }
@@ -778,6 +780,7 @@ namespace HttpServer
 
         if (is_dir)
         {
+            Activities::ItemCurrent(src);
             FS::MkDirs(dest);
 
             std::vector<DirEntry> entries = client->ListDir(src);
@@ -786,12 +789,21 @@ namespace HttpServer
             {
                 if (strcmp(entries[i].name, "..") == 0)
                     continue;
+
+                // Cancelled: unwinds the whole walk, not just this folder.
+                if (Activities::Stopped())
+                    return false;
+
                 std::string target = dest + "/" + entries[i].name;
                 if (!CopyRemoteToLocal(client, job, entries[i].path, target, entries[i].isDir, loaded, failed))
                     ok = false;
             }
             return ok;
         }
+
+        // Stop before starting another file once the user cancelled.
+        if (Activities::Stopped())
+            return false;
 
         uint64_t size = 0;
         client->Size(src, &size);
@@ -804,6 +816,7 @@ namespace HttpServer
             return true;
         }
 
+        Activities::ItemCurrent(src);
         UpdateTransfer(job->id, *loaded, job->total, CopyItemName(src));
         FILE *out = FS::Create(dest);
         if (out == nullptr)
@@ -814,6 +827,11 @@ namespace HttpServer
 
         DataSink sink;
         sink.write = [out, job, loaded](const char *data, size_t len) {
+            // Cancelling the activity makes the sink refuse further data, which
+            // ends the transfer inside whichever client is reading it.
+            if (Activities::Stopped())
+                return false;
+
             if (FS::Write(out, data, (uint32_t) len) != (int) len)
                 return false;
             *loaded += len;
@@ -823,6 +841,11 @@ namespace HttpServer
 
         int ret = client->GetRange(src, sink, size, 0);
         FS::Close(out);
+
+        // Some clients report success after an aborted transfer (they close the
+        // handle cleanly), so treat the cancel flag as authoritative.
+        if (Activities::Stopped())
+            return false;
 
         if (ret != 1)
         {
@@ -2067,6 +2090,9 @@ namespace HttpServer
                 json_object_object_add(item, "cancellable", json_object_new_boolean(list[i].cancellable));
                 // True once the user asked to stop but the worker has not noticed.
                 json_object_object_add(item, "cancelRequested", json_object_new_boolean(list[i].cancel));
+                // How far the job got, for "cancelled at 3 of 5".
+                json_object_object_add(item, "itemsDone", json_object_new_int((int32_t) list[i].items_done));
+                json_object_object_add(item, "itemsTotal", json_object_new_int((int32_t) list[i].items_total));
                 json_object_object_add(item, "originName", json_object_new_string(Activities::OriginName(list[i].origin)));
                 json_object_array_add(result, item);
             }
@@ -3960,16 +3986,26 @@ namespace HttpServer
 
             std::string toFilename = req.get_param_value("toFilename");
             std::string zip_file = std::string(compressed_file_path) + "/" + toFilename;
+
+            // One activity for the whole batch, so cancelling stops every file
+            // instead of just the one being written.
+            Activities::Guard activity(ACTIVITY_DOWNLOAD, STR_DOWNLOADING, ACTIVITY_WEB, ACTIVITY_LOCAL);
+
             zipFile zf = zipOpen64(zip_file.c_str(), APPEND_STATUS_CREATE);
             if (zf != NULL)
             {
                 int items_count = req.get_param_value_count("items");
                 for (size_t i=0; i < items_count; i++)
                 {
+                    if (Activities::Stopped())
+                        break;
+
                     std::string src = req.get_param_value("items", i);
+                    Activities::Item(activity.id, src);
                     size_t slash_pos = src.find_last_of("/");
                     int ret = ZipUtil::ZipAddPath(zf, src, (slash_pos != std::string::npos ? slash_pos + 1 : 1), Z_DEFAULT_COMPRESSION);
-                    if (ret != 1)
+                    Activities::CountCurrent((uint32_t)(i + 1), (uint32_t) items_count);
+                    if (ret != 1 && !Activities::Stopped())
                     {
                         zipClose(zf, NULL);
                         FS::Rm(zip_file);
@@ -3978,6 +4014,14 @@ namespace HttpServer
                     }
                 }
                 zipClose(zf, NULL);
+
+                if (Activities::Stopped())
+                {
+                    // Cancelled: drop the half-built archive, answer empty.
+                    FS::Rm(zip_file);
+                    res.status = 204;
+                    return;
+                }
 
                 // start stream the zip
                 FILE *in = FS::OpenRead(zip_file);
@@ -3989,6 +4033,9 @@ namespace HttpServer
                         size_t size_to_read = std::min(static_cast<size_t>(length), (size_t)1048576);
                         char buff[size_to_read];
                         size_t read_len;
+                        if (Activities::Stopped())
+                            return false;
+
                         FS::Seek(in, offset);
                         read_len = FS::Read(in, buff, size_to_read);
                         sink.write(buff, read_len);

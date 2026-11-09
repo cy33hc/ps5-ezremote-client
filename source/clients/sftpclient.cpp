@@ -397,6 +397,9 @@ int SFTPClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offse
     size_t bytes_remaining = size;
     do
     {
+        if (Activities::Stopped())
+            break;
+
         size_t bytes_to_read = std::min<size_t>(FTP_CLIENT_BUFSIZ, bytes_remaining);
         rc = libssh2_sftp_read(sftp_handle, buff, bytes_to_read);
         if (rc > 0)

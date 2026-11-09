@@ -441,6 +441,9 @@ export interface Activity {
   cancellable: boolean;
   /** True once the user asked to stop; the worker has not noticed yet. */
   cancelRequested: boolean;
+  /** Entries finished; itemsTotal is 0 when the worker does not track them. */
+  itemsDone: number;
+  itemsTotal: number;
   label: string;
   item: string;
   done: number;

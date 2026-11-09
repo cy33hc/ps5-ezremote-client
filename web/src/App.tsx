@@ -2092,7 +2092,10 @@ function ActivitiesDialog({
                   <span className="text-mist-500">{t(ACTIVITY_KINDS[item.kind] ?? item.kindName)} · </span>
                   {item.label}
                 </span>
-                <span className={`shrink-0 text-xs ${label[ACTIVITY_STATES[item.state]] ?? "text-mist-500"}`}>{t(ACTIVITY_STATES[item.state] ?? item.stateName)}</span>
+                <span className={`shrink-0 text-xs ${label[ACTIVITY_STATES[item.state]] ?? "text-mist-500"}`}>
+                  {t(ACTIVITY_STATES[item.state] ?? item.stateName)}
+                  {item.state === 3 && item.itemsTotal > 0 ? ` ${item.itemsDone}/${item.itemsTotal}` : ""}
+                </span>
                 <span className="shrink-0 font-mono text-xs text-mist-500">{item.elapsed}s</span>
                 {item.state === 0 && item.cancellable ? (
                   item.cancelRequested ? (

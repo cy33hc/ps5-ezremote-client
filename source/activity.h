@@ -61,6 +61,8 @@ struct Activity
     uint64_t total;
     bool cancel;       // requested by the user
     bool cancellable;  // false during a phase that cannot be interrupted
+    uint32_t items_done;  // entries finished by the worker, for "3 of 5" text
+    uint32_t items_total; // 0 when the worker does not track item counts
     uint64_t started;  // Util::GetTick() when the activity began
     uint64_t finished; // when it ended, 0 while running
     int origin;
@@ -85,10 +87,16 @@ namespace Activities
     void SetOverwriteType(int type);
     void SnapshotOverwrite();
     void Item(uint64_t id, const std::string &item);
+    // Same for the calling thread's activity, so deep helpers can keep the
+    // "current file" line up to date without carrying the id around.
+    void ItemCurrent(const std::string &item);
     // Marks the calling thread's activity as interruptible or not, e.g. an
     // install hands off to the system installer, which cannot be stopped.
     void SetCancellable(bool cancellable);
     void Progress(uint64_t id, uint64_t done, uint64_t total);
+    // Item counters for the calling thread's activity, so a cancelled job can
+    // say how far it got.
+    void CountCurrent(uint32_t done, uint32_t total);
 
     // Marks the activity failed with a message; Guard's destructor will not
     // overwrite the state afterwards.

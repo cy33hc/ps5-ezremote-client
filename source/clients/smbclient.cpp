@@ -323,6 +323,9 @@ int SmbClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset
 	size_t bytes_remaining = size;
 	do
 	{
+		if (Activities::Stopped())
+			break;
+
 		size_t bytes_to_read = std::min<size_t>(max_read_size, bytes_remaining);
 		count = smb2_read(smb2, in, buff, bytes_to_read);
 		if (count > 0)

@@ -370,6 +370,7 @@ namespace Actions
             total++;
             if (FS::RmRecursive(it->path) <= 0)
                 failed++;
+            Activities::CountCurrent(total, (uint32_t) files.size());
         }
         // A cancelled delete is not a failure.
         if (failed > 0 && !Activities::Stopped())
@@ -426,6 +427,7 @@ namespace Actions
                             healthy = false;
                         }
                     }
+                    Activities::CountCurrent(total, (uint32_t) files.size());
                 }
                 else
                 {
@@ -614,6 +616,7 @@ namespace Actions
                     if (Upload(*it, remote_directory, client) == 0)
                         failed++;
                 }
+                Activities::CountCurrent(total, (uint32_t) files.size());
             }
         }
         else
@@ -867,6 +870,7 @@ namespace Actions
                     if (Download(*it, local_directory, client) == 0)
                         failed++;
                 }
+                Activities::CountCurrent(total, (uint32_t) files.size());
             }
         }
         else
@@ -1854,6 +1858,7 @@ namespace Actions
                     failed++;
             }
             Activities::Item(activity.id, it->path);
+            Activities::CountCurrent(total, (uint32_t) files.size());
         }
         // A cancelled copy aborts mid-file; that is not a failure.
         if (failed > 0 && !Activities::Stopped())
@@ -1977,6 +1982,7 @@ namespace Actions
                     failed++;
             }
             Activities::Item(activity.id, it->path);
+            Activities::CountCurrent(total, (uint32_t) files.size());
         }
         // A cancelled copy aborts mid-file; that is not a failure.
         if (failed > 0 && !Activities::Stopped())

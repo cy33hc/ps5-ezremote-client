@@ -58,6 +58,8 @@ namespace Activities
         activity.finished = 0;
         activity.cancel = false;
         activity.cancellable = true;
+        activity.items_done = 0;
+        activity.items_total = 0;
         activity.origin = origin;
         activity.scope = scope;
         activity_list.push_back(activity);
@@ -84,6 +86,31 @@ namespace Activities
         {
             activity->done = done;
             activity->total = total;
+        }
+    }
+
+    void ItemCurrent(const std::string &item)
+    {
+        if (activity_current_id == 0)
+            return;
+
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        Activity *activity = Find(activity_current_id);
+        if (activity != nullptr)
+            activity->item = item;
+    }
+
+    void CountCurrent(uint32_t done, uint32_t total)
+    {
+        if (activity_current_id == 0)
+            return;
+
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        Activity *activity = Find(activity_current_id);
+        if (activity != nullptr)
+        {
+            activity->items_done = done;
+            activity->items_total = total;
         }
     }
 

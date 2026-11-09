@@ -4410,7 +4410,7 @@ namespace HttpServer
                     int ret = pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);
 
                     Activities::SetCancellable(false);
-                    ret = INSTALLER::InstallArchivePkg(entry->filename, install_data, true);
+                    ret = INSTALLER::InstallArchivePkg(entry->filename, install_data, false);
                     Activities::SetCancellable(true);
 
                     if (Activities::Stopped())

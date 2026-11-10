@@ -590,6 +590,7 @@ namespace Actions
         TransferJob *job = static_cast<TransferJob *>(argp);
         Activities::Guard activity(ACTIVITY_UPLOAD, STR_UPLOADING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         std::vector<DirEntry> files = job->files;
+        std::string target = job->target;
         delete job;
         int failed = 0;
         int total = 0;
@@ -605,7 +606,7 @@ namespace Actions
                 if (it->isDir)
                 {
                     char new_dir[512];
-                    sprintf(new_dir, "%s%s%s", remote_directory, FS::hasEndSlash(remote_directory) ? "" : "/", it->name);
+                    sprintf(new_dir, "%s%s%s", target.c_str(), FS::hasEndSlash(target.c_str()) ? "" : "/", it->name);
                     total++;
                     if (Upload(*it, new_dir, client) == 0)
                         failed++;
@@ -613,7 +614,7 @@ namespace Actions
                 else
                 {
                     total++;
-                    if (Upload(*it, remote_directory, client) == 0)
+                    if (Upload(*it, target.c_str(), client) == 0)
                         failed++;
                 }
                 Activities::CountCurrent(total, (uint32_t) files.size());
@@ -644,10 +645,12 @@ namespace Actions
         sprintf(status_message, "%s", "");
         TransferJob *job = new TransferJob();
         job->files = TakeSelection(multi_selected_local_files, selected_local_file);
+        job->target = remote_directory;
 
         int thread_res = pthread_create(&bk_activity_thid, NULL, UploadFilesThread, job);
         if (thread_res != 0)
         {
+            delete job;
             multi_selected_local_files.clear();
             selected_action = ACTION_REFRESH_REMOTE_FILES;
         }
@@ -844,6 +847,7 @@ namespace Actions
         TransferJob *job = static_cast<TransferJob *>(argp);
         Activities::Guard activity(ACTIVITY_DOWNLOAD, STR_DOWNLOADING, ACTIVITY_NATIVE, ACTIVITY_REMOTE);
         std::vector<DirEntry> files = job->files;
+        std::string target = job->target;
         delete job;
         int failed = 0;
         int total = 0;
@@ -859,7 +863,7 @@ namespace Actions
                 if (it->isDir)
                 {
                     char new_dir[512];
-                    sprintf(new_dir, "%s%s%s", local_directory, FS::hasEndSlash(local_directory) ? "" : "/", it->name);
+                    sprintf(new_dir, "%s%s%s", target.c_str(), FS::hasEndSlash(target.c_str()) ? "" : "/", it->name);
                     total++;
                     if (Download(*it, new_dir, client) == 0)
                         failed++;
@@ -867,7 +871,7 @@ namespace Actions
                 else
                 {
                     total++;
-                    if (Download(*it, local_directory, client) == 0)
+                    if (Download(*it, target.c_str(), client) == 0)
                         failed++;
                 }
                 Activities::CountCurrent(total, (uint32_t) files.size());
@@ -899,10 +903,12 @@ namespace Actions
         sprintf(status_message, "%s", "");
         TransferJob *job = new TransferJob();
         job->files = TakeSelection(multi_selected_remote_files, selected_remote_file);
+        job->target = local_directory;
 
         int thread_res = pthread_create(&bk_activity_thid, NULL, DownloadFilesThread, job);
         if (thread_res != 0)
         {
+            delete job;
             multi_selected_remote_files.clear();
             selected_action = ACTION_REFRESH_LOCAL_FILES;
         }
@@ -1364,7 +1370,7 @@ namespace Actions
                     break;
                 
                 Activities::Item(activity.id, it->path);
-                int res = ZipUtil::ZipAddPath(zf, it->path, strlen(local_directory) + 1, Z_DEFAULT_COMPRESSION);
+                int res = ZipUtil::ZipAddPath(zf, it->path, strlen(it->directory) + 1, Z_DEFAULT_COMPRESSION);
                 Activities::Item(activity.id, it->path);
                 if (res <= 0 && !Activities::Stopped())
                 {

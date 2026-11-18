@@ -266,6 +266,8 @@ export interface Settings {
   languages: string[];
   autoDeleteTmpPkg: boolean;
   showHiddenFiles: boolean;
+  /** Running ezRemote Server payload is not the version this client ships. */
+  ezremoteServerOutdated: boolean;
   tempFolder: string;
   enableBackgroundDownload: boolean;
   showActivityDialog: boolean;

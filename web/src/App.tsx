@@ -72,6 +72,9 @@ function sortEntries(entries: DirEntry[], filter: string, sort: Sort): DirEntry[
   return filtered;
 }
 
+// Keeps the payload-version warning to one show per browser session.
+const SERVER_WARNING_KEY = "ezremote-server-warning-dismissed";
+
 export default function App() {
   const [path, setPath] = useState(() => localStorage.getItem(LAST_PATH_KEY) || DEFAULT_PATH);
   const [entries, setEntries] = useState<DirEntry[]>([]);
@@ -97,6 +100,11 @@ export default function App() {
   const [remoteClipboard, setRemoteClipboard] = useState<{ mode: "copy" | "cut"; items: string[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [bgOpen, setBgOpen] = useState(false);
+  const dismissServerWarning = () => {
+    sessionStorage.setItem(SERVER_WARNING_KEY, "1");
+    setServerOutdated(false);
+  };
+
   const [activityList, setActivityList] = useState<api.Activity[]>([]);
   const [showActivityDialog, setShowActivityDialog] = useState(true);
   const [, refreshTranslations] = useReducer((value: number) => value + 1, 0);
@@ -105,6 +113,10 @@ export default function App() {
     try {
       const loaded = await api.getSettings();
       setShowActivityDialog(loaded.showActivityDialog);
+      // The console warns once per run when its payload is the wrong version;
+      // here the browser session plays that role.
+      if (loaded.ezremoteServerOutdated && sessionStorage.getItem(SERVER_WARNING_KEY) !== "1")
+        setServerOutdated(true);
       loadLanguage(loaded.language);
       // Translations are module state; re-render the tree once they are in.
       refreshTranslations();
@@ -114,6 +126,7 @@ export default function App() {
   }, []);
 
   const [activityOpen, setActivityOpen] = useState(false);
+  const [serverOutdated, setServerOutdated] = useState(false);
   const [exitDialog, setExitDialog] = useState<"stop" | "restart" | null>(null);
   const [remotePkgView, setRemotePkgView] = useState<DirEntry | null>(null);
   const [auth, setAuth] = useState<api.AuthStatus | null>(null);
@@ -1654,6 +1667,27 @@ export default function App() {
             })();
           }}
         />
+      ) : null}
+      {authed && serverOutdated ? (
+        <Modal
+          title={t("Warning")}
+          onClose={dismissServerWarning}
+          footer={
+            <button
+              type="button"
+              onClick={dismissServerWarning}
+              className="rounded-lg bg-accent-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-400"
+            >
+              {t("Close")}
+            </button>
+          }
+        >
+          <div className="space-y-2 text-sm leading-relaxed text-mist-300">
+            <p>{t("The version of ezRemote Server payload running does not match the required version needed by ezRemote Client.")}</p>
+            <p>{t("If you are using an auto payload loader, then please update the payload in that location with the version that comes with ezRemoteClient package.")}</p>
+            <p>{t("You may goto the Global Settings and restart ezRemote Server with the version that came packaged.")}</p>
+          </div>
+        </Modal>
       ) : null}
       {exitDialog ? (
         <ExitConfirmDialog

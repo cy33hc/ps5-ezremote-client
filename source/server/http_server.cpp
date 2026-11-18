@@ -317,6 +317,14 @@ namespace HttpServer
         }
     }
 
+    // True when a payload is running but it is not the version this client
+    // ships with; an empty version means nothing is listening (no warning).
+    static bool EzRemoteServerOutdated()
+    {
+        std::string version = INSTALLER::EzRemoteServerVersion();
+        return !version.empty() && version != EZREMOTE_SERVER_REQUIRED_VERSION;
+    }
+
     static void DeleteRemoteClient(RemoteClient *tmp_client)
     {
         tmp_client->Quit();
@@ -2947,6 +2955,9 @@ namespace HttpServer
             json_object_object_add(result, "languages", languages);
             json_object_object_add(result, "autoDeleteTmpPkg", json_object_new_boolean(auto_delete_tmp_pkg));
             json_object_object_add(result, "showHiddenFiles", json_object_new_boolean(show_hidden_files));
+            // Mirrors the warning the console shows when its payload is older
+            // or newer than the version this client expects.
+            json_object_object_add(result, "ezremoteServerOutdated", json_object_new_boolean(EzRemoteServerOutdated()));
             json_object_object_add(result, "tempFolder", json_object_new_string(temp_folder));
             json_object_object_add(result, "enableBackgroundDownload", json_object_new_boolean(enable_background_download));
             json_object_object_add(result, "showActivityDialog", json_object_new_boolean(show_activity_dialog));

@@ -40,5 +40,8 @@ void log_msg(const char *fmt, ...);
  * redirected to /dev/null so it can keep running after the launcher exits.
  * Returns 0 on success, or a negative value on failure.
  **/
-int sys_launch_homebrew(const char* cwd, const char* path, const char* args,
-			const char* env);
+int sys_launch_homebrew(const char* cwd, const char* path, const char* args, const char* env);
+
+int sys_launch_daemon(const char* cwd, const char* uri, const char* args, const char* env);
+
+int launch_uri(const char* uri);

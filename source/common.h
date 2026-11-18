@@ -8,6 +8,10 @@
 #include <lexbor/dom/interfaces/element.h>
 
 #define HTTP_SUCCESS(x) (x >= 200 && x < 300)
+// Set from the process arguments before anything starts: skips the ImGui/SDL
+// front end and serves only the web UI.
+extern bool headless_mode;
+
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 

@@ -98,6 +98,11 @@ namespace Actions
 
     void RefreshLocalFiles(bool apply_filter)
     {
+        // These fill the native file lists; headless has no UI to feed and the
+        // web UI lists directories through its own endpoints.
+        if (headless_mode)
+            return;
+
         multi_selected_local_files.clear();
         local_files.clear();
         int err;
@@ -127,6 +132,11 @@ namespace Actions
 
     void RefreshRemoteFiles(bool apply_filter)
     {
+        // Same as above; the null check also protects callers that run before
+        // the console ever connected.
+        if (headless_mode || remoteclient == nullptr)
+            return;
+
         if (!remoteclient->Ping())
         {
             remoteclient->Quit();
@@ -321,6 +331,14 @@ namespace Actions
 
     static void PromptOverwrite(const char *dest)
     {
+        // Headless has no dialog to answer, so blocking here would freeze the
+        // worker for good; skip instead of overwriting blindly.
+        if (headless_mode)
+        {
+            confirm_state = CONFIRM_NO;
+            return;
+        }
+
         std::lock_guard<std::mutex> lock(confirm_mutex);
         confirm_kind = CONFIRM_KIND_OVERWRITE;
         sprintf(confirm_message, "%s %s?", lang_strings[STR_OVERWRITE], dest);

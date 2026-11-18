@@ -138,6 +138,8 @@ static void terminate()
 	}
 }
 
+bool headless_mode = false;
+
 int main()
 {
 	// dbglogger_init();
@@ -146,7 +148,12 @@ int main()
 	// No buffering
 	setvbuf(stdout, NULL, _IONBF, 0);
 
-	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
+	// The mode comes from Global Settings, so the config is read before deciding
+	// whether the video, timer and controller subsystems are needed.
+	CONFIG::LoadConfig();
+	headless_mode = headless_enabled;
+
+	if (!headless_mode && SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
 	{
 		return -1;
 	}
@@ -157,10 +164,42 @@ int main()
 		return -1;
 	}
 
-	CONFIG::LoadConfig();
-	HttpServer::Start();
 	INSTALLER::StartDirectPackageInstaller();
 	INSTALLER::StartEzRemoteServer();
+
+	// Headless: no window, no ImGui, no font atlas. Everything below the branch
+	// is the native front end.
+	if (headless_mode)
+	{
+		// Strings are needed by the web UI and the activity tracker, but the
+		// layout is the only thing Fonts::Load() would add.
+		Lang::SetTranslation(0);
+
+		// No window will appear, so say where the app went.
+		Util::Notify("%s", lang_strings[STR_HEADLESS_STARTED_MSG]);
+
+		// No UI loop to keep the process alive, so the server runs on this
+		// thread: listen() blocks and returns when "/stop" is handled.
+		HttpServer::Start(true);
+
+		// listen() returned because the web UI asked to stop; the process is
+		// about to disappear, so say why.
+		Util::Notify("%s", lang_strings[STR_CLOSING_MSG]);
+
+		Activities::Shutdown();
+
+		if (remoteclient != nullptr)
+		{
+			remoteclient->Quit();
+		}
+
+		terminate();
+		kill(getpid(), SIGKILL);
+		_exit(0);
+		return 0;
+	}
+
+    HttpServer::Start();
 
     // Setup window
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);

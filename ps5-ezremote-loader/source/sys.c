@@ -29,7 +29,9 @@ along with this program; see the file COPYING. If not, see
 
 #include <ps5/kernel.h>
 
+#include "elfldr.h"
 #include "hbldr.h"
+#include "fs.h"
 #include "sys.h"
 
 /* ShellUI / UserService externs */
@@ -63,7 +65,7 @@ Notify(const char *fmt, ...) {
  * Uses: pshomeui:navigateToHome?bootCondition=psButton
  * Based on the Return-to-Home mechanism by LightningMods / etaHEN.
  */
-static int return_to_home_by_uri(void) {
+int launch_uri(const char* uri) {
     int (*p_sceShellUIUtilInitialize)(void) = NULL;
     int (*p_sceShellUIUtilLaunchByUri)(const char *uri, SceShellUIUtilLaunchByUriParam *param) = NULL;
 
@@ -109,7 +111,7 @@ static int return_to_home_by_uri(void) {
     printf("[autoloader] return_to_home_by_uri: launching pshomeui with userId=0x%08x\n", param.userId);
     fflush(stdout);
 
-    int res = p_sceShellUIUtilLaunchByUri("pshomeui:navigateToHome?bootCondition=psButton", &param);
+    int res = p_sceShellUIUtilLaunchByUri(uri, &param);
     printf("[autoloader] return_to_home_by_uri: sceShellUIUtilLaunchByUri returned: 0x%08x (%d)\n", res, res);
     fflush(stdout);
 
@@ -274,7 +276,7 @@ sys_launch_homebrew(const char* cwd, const char* path, const char* args,
     perror("open");
   }
 
-  return_to_home_by_uri();
+  launch_uri("pshomeui:navigateToHome?bootCondition=psButton");
 
   args_split(args, argv, 255);
   args_split(env, envp, 255);
@@ -298,6 +300,68 @@ sys_launch_homebrew(const char* cwd, const char* path, const char* args,
   return 0;
 }
 
+int
+sys_launch_daemon(const char* cwd, const char* uri, const char* args,
+		  const char* env) {
+  uint8_t* elf = 0;
+  char* argv[255];
+  char* envp[255];
+  int fds[2];
+  pid_t pid;
+
+  if(!cwd) {
+    cwd = "/";
+  }
+  if(!args) {
+    args = "";
+  }
+  if(!env) {
+    env = "";
+  }
+
+  if(uri[0] == '/') {
+    if(!(elf=fs_readfile(uri, 0))) {
+      return -1;
+    }
+
+  } else if(!strncmp(uri, "file:", 5)) {
+    if(!(elf=fs_readfile(uri+5, 0))) {
+      return -1;
+    }
+
+  }
+
+  if(!elf) {
+    return -1;
+  }
+
+  printf("launch daemon: CWD=%s %s %s %s\n", cwd, env, uri, args);
+
+  if(pipe(fds) == -1) {
+    perror("pipe");
+    return 1;
+  }
+
+  args_split(args, argv, 255);
+  args_split(env, envp, 255);
+  pid = elfldr_spawn(cwd, fds[1], elf, argv, envp);
+
+  free(elf);
+  for(int i=0; argv[i]; i++) {
+    free(argv[i]);
+  }
+  for(int i=0; envp[i]; i++) {
+    free(envp[i]);
+  }
+
+  close(fds[1]);
+  if(pid < 0) {
+    close(fds[0]);
+    return -1;
+  }
+
+  return fds[0];
+}
 
 __attribute__((constructor)) static void
 sys_init(void) {

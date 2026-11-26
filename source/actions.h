@@ -103,6 +103,9 @@ namespace Actions
     void *InstallRemotePkgsThread(void *argp);
     void InstallRemotePkgs();
     void *InstallLocalPkgsThread(void *argp);
+    // Once a selection has been handed to an activity the panes are free
+    // again: the work holds its own copy of the list.
+    void ClearSelection();
     void InstallLocalPkgs();
     void *InstallLocalUrlPkgThread(void *argp);
     void *InstallRpiUrlPkgThread(void *argp);
@@ -132,8 +135,13 @@ namespace Actions
     // site-based install and the install-from-URL one, so both behave alike.
     int InstallPkgByDownload(RemoteClient *client, const std::string &path, pkg_header *header);
     // Takes ownership of stream_client; cache_key is what InstallSplitPkg hashes.
+    // known_header is the CNT header the caller already read from that client,
+    // so the stream does not have to be searched for it.
+    // range_client (optional, takes ownership) serves the installer's
+    // out-of-order reads; without it those reads wait for the writer.
     int InstallPkgByStreaming(RemoteClient *stream_client, const std::string &stream_path,
-                              const std::string &cache_key);
+                              const std::string &cache_key, const pkg_header *known_header = nullptr,
+                              RemoteClient *range_client = nullptr);
     int InstallPkgByProxy(const std::string &url, pkg_header *header, const std::string &title);
 
     // Removes a remote folder tree entry by entry, so a deep delete can be

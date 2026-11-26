@@ -162,6 +162,17 @@ struct SplitPkgInstallData
     bool stop_write_thread;
     bool delete_client;
     uint64_t activity_id; // background threads cannot read the caller's TLS
+    // CNT header fetched from the remote file before streaming started. Real
+    // PS5 packages keep it at the end of the file, so waiting for the stream to
+    // reach it would leave the install without a content id for a long time.
+    pkg_header header;
+    bool header_valid;
+    // Ranges prefetched from the source file so the installer's out-of-order
+    // reads (CNT header, package tail) never wait for the writer.
+    // Second connection to the same source, used to answer the installer's
+    // out-of-order reads (the CNT/SC region at the end) without buffering it
+    // in memory and without disturbing the streaming writer.
+    RemoteClient *range_client;
     int http_users;       // /split_inst streams reading the blocks right now
     bool closing;         // no new readers; the blocks are about to go away
 };
@@ -186,6 +197,14 @@ namespace INSTALLER
     bool ExtractRemotePkg(RemoteClient *client, const std::string &path, const std::string sfo_path, const std::string param_json_path, const std::string icon_path);
     bool ExtractRemotePkg(const std::string &path, const std::string sfo_path, const std::string param_json_path, const std::string icon_path);
     std::string GetRemotePkgTitle(RemoteClient *client, const std::string &path, pkg_header *header);
+
+    // A PS5 package starts with an FIH header; the CNT header that carries the
+    // content id lives at fih.embedded_cnt_offset, not at offset 0. These
+    // resolve whichever layout a package file uses.
+    bool ReadLocalPkgHeader(const std::string &path, pkg_header *header);
+    // cnt_offset, when given, receives the offset the CNT header was read from.
+    bool ReadRemotePkgHeader(RemoteClient *client, const std::string &path, pkg_header *header,
+                             uint64_t *cnt_offset = nullptr);
     std::string GetLocalPkgTitle(const std::string &path, pkg_header *header);
     ArchivePkgInstallData *GetArchivePkgInstallData(const std::string &hash);
     // Take a reference for the lifetime of an HTTP stream so cleanup cannot

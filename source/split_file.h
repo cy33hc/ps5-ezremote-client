@@ -50,6 +50,7 @@ public:
 
     double GetReadSpeed();   // bytes/s, rate of the time since the last sample
     size_t GetReadBytes();   // total bytes returned by Read()
+    size_t GetWriteBytes();  // total bytes the writer has produced
 
 private:
     std::deque<FileBlock*> file_blocks;

@@ -403,6 +403,12 @@ namespace Actions
         return NULL;
     }
 
+    void ClearSelection()
+    {
+        multi_selected_local_files.clear();
+        multi_selected_remote_files.clear();
+    }
+
     void DeleteSelectedLocalFiles()
     {
         TransferJob *job = new TransferJob();
@@ -413,6 +419,8 @@ namespace Actions
         {
             selected_action = ACTION_REFRESH_LOCAL_FILES;
         }
+        else
+            ClearSelection();
     }
 
     void *DeleteSelectedRemotesFilesThread(void *argp)
@@ -490,6 +498,8 @@ namespace Actions
         if (thread_res != 0)
         {
         }
+        else
+            ClearSelection();
     }
 
     int UploadFile(const char *src, const char *dest, RemoteClient *client)
@@ -672,6 +682,8 @@ namespace Actions
             multi_selected_local_files.clear();
             selected_action = ACTION_REFRESH_REMOTE_FILES;
         }
+        else
+            ClearSelection();
     }
 
     int BackgroundDownload(const char* src, const char *dest, uint64_t file_size)
@@ -930,6 +942,8 @@ namespace Actions
             multi_selected_remote_files.clear();
             selected_action = ACTION_REFRESH_LOCAL_FILES;
         }
+        else
+            ClearSelection();
     }
 
     void *InstallRemotePkgsThread(void *argp)
@@ -966,13 +980,12 @@ namespace Actions
                 if (path.size() > 4 && path.substr(path.size() - 4) == ".pkg")
                 {
                     pkg_header header;
-                    memset(&header, 0, sizeof(header));
 
-                    if (client->Head(it->path, (void *)&header, sizeof(header)) == 0)
+                    if (!INSTALLER::ReadRemotePkgHeader(client, it->path, &header))
                         failed++;
                     else
                     {
-                        if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
+                        if (BE32(header.pkg_magic) == PKG_CNT_MAGIC)
                         {
                             uint64_t file_size = 0;
                             client->Size(it->path, &file_size);
@@ -1063,6 +1076,8 @@ namespace Actions
         {
             multi_selected_remote_files.clear();
         }
+        else
+            ClearSelection();
     }
 
     void *ExtractArchivePkg(void *argp)
@@ -1158,12 +1173,11 @@ namespace Actions
                 if (Util::EndsWith(path,".pkg"))
                 {
                     pkg_header header;
-                    memset(&header, 0, sizeof(header));
-                    if (FS::Head(it->path, (void *)&header, sizeof(header)) == 0)
+                    if (!INSTALLER::ReadLocalPkgHeader(it->path, &header))
                         failed++;
                     else
                     {
-                        if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
+                        if (BE32(header.pkg_magic) == PKG_CNT_MAGIC)
                         {
                             Activities::SetCancellable(false);
                             ret = INSTALLER::InstallLocalPkg(it->path, &header);
@@ -1263,6 +1277,8 @@ namespace Actions
         {
             multi_selected_local_files.clear();
         }
+        else
+            ClearSelection();
     }
 
     void *ExtractZipThread(void *argp)
@@ -1309,6 +1325,8 @@ namespace Actions
             delete job;
             multi_selected_local_files.clear();
         }
+        else
+            ClearSelection();
     }
 
     void *ExtractRemoteZipThread(void *argp)
@@ -1366,6 +1384,8 @@ namespace Actions
             delete job;
             multi_selected_remote_files.clear();
         }
+        else
+            ClearSelection();
     }
 
     void *MakeZipThread(void *argp)
@@ -1416,6 +1436,8 @@ namespace Actions
             delete job;
             multi_selected_local_files.clear();
         }
+        else
+            ClearSelection();
     }
 
     void *InstallLocalUrlPkgThread(void *argp)
@@ -1480,16 +1502,13 @@ namespace Actions
         }
         tmp_client.Quit();
 
-        FILE *in = FS::OpenRead(filename);
-        if (in == NULL)
+        if (!INSTALLER::ReadLocalPkgHeader(filename, &header))
         {
-            sprintf(status_message, "%s - Error opening temp pkg file - %s", lang_strings[STR_FAILED], filename);
+            sprintf(status_message, "%s - %s", lang_strings[STR_FAILED], filename);
             return NULL;
         }
 
-        FS::Read(in, (void *)&header, s);
-        FS::Close(in);
-        if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
+        if (BE32(header.pkg_magic) == PKG_CNT_MAGIC)
         {
             int ret;
             Activities::SetCancellable(false);
@@ -2389,7 +2408,8 @@ namespace Actions
     }
 
     int InstallPkgByStreaming(RemoteClient *stream_client, const std::string &stream_path,
-                              const std::string &cache_key)
+                              const std::string &cache_key, const pkg_header *known_header,
+                              RemoteClient *range_client)
     {
         SplitPkgInstallData *install_data = (SplitPkgInstallData*) malloc(sizeof(SplitPkgInstallData));
         memset(install_data, 0, sizeof(SplitPkgInstallData));
@@ -2404,6 +2424,33 @@ namespace Actions
         install_data->stop_write_thread = false;
         install_data->delete_client = true;
         install_data->activity_id = activity_current_id;
+        // Prefer the header the caller already resolved; otherwise ask the
+        // source file directly.
+        uint64_t cnt_offset = 0;
+        install_data->header_valid = false;
+
+        if (known_header != nullptr && BE32(known_header->pkg_magic) == PKG_CNT_MAGIC)
+        {
+            install_data->header = *known_header;
+            install_data->header_valid = true;
+
+            // One cheap read of the FIH header so the CNT range can still be
+            // prefetched for the installer's out-of-order read.
+            fih_header fih;
+            memset(&fih, 0, sizeof(fih_header));
+            if (stream_client->Head(stream_path, &fih, sizeof(fih_header)) && BE32(fih.magic) == PKG_FIH_MAGIC)
+                cnt_offset = fih.embedded_cnt_offset;
+        }
+        else
+        {
+            install_data->header_valid = INSTALLER::ReadRemotePkgHeader(stream_client, stream_path,
+                                                                        &install_data->header, &cnt_offset);
+        }
+
+        // The installer reads out of order before it starts streaming (the
+        // CNT/SC region at the end). range_client answers those reads from the
+        // source instead of buffering memory or waiting for the writer.
+        install_data->range_client = range_client;
 
         pthread_create(&install_data->thread, NULL, DownloadSplitPkg, install_data);
 
@@ -2432,7 +2479,8 @@ namespace Actions
 
         // Disk cache: stream it into the installer instead of buffering it all.
         if (settings->enable_disk_cache)
-            return InstallPkgByStreaming(INSTALLER::GetRemoteClient(settings), path, path);
+            return InstallPkgByStreaming(INSTALLER::GetRemoteClient(settings), path, path, header,
+                                         INSTALLER::GetRemoteClient(settings));
 
         // RPI: let the installer fetch the package itself through the proxy.
         std::string url = INSTALLER::getRemoteUrl(settings, client, path, file_size, true);

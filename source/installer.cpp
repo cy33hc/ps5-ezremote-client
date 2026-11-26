@@ -79,6 +79,61 @@ namespace INSTALLER
 	{
 	}
 
+	bool ReadLocalPkgHeader(const std::string &path, pkg_header *header)
+	{
+		memset(header, 0, sizeof(pkg_header));
+
+		uint32_t magic = 0;
+		if (!FS::Head(path, &magic, sizeof(magic)))
+			return false;
+
+		if (BE32(magic) == PKG_CNT_MAGIC)
+			return FS::Head(path, header, sizeof(pkg_header)) != 0;
+
+		if (BE32(magic) != PKG_FIH_MAGIC)
+			return false;
+
+		fih_header fih;
+		memset(&fih, 0, sizeof(fih_header));
+		if (!FS::Head(path, &fih, sizeof(fih_header)) || fih.embedded_cnt_offset == 0)
+			return false;
+
+		return FS::Head(path, header, sizeof(pkg_header), fih.embedded_cnt_offset) != 0 &&
+		       BE32(header->pkg_magic) == PKG_CNT_MAGIC;
+	}
+
+	bool ReadRemotePkgHeader(RemoteClient *client, const std::string &path, pkg_header *header, uint64_t *cnt_offset)
+	{
+		if (cnt_offset != nullptr)
+			*cnt_offset = 0;
+
+		memset(header, 0, sizeof(pkg_header));
+
+		uint32_t magic = 0;
+		if (client == nullptr || !client->Head(path, &magic, sizeof(magic)))
+			return false;
+
+		if (BE32(magic) == PKG_CNT_MAGIC)
+			return client->Head(path, header, sizeof(pkg_header)) != 0;
+
+		if (BE32(magic) != PKG_FIH_MAGIC)
+			return false;
+
+		fih_header fih;
+		memset(&fih, 0, sizeof(fih_header));
+		if (!client->Head(path, &fih, sizeof(fih_header)) || fih.embedded_cnt_offset == 0)
+			return false;
+
+		if (client->GetRange(path, header, sizeof(pkg_header), fih.embedded_cnt_offset) == 0 ||
+		    BE32(header->pkg_magic) != PKG_CNT_MAGIC)
+			return false;
+
+		if (cnt_offset != nullptr)
+			*cnt_offset = fih.embedded_cnt_offset;
+
+		return true;
+	}
+
 	std::string GetRemotePkgTitle(RemoteClient *client, const std::string &path, pkg_header *header)
 	{
 		if (BE32(header->pkg_magic) != PKG_CNT_MAGIC)
@@ -303,7 +358,8 @@ namespace INSTALLER
 			}
 
 			std::string hash = StoreBgInstallHostData(settings, _path, size);
-			std::string full_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
+			// PlayGo fetches this one too, so keep it on IPv4.
+			std::string full_url = std::string("http://127.0.0.1:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
 			return full_url;
 		}
 
@@ -360,8 +416,16 @@ namespace INSTALLER
 			split_pkg_data->split_file->Close();
 		pthread_join(split_pkg_data->thread, NULL);
 		delete (split_pkg_data->split_file);
-		if (split_pkg_data->delete_client)
+		if (split_pkg_data->delete_client && split_pkg_data->remote_client != nullptr)
+		{
+			split_pkg_data->remote_client->Quit();
 			delete (split_pkg_data->remote_client);
+		}
+		if (split_pkg_data->range_client != nullptr)
+		{
+			split_pkg_data->range_client->Quit();
+			delete (split_pkg_data->range_client);
+		}
 		free(split_pkg_data);
 		return nullptr;
 	}
@@ -480,15 +544,11 @@ namespace INSTALLER
 
 	int InstallLocalPkg(const std::string &path)
 	{
-		int ret;
 		pkg_header header;
-		bool completed = false;
 
-		memset(&header, 0, sizeof(header));
-		if (FS::Head(path.c_str(), (void *)&header, sizeof(header)) == 0)
-			return 0;
-
-		if (BE32(header.pkg_magic) != PKG_CNT_MAGIC && BE32(header.pkg_magic) != PKG_FIH_MAGIC)
+		// A PS5 package keeps its CNT header behind an FIH header, so this
+		// resolves whichever layout the file uses.
+		if (!ReadLocalPkgHeader(path, &header))
 			return 0;
 
 		return InstallLocalPkg(path, &header, false);
@@ -867,12 +927,28 @@ namespace INSTALLER
 		pkg_header header;
 		pkg_data->split_file->Read((char *)&header, sizeof(pkg_header), 0);
 
-		std::string cid = std::string((char *)header.pkg_content_id);
-		cid = cid.substr(cid.find_first_of("-") + 1, 9);
-		std::string display_title = cid;
-
 		std::string hash = Util::UrlHash(path);
-		std::string full_url = std::string("http://localhost:") + std::to_string(http_server_port) + "/archive_inst/" + hash;
+		std::string cid;
+		std::string display_title;
+		std::string full_url;
+
+		// An archive entry can only be read from the start, so a package whose
+		// CNT header sits at the end (the FIH layout used by PS5 packages)
+		// cannot be installed from inside an archive. Refuse it instead of
+		// installing with a content id taken from the wrong bytes.
+		if (BE32(header.pkg_magic) != PKG_CNT_MAGIC)
+		{
+			// Stop the extractor and unblock its archive read before teardown.
+			CancelArchiveInstall(pkg_data);
+			ret = 0;
+			goto finish;
+		}
+
+		cid = std::string((char *)header.pkg_content_id);
+		cid = cid.substr(cid.find_first_of("-") + 1, 9);
+		display_title = cid;
+		// PlayGo resolves "localhost" to IPv6 first, which we do not listen on.
+		full_url = std::string("http://127.0.0.1:") + std::to_string(http_server_port) + "/archive_inst/" + hash;
 		AddArchivePkgInstallData(hash, pkg_data);
 
 		if (!bg)
@@ -931,6 +1007,7 @@ namespace INSTALLER
 	
 			Activities::ProgressCurrent(progress_info.downloaded_size, progress_info.total_size);
 				sceSystemServicePowerTick();
+				usleep(500000);
 			}
 		}
 		else
@@ -959,9 +1036,10 @@ namespace INSTALLER
 		// set by the install path above (1 = installed, 0 = failed).
 		RemoveArchivePkgInstallData(hash);
 
+		// The writer must be gone before the file is closed under it.
+		pthread_join(pkg_data->thread, NULL);
 		if (!pkg_data->split_file->IsClosed())
 			pkg_data->split_file->Close();
-		pthread_join(pkg_data->thread, NULL);
 		delete (pkg_data->split_file);
 		free(pkg_data);
 		return ret;
@@ -1052,15 +1130,21 @@ namespace INSTALLER
 		if (pkg_data->activity_id == 0)
 			pkg_data->activity_id = activity_current_id;
 
+		// The caller resolved the CNT header from the source file; falling back
+		// to the stream would only work for small packages.
 		pkg_header header;
-		pkg_data->split_file->Read((char *)&header, sizeof(pkg_header), 0);
+		if (pkg_data->header_valid)
+			header = pkg_data->header;
+		else
+			pkg_data->split_file->Read((char *)&header, sizeof(pkg_header), 0);
 
 		std::string cid = std::string((char *)header.pkg_content_id);
 		cid = cid.substr(cid.find_first_of("-") + 1, 9);
 		std::string display_title = cid;
 
 		std::string hash = Util::UrlHash(path);
-		std::string full_url = std::string("http://localhost:") + std::to_string(http_server_port) + "/split_inst/" + hash;
+		// PlayGo resolves "localhost" to IPv6 first, which we do not listen on.
+		std::string full_url = std::string("http://127.0.0.1:") + std::to_string(http_server_port) + "/split_inst/" + hash;
 		AddSplitPkgInstallData(hash, pkg_data);
 
 		if (!bg)
@@ -1119,6 +1203,7 @@ namespace INSTALLER
 	
 			Activities::ProgressCurrent(progress_info.downloaded_size, progress_info.total_size);
 				sceSystemServicePowerTick();
+				usleep(500000);
 			}
 		}
 		else
@@ -1147,12 +1232,21 @@ namespace INSTALLER
 		// blocks the writer is still filling.
 		RemoveSplitPkgInstallData(hash);
 
+		// The writer must be gone before the file is closed under it.
+		pthread_join(pkg_data->thread, NULL);
 		if (!pkg_data->split_file->IsClosed())
 			pkg_data->split_file->Close();
-		pthread_join(pkg_data->thread, NULL);
 		delete (pkg_data->split_file);
-		if (pkg_data->delete_client)
+		if (pkg_data->delete_client && pkg_data->remote_client != nullptr)
+		{
+			pkg_data->remote_client->Quit();
 			delete (pkg_data->remote_client);
+		}
+		if (pkg_data->range_client != nullptr)
+		{
+			pkg_data->range_client->Quit();
+			delete (pkg_data->range_client);
+		}
 		free(pkg_data);
 		return ret;
 	}

@@ -208,6 +208,11 @@ double SplitFile::GetReadSpeed()
     return this->read_speed;
 }
 
+size_t SplitFile::GetWriteBytes()
+{
+    return this->write_offset;
+}
+
 size_t SplitFile::GetReadBytes()
 {
     return this->read_bytes_total;

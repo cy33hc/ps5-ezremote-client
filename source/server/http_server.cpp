@@ -998,6 +998,7 @@ namespace HttpServer
 
     void *ServerThread(void *argp)
     {
+
         svr->Get("/", [&](const Request &req, Response &res)
                  { res.set_redirect("/index.html"); });
 
@@ -4138,11 +4139,10 @@ namespace HttpServer
             res.set_content_provider(
                 pkg_data->archive_entry->filesize, "application/octet-stream",
                 [pkg_data](size_t offset, size_t length, DataSink &sink) {
-                    char *buf = (char*) malloc(length);
-                    ssize_t bytes_read = pkg_data->split_file->Read(buf, length, offset);
-                    // 0 means the install was cancelled or the blocks are gone.
-                    // Returning true without writing would spin httplib, which
-                    // then never releases its reference and the teardown hangs.
+                    size_t to_read = MIN(length, (size_t) 1048576);
+                    char *buf = (char*) malloc(to_read);
+
+                    ssize_t bytes_read = pkg_data->split_file->Read(buf, to_read, offset);
                     if (bytes_read <= 0)
                     {
                         free(buf);
@@ -4173,11 +4173,23 @@ namespace HttpServer
             res.set_content_provider(
                 pkg_data->size, "application/octet-stream",
                 [pkg_data](size_t offset, size_t length, DataSink &sink) {
-                    char *buf = (char*) malloc(length);
-                    ssize_t bytes_read = pkg_data->split_file->Read(buf, length, offset);
-                    // 0 means the install was cancelled or the blocks are gone.
-                    // Returning true without writing would spin httplib, which
-                    // then never releases its reference and the teardown hangs.
+                    size_t to_read = MIN(length, (size_t) 1048576);
+                    char *buf = (char*) malloc(to_read);
+                    size_t written = pkg_data->split_file->GetWriteBytes();
+                    if (pkg_data->range_client != nullptr && offset + to_read > written)
+                    {
+                        static std::mutex range_mutex;
+                        std::lock_guard<std::mutex> lock(range_mutex);
+
+                        if (pkg_data->range_client->GetRange(pkg_data->path, buf, to_read, offset))
+                        {
+                            sink.write(buf, to_read);
+                            free(buf);
+                            return true;
+                        }
+                    }
+
+                    ssize_t bytes_read = pkg_data->split_file->Read(buf, to_read, offset);
                     if (bytes_read <= 0)
                     {
                         free(buf);
@@ -4279,13 +4291,17 @@ namespace HttpServer
                 failed(res, 200, baseclient->LastResponse());
                 return;
             }
-            baseclient->Head(path, &header, sizeof(pkg_header));
+            // Best effort: some hosts answer the range request with a redirect
+            // or refuse HEAD, and the installer can still fetch the package.
+            INSTALLER::ReadRemotePkgHeader(baseclient, path, &header);
             baseclient->Size(path, &file_size);
 
             FileHost::AddCacheDownloadUrl(hash, download_url);
             std::string title = INSTALLER::GetRemotePkgTitle(baseclient, path, &header);
 
-            if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || BE32(header.pkg_magic) == PKG_FIH_MAGIC)
+            // An unresolved header (all zeroes) is not a reason to give up;
+            // only a header that parsed to another magic is clearly not a pkg.
+            if (BE32(header.pkg_magic) == PKG_CNT_MAGIC || header.pkg_magic == 0)
             {
                 if (!enable_rpi)
                 {
@@ -4317,7 +4333,8 @@ namespace HttpServer
 
                     // The proxy needs a moment before the installer asks for it.
                     sleep(2);
-                    bg_url = std::string("http://localhost:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
+                    // PlayGo fetches this one too, so keep it on IPv4.
+                    bg_url = std::string("http://127.0.0.1:") + std::to_string(http_int_server_port) + "/bg_install/" + hash;
 
                     int rc = Actions::InstallPkgByProxy(bg_url, &header, title);
                     delete baseclient;
@@ -4331,8 +4348,17 @@ namespace HttpServer
                 }
                 else if (enable_rpi && use_disk_cache && BE32(header.pkg_magic) == PKG_CNT_MAGIC)
                 {
-                    // Takes ownership of baseclient for the streaming thread.
-                    int ret = Actions::InstallPkgByStreaming(baseclient, path, download_url);
+                    // Takes ownership of baseclient for the streaming thread. A
+                    // second connection answers the installer's out-of-order
+                    // reads (the CNT/SC region at the end of the package).
+                    BaseClient *range_client = new BaseClient();
+                    if (!range_client->Connect(host, "", ""))
+                    {
+                        delete range_client;
+                        range_client = nullptr;
+                    }
+
+                    int ret = Actions::InstallPkgByStreaming(baseclient, path, download_url, &header, range_client);
                     if (ret == 0)
                     {
                         activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
@@ -4367,9 +4393,10 @@ namespace HttpServer
 
                     if (ret == 0)
                     {
+                        // install_data belongs to InstallArchivePkg, which has
+                        // already freed it along with the split file.
                         activity.fail(lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
                         failed(res, 200, lang_strings[STR_FAIL_INSTALL_FROM_URL_MSG]);
-                        free(install_data);
                         return;
                     }
                 }

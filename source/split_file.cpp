@@ -60,6 +60,11 @@ ssize_t SplitFile::Read(char *buf, size_t buf_size, size_t offset)
     FILE *fd;
     char *p;
 
+    // A cancelled install has no reader left to serve; report EOF so the
+    // installer stops asking instead of waiting for blocks that never come.
+    if (this->aborted)
+        return 0;
+
     first_block_num= offset / this->block_size;
     block_num = first_block_num;
     block_offset = offset % this->block_size;
@@ -293,7 +298,7 @@ ssize_t SplitFile::Write(char *buf, size_t buf_size)
     ssize_t total_bytes_written = 0;
     size_t remaining_to_write = buf_size;
 
-    if (this->IsClosed())
+    if (this->IsClosed() || this->aborted)
         return -1;
 
     while (remaining_to_write > 0 && !this->complete)
@@ -382,6 +387,18 @@ int SplitFile::Close()
 bool SplitFile::IsClosed()
 {
     return this->complete;
+}
+
+void SplitFile::Abort()
+{
+    this->aborted = true;
+    this->complete = true;
+    sem_post(&this->block_ready);
+}
+
+bool SplitFile::IsAborted()
+{
+    return this->aborted;
 }
 
 FileBlock *SplitFile::NewBlock()

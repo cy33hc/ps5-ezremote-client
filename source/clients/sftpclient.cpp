@@ -888,6 +888,14 @@ void *SFTPClient::Open(const std::string &path, int flags)
     return libssh2_sftp_open(sftp_session, path.c_str(), LIBSSH2_FXF_READ, 0);
 }
 
+void SFTPClient::Cancel()
+{
+    // Closing the session from another thread is not safe, but shutting down
+    // the socket makes a pending libssh2 read fail so the loop unwinds.
+    if (sock > 0)
+        shutdown(sock, SHUT_RDWR);
+}
+
 void SFTPClient::Close(void *fp)
 {
     libssh2_sftp_close((LIBSSH2_SFTP_HANDLE *)fp);

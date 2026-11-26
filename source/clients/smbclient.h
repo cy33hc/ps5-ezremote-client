@@ -42,6 +42,7 @@ public:
 	bool Ping();
 	const char *LastResponse();
 	int Quit();
+	void Cancel();
 	std::string GetPath(std::string ppath1, std::string ppath2);
 	int Head(const std::string &path, void *buffer, uint64_t len);
 	ClientType clientType();

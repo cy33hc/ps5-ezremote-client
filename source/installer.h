@@ -148,6 +148,8 @@ struct ArchivePkgInstallData
     pthread_t thread;
     bool stop_write_thread;
     uint64_t activity_id; // progress is reported to the calling install
+    int http_users;       // /archive_inst streams reading the blocks right now
+    bool closing;         // no new readers; the blocks are about to go away
 };
 
 struct SplitPkgInstallData
@@ -159,6 +161,9 @@ struct SplitPkgInstallData
     pthread_t thread;
     bool stop_write_thread;
     bool delete_client;
+    uint64_t activity_id; // background threads cannot read the caller's TLS
+    int http_users;       // /split_inst streams reading the blocks right now
+    bool closing;         // no new readers; the blocks are about to go away
 };
 
 static pthread_t bk_install_thid;
@@ -183,13 +188,24 @@ namespace INSTALLER
     std::string GetRemotePkgTitle(RemoteClient *client, const std::string &path, pkg_header *header);
     std::string GetLocalPkgTitle(const std::string &path, pkg_header *header);
     ArchivePkgInstallData *GetArchivePkgInstallData(const std::string &hash);
+    // Take a reference for the lifetime of an HTTP stream so cleanup cannot
+    // delete the blocks while they are being read.
+    ArchivePkgInstallData *AcquireArchivePkgInstallData(const std::string &hash);
+    void ReleaseArchivePkgInstallData(ArchivePkgInstallData *pkg_data);
     void AddArchivePkgInstallData(const std::string &hash, ArchivePkgInstallData *pkg_data);
     void RemoveArchivePkgInstallData(const std::string &hash);
     bool InstallArchivePkg(const std::string &path, ArchivePkgInstallData* pkg_data, bool bg = false);
     SplitPkgInstallData *GetSplitPkgInstallData(const std::string &hash);
+    SplitPkgInstallData *AcquireSplitPkgInstallData(const std::string &hash);
+    void ReleaseSplitPkgInstallData(SplitPkgInstallData *pkg_data);
     void AddSplitPkgInstallData(const std::string &hash, SplitPkgInstallData *pkg_data);
     void RemoveSplitPkgInstallData(const std::string &hash);
     bool InstallSplitPkg(const std::string &path, SplitPkgInstallData* pkg_data, bool bg = false);
+
+    // Unblocks an install that is waiting on its stream; the worker then
+    // unwinds through its normal cancel path.
+    void CancelInstalls();
+    void CancelInstall(uint64_t activity_id);
     bool IsDirectPackageInstallerEnabled();
     int StartDirectPackageInstaller();
     int InstallWithDirectPackageInstaller(const std::string &url);

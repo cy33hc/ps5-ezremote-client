@@ -186,6 +186,8 @@ int main()
 		// about to disappear, so say why.
 		Util::Notify("%s", lang_strings[STR_CLOSING_MSG]);
 
+		// Unblock any install still streaming into the system installer.
+		INSTALLER::CancelInstalls();
 		Activities::Shutdown();
 
 		if (remoteclient != nullptr)
@@ -229,6 +231,8 @@ int main()
 
 	GUI::RenderLoop(window);
 
+	// Unblock any install still streaming into the system installer.
+	INSTALLER::CancelInstalls();
 	Activities::Shutdown();
 
 	HttpServer::Stop();

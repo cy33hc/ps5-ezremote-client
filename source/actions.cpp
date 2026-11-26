@@ -1008,9 +1008,7 @@ namespace Actions
 
                             int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
 
-                            Activities::SetCancellable(false);
                             int archive_result = INSTALLER::InstallArchivePkg(entry->filename, install_data);
-                            Activities::SetCancellable(true);
                             if (archive_result != 0)
                                 success++;
                             else
@@ -1212,9 +1210,7 @@ namespace Actions
 
                             int res = pthread_create(&install_data->thread, NULL, ExtractArchivePkg, install_data);
 
-                            Activities::SetCancellable(false);
                             int archive_result = INSTALLER::InstallArchivePkg(entry->filename, install_data);
-                            Activities::SetCancellable(true);
                             if (archive_result != 0)
                                 success++;
                             else
@@ -2407,12 +2403,11 @@ namespace Actions
         stream_client->Size(stream_path, &install_data->size);
         install_data->stop_write_thread = false;
         install_data->delete_client = true;
+        install_data->activity_id = activity_current_id;
 
         pthread_create(&install_data->thread, NULL, DownloadSplitPkg, install_data);
 
-        Activities::SetCancellable(false);
         int ret = INSTALLER::InstallSplitPkg(cache_key, install_data, false);
-        Activities::SetCancellable(true);
 
         if (Activities::Stopped())
             FS::Rm(install_pkg_path.c_str());

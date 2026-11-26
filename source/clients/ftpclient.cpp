@@ -429,6 +429,9 @@ int FtpClient::FtpAccess(const std::string &path, accesstype type, transfermode 
 		}
 	}
 
+	// Remember the open data connection so Cancel() can shut it down.
+	mp_datahandle = *nData;
+
 	return 1;
 }
 
@@ -1032,8 +1035,18 @@ int FtpClient::Writeline(char *buf, int len, ftphandle *nData)
 /*
  * FtpClose - close a data connection
  */
+void FtpClient::Cancel()
+{
+	// A blocked FtpRead() only returns when its data socket is closed.
+	if (mp_datahandle != nullptr)
+		shutdown(mp_datahandle->handle, SHUT_RDWR);
+}
+
 int FtpClient::FtpClose(ftphandle *nData)
 {
+	if (nData == mp_datahandle)
+		mp_datahandle = nullptr;
+
 	ftphandle *ctrl;
 
 	if (nData->dir == FTP_CLIENT_WRITE)

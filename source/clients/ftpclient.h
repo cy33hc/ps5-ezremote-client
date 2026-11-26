@@ -102,12 +102,15 @@ public:
 	char *LastResponse();
 	long GetIdleTime();
 	int Quit();
+	void Cancel();
 	std::string GetPath(std::string path1, std::string path2);
 	ClientType clientType();
 	uint32_t SupportedActions();
 
 private:
 	ftphandle *mp_ftphandle;
+	// Data connection of the transfer in flight, so Cancel() can shut it down.
+	ftphandle *mp_datahandle = nullptr;
 	struct tm cur_time;
 	timeval tick;
 	char server[128];

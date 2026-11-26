@@ -612,6 +612,18 @@ int NfsClient::Head(const std::string &ppath, void *buffer, uint64_t len)
 	return 1;
 }
 
+void NfsClient::Cancel()
+{
+    // libnfs blocks inside nfs_read(); closing its socket makes the call
+    // return with an error so the install loop can stop.
+    if (nfs != nullptr)
+    {
+        int fd = nfs_get_fd(nfs);
+        if (fd >= 0)
+            shutdown(fd, SHUT_RDWR);
+    }
+}
+
 ClientType NfsClient::clientType()
 {
 	return CLIENT_TYPE_NFS;

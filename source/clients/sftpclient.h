@@ -34,6 +34,7 @@ public:
     std::vector<DirEntry> ListDir(const std::string &path);
     void *Open(const std::string &path, int flags);
     void Close(void *fp);
+    void Cancel();
     std::string GetPath(std::string path1, std::string path2);
     bool IsConnected();
     bool Ping();

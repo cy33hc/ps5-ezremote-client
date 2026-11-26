@@ -39,6 +39,10 @@ public:
     bool Ping();
     const char *LastResponse();
     int Quit();
+    // Aborts the transfer running on this connection; the progress callback
+    // returns non-zero, which makes libcurl unwind.
+    void Cancel();
+    bool IsCancelled() const { return cancelled_.load(std::memory_order_relaxed); }
     ClientType clientType();
     uint32_t SupportedActions();
     void SetClientPathEncoding(bool enabled);
@@ -56,6 +60,7 @@ protected:
     std::string BuildUrl(const std::string &path);
 
     CHTTPClient *client = nullptr;
+    std::atomic<bool> cancelled_{false};
     std::string base_path;
     std::string host_url;
     char response[512];

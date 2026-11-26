@@ -2262,7 +2262,10 @@ namespace Windows
                         }
                         else if (ImGui::SmallButton(lang_strings[STR_CANCEL]))
                         {
-                            Activities::Cancel(item.id);
+                            // Unblock a streaming install too, so the worker
+                            // does not have to wait for the next chunk.
+                            if (Activities::Cancel(item.id))
+                                INSTALLER::CancelInstall(item.id);
                         }
                         ImGui::PopID();
                     }

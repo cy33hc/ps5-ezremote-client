@@ -1536,9 +1536,8 @@ namespace HttpServer
 
                     pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);
 
-                    Activities::SetCancellable(false);
                     int archive_result = INSTALLER::InstallArchivePkg(entry->filename, install_data);
-                    Activities::SetCancellable(true);
+
                     if (archive_result != 0)
                         installed = true;
                     else
@@ -1885,9 +1884,8 @@ namespace HttpServer
 
                     pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);
 
-                    Activities::SetCancellable(false);
                     int archive_result = INSTALLER::InstallArchivePkg(entry->filename, install_data);
-                    Activities::SetCancellable(true);
+
                     if (archive_result != 0)
                         installed++;
                     else
@@ -2059,7 +2057,10 @@ namespace HttpServer
                 return;
             }
 
-            bool cancelled = Activities::Cancel((uint64_t) json_object_get_int64(jid));
+            uint64_t cancel_id = (uint64_t) json_object_get_int64(jid);
+            bool cancelled = Activities::Cancel(cancel_id);
+            if (cancelled)
+                INSTALLER::CancelInstall(cancel_id);
 
             json_object *result = json_object_new_object();
             JsonObjectRef result_ref(result);
@@ -4123,7 +4124,9 @@ namespace HttpServer
         svr->Get("/archive_inst/(.*)", [&](const Request &req, Response &res)
         {
             std::string hash = req.matches[1];
-            ArchivePkgInstallData *pkg_data = INSTALLER::GetArchivePkgInstallData(hash);
+            // Held until the stream ends so a cancel cannot free the blocks
+            // while they are still being sent.
+            ArchivePkgInstallData *pkg_data = INSTALLER::AcquireArchivePkgInstallData(hash);
 
             if (pkg_data == nullptr)
             {
@@ -4137,7 +4140,10 @@ namespace HttpServer
                 [pkg_data](size_t offset, size_t length, DataSink &sink) {
                     char *buf = (char*) malloc(length);
                     ssize_t bytes_read = pkg_data->split_file->Read(buf, length, offset);
-                    if (bytes_read < 0)
+                    // 0 means the install was cancelled or the blocks are gone.
+                    // Returning true without writing would spin httplib, which
+                    // then never releases its reference and the teardown hangs.
+                    if (bytes_read <= 0)
                     {
                         free(buf);
                         return false;
@@ -4146,8 +4152,8 @@ namespace HttpServer
                     free(buf);
                     return true;
                 },
-                [](bool success) {
-                    return true;
+                [pkg_data](bool success) {
+                    INSTALLER::ReleaseArchivePkgInstallData(pkg_data);
                 });
         });
 
@@ -4155,7 +4161,7 @@ namespace HttpServer
         {
             std::string hash = req.matches[1];
 
-            SplitPkgInstallData *pkg_data = INSTALLER::GetSplitPkgInstallData(hash);
+            SplitPkgInstallData *pkg_data = INSTALLER::AcquireSplitPkgInstallData(hash);
 
             if (pkg_data == nullptr)
             {
@@ -4169,7 +4175,10 @@ namespace HttpServer
                 [pkg_data](size_t offset, size_t length, DataSink &sink) {
                     char *buf = (char*) malloc(length);
                     ssize_t bytes_read = pkg_data->split_file->Read(buf, length, offset);
-                    if (bytes_read < 0)
+                    // 0 means the install was cancelled or the blocks are gone.
+                    // Returning true without writing would spin httplib, which
+                    // then never releases its reference and the teardown hangs.
+                    if (bytes_read <= 0)
                     {
                         free(buf);
                         return false;
@@ -4178,8 +4187,8 @@ namespace HttpServer
                     free(buf);
                     return true;
                 },
-                [](bool success) {
-                    return true;
+                [pkg_data](bool success) {
+                    INSTALLER::ReleaseSplitPkgInstallData(pkg_data);
                 });
         });
 
@@ -4350,9 +4359,8 @@ namespace HttpServer
 
                     int ret = pthread_create(&install_data->thread, NULL, Actions::ExtractArchivePkg, install_data);
 
-                    Activities::SetCancellable(false);
                     ret = INSTALLER::InstallArchivePkg(entry->filename, install_data, false);
-                    Activities::SetCancellable(true);
+                    
 
                     if (Activities::Stopped())
                         FS::Rm(install_pkg_path.c_str());

@@ -36,24 +36,35 @@ int BaseClient::SocketOptCallback(void* ptr, int fd, uint32_t socktype)
 int BaseClient::NothingCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     // Used where progress is not wanted, but a cancel should still stop the
-    // transfer (split-file downloads).
+    // transfer (split-file downloads). The owner is passed in so a cancel from
+    // another thread (install teardown) can abort too.
+    if (ptr != nullptr)
+    {
+        CHTTPClient::ProgressFnStruct *progress_data = (CHTTPClient::ProgressFnStruct*) ptr;
+        BaseClient *owner = static_cast<BaseClient *>(progress_data->pOwner);
+        if (owner != nullptr && owner->IsCancelled())
+            return 1;
+    }
+
     return Activities::Stopped() ? 1 : 0;
 }
 
 int BaseClient::DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     CHTTPClient::ProgressFnStruct *progress_data = (CHTTPClient::ProgressFnStruct*) ptr;
-    static_cast<BaseClient *>(progress_data->pOwner)->SetTransferredBytes((uint64_t) dNowDownloaded);
+    BaseClient *owner = static_cast<BaseClient *>(progress_data->pOwner);
+    owner->SetTransferredBytes((uint64_t) dNowDownloaded);
     // A non-zero return aborts the transfer, which is how a cancel reaches the
     // HTTP layer.
-    return Activities::Stopped() ? 1 : 0;
+    return (owner->IsCancelled() || Activities::Stopped()) ? 1 : 0;
 }
 
 int BaseClient::UploadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     CHTTPClient::ProgressFnStruct *progress_data = (CHTTPClient::ProgressFnStruct*) ptr;
-    static_cast<BaseClient *>(progress_data->pOwner)->SetTransferredBytes((uint64_t) dNowUploaded);
-    return Activities::Stopped() ? 1 : 0;
+    BaseClient *owner = static_cast<BaseClient *>(progress_data->pOwner);
+    owner->SetTransferredBytes((uint64_t) dNowUploaded);
+    return (owner->IsCancelled() || Activities::Stopped()) ? 1 : 0;
 }
 
 size_t BaseClient::WriteToSplitFileCallback(void *buff, size_t size, size_t nmemb, void *data)
@@ -190,6 +201,7 @@ int BaseClient::Size(const std::string &path, uint64_t *size)
 int BaseClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
 {
     long status;
+    cancelled_.store(false, std::memory_order_relaxed);
     ResetTransferredBytes();
     prev_tick = Util::GetTick();
     CHTTPClient::HeadersMap headers;
@@ -220,9 +232,11 @@ int BaseClient::Get(FileStream *split_file, const std::string &path, uint64_t of
     long status;
     CHTTPClient::HeadersMap headers;
 
+    cancelled_.store(false, std::memory_order_relaxed);
     prev_tick = Util::GetTick();
     std::string encoded_url = BuildUrl(path);
-    client->SetProgressFnCallback(nullptr, NothingCallback);
+    // Pass the owner so NothingCallback can see a Cancel() from another thread.
+    client->SetProgressFnCallback(this, NothingCallback);
     if (client->DownloadFile((void*)split_file, encoded_url, (void*)WriteToSplitFileCallback, status))
     {
         return 1;
@@ -270,7 +284,8 @@ int BaseClient::GetRange(const std::string &path, void *buffer, uint64_t size, u
     BufferPtr buff = {(char*)buffer};
 
     std::string encoded_url = BuildUrl(path);
-    client->SetProgressFnCallback(nullptr, NothingCallback);
+    cancelled_.store(false, std::memory_order_relaxed);
+    client->SetProgressFnCallback(this, NothingCallback);
     if (client->Get(encoded_url, headers, res, (void*) &WriteBufferCallback, (void*) &buff))
     {
         return 1;
@@ -322,7 +337,8 @@ int BaseClient::Head(const std::string &path, void *buffer, uint64_t size)
     headers["Range"] = range_header;
 
     std::string encoded_url = BuildUrl(path);
-    client->SetProgressFnCallback(nullptr, NothingCallback);
+    cancelled_.store(false, std::memory_order_relaxed);
+    client->SetProgressFnCallback(this, NothingCallback);
     if (client->Get(encoded_url, headers, res))
     {
         uint64_t len = MIN(size, res.strBody.size());
@@ -409,6 +425,13 @@ int BaseClient::Quit()
         client = nullptr;
     }
     return 1;
+}
+
+void BaseClient::Cancel()
+{
+    // This HTTP client build cannot stop a handle from another thread, so the
+    // progress callback checks the flag and aborts the transfer instead.
+    cancelled_.store(true, std::memory_order_relaxed);
 }
 
 ClientType BaseClient::clientType()

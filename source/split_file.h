@@ -40,6 +40,11 @@ public:
     int Close();
     bool IsClosed();
 
+    // Ends the stream early: pending readers see EOF and writers fail, so an
+    // install that no longer has a reader can be torn down without waiting.
+    void Abort();
+    bool IsAborted();
+
     void SetWriteSpeedup(double write_speedup);
     double GetWriteSpeedup() const { return this->write_speedup; }
 
@@ -54,6 +59,7 @@ private:
     std::string path;
     int write_error;
     bool complete;
+    bool aborted = false;
     FileBlock *block_in_progress;
     sem_t block_ready;
     std::shared_mutex mutex_;

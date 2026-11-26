@@ -648,6 +648,18 @@ int SmbClient::Head(const std::string &ppath, void *buffer, uint64_t len)
 	return 1;
 }
 
+void SmbClient::Cancel()
+{
+    // A blocked smb2_read() only notices a cancel when the socket goes away;
+    // shutting it down unwinds the extract/install loop.
+    if (smb2 != nullptr)
+    {
+        int fd = smb2_get_fd(smb2);
+        if (fd >= 0)
+            shutdown(fd, SHUT_RDWR);
+    }
+}
+
 ClientType SmbClient::clientType()
 {
 	return CLIENT_TYPE_SMB;
